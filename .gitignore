@@ -1,0 +1,22 @@
+# Logs
+Logs/
+*.log
+
+# Local secrets
+.env
+*.key
+*.pem
+
+# OS/system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node/Python artifacts
+node_modules/
+__pycache__/
+*.pyc
+
+# Temporary files
+*.tmp
+*.bak
