@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Oracle CLI",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["core/oracle.py"],
+      "port": null,
+      "note": "Terminal-based assistant. Requires ANTHROPIC_API_KEY in .env."
+    }
+  ]
+}
