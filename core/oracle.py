@@ -39,7 +39,7 @@ def banner(identity):
     print(f"\n{greeting}, {name.split()[0]}.\n")
     if constructs:
         print(f"Echo constructs available: {', '.join(constructs[:4])}")
-    print("\nType your message. Commands: /quit /memory /clear\n")
+    print("\nType your message. Commands: /help /memory /projects /quit\n")
 
 
 def show_memory(session_id):
@@ -54,6 +54,110 @@ def show_memory(session_id):
         print("  No facts stored yet.")
     print(f"\n  Recent messages this session: {len(msgs)}")
     print("-----------------------\n")
+
+
+def handle_project_command(args):
+    from memory import add_project, add_project_note, recall_project, list_projects
+    if not args:
+        projects = list_projects()
+        if not projects:
+            print("  No projects yet. Use: /project add <name>\n")
+        else:
+            print("\n--- Projects ---")
+            for p in projects:
+                print(f"  [{p['status']}] {p['name']}")
+            print()
+        return
+
+    parts = args.split(None, 2)
+    sub = parts[0].lower()
+
+    if sub == "add":
+        if len(parts) < 2:
+            print("  Usage: /project add <name>\n")
+            return
+        name = parts[1]
+        if add_project(name):
+            print(f"  Project added: {name}\n")
+        else:
+            print(f"  Project '{name}' already exists.\n")
+
+    elif sub == "note":
+        if len(parts) < 3:
+            print("  Usage: /project note <name> <note>\n")
+            return
+        name, note = parts[1], parts[2]
+        if add_project_note(name, note):
+            print(f"  Note added to {name}.\n")
+        else:
+            print(f"  Project '{name}' not found. Add it first: /project add {name}\n")
+
+    elif sub == "recall":
+        if len(parts) < 2:
+            print("  Usage: /project recall <name>\n")
+            return
+        result = recall_project(parts[1])
+        if not result:
+            print(f"  Project '{parts[1]}' not found.\n")
+        else:
+            print(f"\n--- {result['name']} [{result['status']}] ---")
+            if result["notes"]:
+                for n in result["notes"]:
+                    print(f"  {n['date']}: {n['note']}")
+            else:
+                print("  No notes yet.")
+            print()
+    else:
+        print("  Commands: /project add <name> | /project note <name> <note> | /project recall <name> | /projects\n")
+
+
+def handle_person_command(args):
+    from memory import add_person, add_person_note, recall_person
+    if not args:
+        print("  Usage: /person add <name> [role] | /person note <name> <note> | /person recall <name>\n")
+        return
+
+    parts = args.split(None, 2)
+    sub = parts[0].lower()
+
+    if sub == "add":
+        if len(parts) < 2:
+            print("  Usage: /person add <name> [role]\n")
+            return
+        name = parts[1]
+        role = parts[2] if len(parts) == 3 else None
+        if add_person(name, role):
+            print(f"  Person added: {name}" + (f" ({role})" if role else "") + "\n")
+        else:
+            print(f"  '{name}' already exists.\n")
+
+    elif sub == "note":
+        if len(parts) < 3:
+            print("  Usage: /person note <name> <note>\n")
+            return
+        name, note = parts[1], parts[2]
+        if add_person_note(name, note):
+            print(f"  Note added to {name}.\n")
+        else:
+            print(f"  Person '{name}' not found. Add them first: /person add {name}\n")
+
+    elif sub == "recall":
+        if len(parts) < 2:
+            print("  Usage: /person recall <name>\n")
+            return
+        result = recall_person(parts[1])
+        if not result:
+            print(f"  Person '{parts[1]}' not found.\n")
+        else:
+            print(f"\n--- {result['name']}" + (f" | {result['role']}" if result["role"] else "") + " ---")
+            if result["notes"]:
+                for n in result["notes"]:
+                    print(f"  {n['date']}: {n['note']}")
+            else:
+                print("  No notes yet.")
+            print()
+    else:
+        print("  Commands: /person add <name> [role] | /person note <name> <note> | /person recall <name>\n")
 
 
 def chat(client, session_id, system_prompt, history, user_input):
@@ -119,6 +223,34 @@ def main():
         if user_input.lower() == "/clear":
             history = []
             print("Conversation history cleared. Memory persists.\n")
+            continue
+
+        if user_input.lower() in ("/projects", "/project"):
+            handle_project_command("")
+            continue
+
+        if user_input.lower().startswith("/project "):
+            handle_project_command(user_input[9:].strip())
+            continue
+
+        if user_input.lower().startswith("/person "):
+            handle_person_command(user_input[8:].strip())
+            continue
+
+        if user_input.lower() == "/help":
+            print("""
+Commands:
+  /memory                            Show stored facts and session info
+  /projects                          List all projects
+  /project add <name>                Add a project
+  /project note <name> <note>        Add a note to a project
+  /project recall <name>             Show project and all notes
+  /person add <name> [role]          Add a person
+  /person note <name> <note>         Add a note about a person
+  /person recall <name>              Show person and all notes
+  /clear                             Clear conversation history
+  /quit                              Exit Oracle
+""")
             continue
 
         try:
