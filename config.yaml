@@ -1,0 +1,31 @@
+# ORACLE.AI Configuration
+
+oracle:
+  model: claude-sonnet-4-6
+  max_tokens: 4096
+  max_doc_chars: 4000       # Characters per doc loaded into system prompt
+
+paths:
+  memory_db: Memory/oracle_memory.db
+  logs_dir: Logs
+  users_dir: Users
+  context_dir: Context
+  identity_anchor: Users/Noah.Self/Noah.Self Upload Repository/Noah.Identity.Anchor.json
+
+context:
+  priority_docs:
+    - Noah_Hawkes_Complete_Profile.docx
+    - Noah_Hawkes_Narrative_Profile.docx
+    - Updated_Noah_Personal_Mind_Journal.docx
+    - Updated_Noah_Business_Financial_Journal.docx
+
+# Applications that Oracle is allowed to launch (approval required each time)
+approved_apps:
+  chrome: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+  vscode: "C:\\Users\\noahh\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe"
+  notepad: "C:\\Windows\\System32\\notepad.exe"
+  explorer: "C:\\Windows\\explorer.exe"
+
+# Scripts Oracle is allowed to run (approval required each time)
+approved_scripts:
+  - Scripts/setup_mirrorGPT.ps1
