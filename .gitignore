@@ -17,6 +17,13 @@ node_modules/
 __pycache__/
 *.pyc
 
+# Runtime data
+Memory/
+*.db
+
+# User identity and personal documents (privacy — reviewed separately)
+Users/
+
 # Temporary files
 *.tmp
 *.bak
