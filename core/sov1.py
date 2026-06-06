@@ -30,7 +30,6 @@ sys.path.insert(0, str(ROOT / "core"))
 from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
 
-import anthropic
 import computer_control as cc
 from audit_log import log
 from llm import is_local, make_client, get_model, to_openai_tools, image_block

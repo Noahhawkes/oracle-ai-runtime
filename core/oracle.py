@@ -22,13 +22,12 @@ load_dotenv(ROOT / ".env")
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "core"))
 
-import anthropic
 from memory import init_db, new_session, save_message, get_recent_messages
 from context_loader import build_system_prompt, load_identity, index_summary
 from audit_log import log
 from tools.definitions import TOOL_DEFINITIONS
 from tools.executor import execute_tool
-from llm import is_local, make_client, get_model, to_openai_tools
+from llm import is_local, make_client, get_model, to_openai_tools, startup_status
 
 MAX_TOKENS = 4096
 
@@ -39,23 +38,24 @@ def banner(identity):
     hour = datetime.now().hour
     greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
 
-    try:
-        import computer_control as cc
-        hands = "SOV1 ONLINE — computer control active" if cc.HANDS_AVAILABLE else "SOV1 LIMITED — install pyautogui+pillow for screen control"
-    except ImportError:
-        hands = "SOV1 UNAVAILABLE"
+    st = startup_status()
 
-    print("\n" + "=" * 56)
-    print("  ORACLE.AI  |  SOV1 OPERATOR")
-    print("=" * 56)
-    print("  Identity Anchor Loaded")
-    print("  Memory Database Connected")
-    print(f"  Context Repository Indexed")
-    print(f"  {hands}")
+    print("\n" + "═" * 56)
+    print("  ORACLE.AI  |  SOV1 OPERATOR MODULE")
+    print("═" * 56)
+    print(f"  Mode        : {st['mode']}")
+    print(f"  Text model  : {st['model']}")
+    print(f"  Vision model: {st['vision_model']}")
+    if st["mode"] == "LOCAL":
+        ollama_icon = "[OK]" if st.get("ollama_ok") else "[!!]"
+        print(f"  Ollama      : {ollama_icon} {st.get('ollama_msg', '')}")
+    sov1_icon = "[OK]" if st["sov1_available"] else "[--]"
+    print(f"  SOV1 hands  : {sov1_icon} {st['sov1_msg']}")
+    print("  Memory DB   : connected")
     print("═" * 56)
     print(f"\n{greeting}, {name.split()[0]}.\n")
     if constructs:
-        print(f"Echo constructs available: {', '.join(constructs[:4])}")
+        print(f"Echo constructs: {', '.join(constructs[:4])}")
     print("\nType your message or tell me to do something on screen.")
     print("Commands: /help /memory /projects /quit\n")
 
@@ -400,25 +400,23 @@ Hands tools (SOV1 — operates the screen):
             else:
                 reply, history = chat(client, session_id, system_prompt, history, user_input)
             print(f"\nOracle: {reply}\n")
-        except anthropic.APIError as e:
+        except Exception as e:
             msg = str(e)
             log("ERROR", msg)
-            if "tool_use" in msg and "tool_result" in msg:
+            # Self-heal dangling tool_use/tool_result mismatch (Anthropic cloud error pattern)
+            if not local and "tool_use" in msg and "tool_result" in msg:
                 history = _repair_history(history)
                 print("\n[Oracle recovered from an interrupted tool call. Retrying...]\n")
                 try:
                     reply, history = chat(client, session_id, system_prompt, history, user_input)
                     print(f"\nOracle: {reply}\n")
                     continue
-                except anthropic.APIError as e2:
+                except Exception as e2:
                     log("ERROR", f"Retry failed: {e2}")
                     history = []
                     print("\n[Oracle reset its conversation buffer. Memory is intact. Try again.]\n")
             else:
-                print(f"\n[API Error: {e}]\n")
-        except Exception as e:
-            log("ERROR", str(e))
-            print(f"\n[Error: {e}]\n")
+                print(f"\n[Error: {e}]\n")
 
 
 if __name__ == "__main__":

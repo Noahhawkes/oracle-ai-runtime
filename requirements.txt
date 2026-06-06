@@ -1,10 +1,33 @@
-anthropic>=0.40.0
+# ORACLE.AI — Python dependencies
+#
+# LOCAL MODE (default, free):
+#   pip install -r requirements.txt
+#   Then: ollama pull qwen2.5:7b
+#         ollama pull qwen2.5-vl:7b   (for SOV1 screen control)
+#
+# CLOUD / TURBO MODE (optional, requires ANTHROPIC_API_KEY in .env):
+#   pip install anthropic>=0.40.0
+
+# ── Core (always required) ────────────────────────────────────────────────────
 python-dotenv>=1.0.0
+pyyaml>=6.0.0
 python-docx>=1.1.0
 pypdf>=4.0.0
-pyyaml>=6.0.0
-pystray>=0.19.0
+
+# ── Local model runtime (Ollama via OpenAI-compatible API) ────────────────────
+openai>=1.0.0
+
+# ── SOV1 computer operator (screen control) ───────────────────────────────────
 Pillow>=10.0.0
 pyautogui>=0.9.54
 mss>=9.0.0
 pygetwindow>=0.0.9
+
+# ── System tray UI ────────────────────────────────────────────────────────────
+pystray>=0.19.0
+
+# ── Browser automation (Playwright — uncomment + run: playwright install chromium)
+# playwright>=1.40.0
+
+# ── Cloud / turbo mode (optional — uncomment to enable Anthropic API)
+# anthropic>=0.40.0

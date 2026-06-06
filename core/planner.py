@@ -28,12 +28,11 @@ sys.path.insert(0, str(ROOT / "core"))
 from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
 
-import anthropic
 import yaml
 from memory import init_db, get_facts
 from audit_log import log
+from llm import is_local, make_client, get_model, startup_status
 
-MODEL = "claude-sonnet-4-6"
 PROJECTS_DIR = ROOT / "Projects"
 OBJECTIVES_FILE = ROOT / "objectives.yaml"
 BRIEF_DIR = ROOT / "Projects"
@@ -74,7 +73,7 @@ def memory_summary():
     return "\n".join(f"[{f['category']}] {f['key']}: {f['value']}" for f in facts[:25])
 
 
-def build_brief(client):
+def build_brief(client, model: str, local: bool) -> str:
     objectives = load_objectives()
     obj_text = yaml.safe_dump(objectives, sort_keys=False) if objectives else "None set."
     projects = scan_projects()
@@ -114,25 +113,39 @@ ESTIMATED FOCUSED TIME: (a realistic number of hours)
 Be concrete and decisive. No fluff, no disclaimers. If a project folder is empty,
 suggest the first thing to put in it. Map everything back to an objective."""
 
-    resp = client.messages.create(
-        model=MODEL, max_tokens=1500,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return "".join(b.text for b in resp.content if hasattr(b, "text"))
+    if local:
+        resp = client.chat.completions.create(
+            model=model, max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return resp.choices[0].message.content or ""
+    else:
+        resp = client.messages.create(
+            model=model, max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return "".join(b.text for b in resp.content if hasattr(b, "text"))
 
 
 def main():
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("ERROR: ANTHROPIC_API_KEY not found in .env")
-        sys.exit(1)
-
     init_db()
-    client = anthropic.Anthropic(api_key=api_key)
-    log("PLANNER", "Generating daily brief")
 
+    local = is_local()
+    st = startup_status()
+    try:
+        client = make_client()
+    except RuntimeError as e:
+        print(f"\nERROR: {e}\n")
+        sys.exit(1)
+    model = get_model(vision=False)
+
+    print(f"\n[Planner] Mode: {st['mode']} | Model: {model}")
+    if local and not st.get("ollama_ok"):
+        print(f"[Planner] WARNING: {st.get('ollama_msg')}")
+
+    log("PLANNER", f"Generating daily brief ({st['mode']} / {model})")
     print("Generating your morning brief...\n")
-    brief = build_brief(client)
+    brief = build_brief(client, model, local)
 
     # Save and open it so Noah can read it
     stamp = datetime.now().strftime("%Y%m%d")
