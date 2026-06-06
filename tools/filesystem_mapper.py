@@ -12,6 +12,8 @@ from datetime import datetime
 ROOT = Path(__file__).parent.parent
 INDEX_PATH = ROOT / "Memory" / "filesystem_index.json"
 
+MAX_FILES_PER_SCAN = 2000  # hard cap — scan stops here regardless of path breadth
+
 # Directories to skip (system/noise)
 SKIP_DIRS = {
     "$Recycle.Bin", "System Volume Information", "Windows", "Program Files",
@@ -43,11 +45,17 @@ def _get_file_category(ext: str) -> str:
     return "other"
 
 
-def scan_directory(path: str, max_depth: int = 4, current_depth: int = 0) -> dict:
+def scan_directory(path: str, max_depth: int = 4, current_depth: int = 0,
+                   _counter: list = None) -> dict:
     """
     Recursively scan a directory up to max_depth.
     Returns a nested dict representing the structure.
+    _counter is a one-element list [files_seen] shared across the recursion
+    so the cap is enforced across all subdirectories in one build_index() call.
     """
+    if _counter is None:
+        _counter = [0]
+
     result = {
         "path": path,
         "type": "directory",
@@ -55,6 +63,10 @@ def scan_directory(path: str, max_depth: int = 4, current_depth: int = 0) -> dic
         "file_count": 0,
         "dir_count": 0
     }
+
+    if _counter[0] >= MAX_FILES_PER_SCAN:
+        result["truncated"] = True
+        return result
 
     try:
         entries = list(os.scandir(path))
@@ -66,13 +78,18 @@ def scan_directory(path: str, max_depth: int = 4, current_depth: int = 0) -> dic
         return result
 
     for entry in entries:
+        if _counter[0] >= MAX_FILES_PER_SCAN:
+            result["truncated"] = True
+            break
+
         if entry.name in SKIP_DIRS or entry.name.startswith("."):
             continue
 
         if entry.is_dir(follow_symlinks=False):
             result["dir_count"] += 1
             if current_depth < max_depth:
-                child = scan_directory(entry.path, max_depth, current_depth + 1)
+                child = scan_directory(entry.path, max_depth, current_depth + 1,
+                                       _counter)
                 result["children"].append(child)
             else:
                 result["children"].append({
@@ -101,6 +118,7 @@ def scan_directory(path: str, max_depth: int = 4, current_depth: int = 0) -> dic
                     "modified": modified
                 })
                 result["file_count"] += 1
+                _counter[0] += 1
 
     return result
 
@@ -136,7 +154,8 @@ def _win_disk_usage(path: str):
 def build_index(paths: list = None, max_depth: int = 4) -> dict:
     """
     Build a full filesystem index.
-    paths: list of directories to scan. Defaults to common Noah locations.
+    paths: list of directories to scan. Defaults to ORACLE.AI repo + Projects/.
+    Stops indexing files once MAX_FILES_PER_SCAN is reached across all paths.
     """
     if not paths:
         paths = [
@@ -144,18 +163,28 @@ def build_index(paths: list = None, max_depth: int = 4) -> dict:
             str(ROOT / "Projects"),
         ]
 
+    counter = [0]  # shared mutable counter across all scan_directory calls
     index = {
         "built_at": datetime.now().isoformat(),
         "drives": map_drives(),
-        "locations": {}
+        "locations": {},
+        "truncated": False,
     }
 
     for p in paths:
+        if counter[0] >= MAX_FILES_PER_SCAN:
+            index["truncated"] = True
+            break
         if os.path.exists(p):
             print(f"[Filesystem Mapper] Scanning: {p}")
-            index["locations"][p] = scan_directory(p, max_depth=max_depth)
+            index["locations"][p] = scan_directory(p, max_depth=max_depth,
+                                                   _counter=counter)
         else:
             index["locations"][p] = {"error": "Path not found"}
+
+    if counter[0] >= MAX_FILES_PER_SCAN:
+        index["truncated"] = True
+        print(f"[Filesystem Mapper] Cap reached: {MAX_FILES_PER_SCAN} files indexed. Scan stopped.")
 
     return index
 
