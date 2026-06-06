@@ -121,7 +121,11 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "recall_facts",
-        "description": "Query Oracle's memory database for stored facts, optionally filtered by category.",
+        "description": (
+            "Query Oracle's persistent memory for facts Noah has shared or Oracle has stored. "
+            "Always call this FIRST when asked what Oracle knows, remembers, or has been told. "
+            "Do not use filesystem tools to answer memory questions — use this."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -275,8 +279,12 @@ TOOL_DEFINITIONS = [
     {
         "name": "filesystem_scan",
         "description": (
-            "Scan and index Noah's file system. Learns what files and folders exist where. "
-            "Run once to build the index, then use filesystem_search to find files."
+            "Scan and index a set of folders so filesystem_search can find files. "
+            "WARNING: can take several minutes on large paths. "
+            "Default scope is the ORACLE.AI repo and Projects/ only — safe and fast. "
+            "Only pass custom paths if Noah explicitly asks to scan a specific location. "
+            "Prefer source_map_search or recall_facts for answering questions — "
+            "only call this when Noah explicitly asks to rebuild or update the file index."
         ),
         "input_schema": {
             "type": "object",

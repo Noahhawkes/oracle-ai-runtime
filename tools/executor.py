@@ -303,8 +303,13 @@ def _browser_session(inp: dict, log) -> str:
 
 def _filesystem_scan(inp: dict, log) -> str:
     from filesystem_mapper import build_index, save_index, get_summary
-    log("ACTION", "filesystem_scan", approved=True)
-    index = build_index(inp.get("paths"), inp.get("max_depth", 4))
+    paths = inp.get("paths")
+    label = f"filesystem_scan paths={paths or 'default (ORACLE.AI repo + Projects/)'}"
+    if not _confirm(f"Scan and index filesystem? {label}\nThis may take a moment."):
+        log("ACTION", label, approved=False)
+        return "Cancelled: filesystem scan not run."
+    log("ACTION", label, approved=True)
+    index = build_index(paths, inp.get("max_depth", 4))
     save_index(index)
     return get_summary(index)
 

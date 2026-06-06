@@ -140,12 +140,8 @@ def build_index(paths: list = None, max_depth: int = 4) -> dict:
     """
     if not paths:
         paths = [
-            str(Path.home() / "Desktop"),
-            str(Path.home() / "Documents"),
-            str(Path.home() / "Downloads"),
-            str(Path.home() / "OneDrive"),
-            "G:\\My Drive",
-            str(ROOT)
+            str(ROOT),
+            str(ROOT / "Projects"),
         ]
 
     index = {
