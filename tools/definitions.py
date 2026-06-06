@@ -377,6 +377,79 @@ TOOL_DEFINITIONS = [
         },
     },
 
+    # ── Source Map (file intelligence) ───────────────────────────────────────
+    {
+        "name": "source_map_scan",
+        "description": (
+            "Index Noah's key folders (ORACLE.AI repo, OneDrive docs, business records) "
+            "into a searchable cache. Run this once to build the index, or again to refresh it. "
+            "After scanning, use source_map_search to find specific files."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "paths": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional custom paths to scan (defaults to all key Noah.AI locations)",
+                },
+                "include_excerpts": {
+                    "type": "boolean",
+                    "description": "Read first 500 chars of each file for search context (default true, slower)",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "source_map_search",
+        "description": (
+            "Search the indexed file cache for files matching a query. "
+            "Searches by filename, path, and file content excerpts. "
+            "Returns file paths you can then read with read_file."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search term — filename fragment, topic, or keyword",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max files to return (default 20)",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "source_map_ingest",
+        "description": (
+            "Read a file and save a summary of it into Oracle's persistent memory, "
+            "so it's available in every future session without re-reading the file. "
+            "Use after reading an important document to lock its key facts into memory."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Full path to the file to ingest",
+                },
+                "summary": {
+                    "type": "string",
+                    "description": "Your concise summary of what this file contains and why it matters",
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Memory category (default: 'source_map'). Use 'compliance', 'project', 'identity', etc. for important docs.",
+                },
+            },
+            "required": ["path", "summary"],
+        },
+    },
+
     # ── Computer Operator (SOV1) ──────────────────────────────────────────────
     {
         "name": "computer_operator",

@@ -86,6 +86,12 @@ def execute_tool(tool_name: str, tool_input: dict) -> str:
             return _build_exe(tool_input, log)
         elif tool_name == "scheduler_control":
             return _scheduler_control(tool_input, log)
+        elif tool_name == "source_map_scan":
+            return _source_map_scan(tool_input, log)
+        elif tool_name == "source_map_search":
+            return _source_map_search(tool_input, log)
+        elif tool_name == "source_map_ingest":
+            return _source_map_ingest(tool_input, log)
         elif tool_name == "computer_operator":
             return _computer_operator(tool_input, log)
         else:
@@ -358,6 +364,47 @@ def _scheduler_control(inp: dict, log) -> str:
             inp.get("interval_minutes", 60),
         )
     return f"Unknown scheduler action: {action}"
+
+
+# ── Source Map ────────────────────────────────────────────────────────────────
+
+def _source_map_scan(inp: dict, log) -> str:
+    sys.path.insert(0, str(ROOT / "core"))
+    from source_map import build_index, save_index, get_index_summary
+    log("ACTION", "source_map_scan", approved=True)
+    paths = inp.get("paths") or None
+    include_excerpts = inp.get("include_excerpts", True)
+    print("[Source Map] Scanning — this may take a minute on first run...")
+    index = build_index(scan_paths=paths, include_excerpts=include_excerpts)
+    save_index(index)
+    return get_index_summary()
+
+
+def _source_map_search(inp: dict, log) -> str:
+    sys.path.insert(0, str(ROOT / "core"))
+    from source_map import search_index, load_index
+    query = inp["query"]
+    max_results = inp.get("max_results", 20)
+    log("ACTION", f"source_map_search:{query}", approved=True)
+    index = load_index()
+    if not index:
+        return "No source map found. Run source_map_scan first."
+    results = search_index(query, max_results=max_results)
+    if not results:
+        return f"No files found matching '{query}'."
+    lines = [f"{r['path']}  [{r['ext']} | {r['size_kb']} KB | {r['modified']}]" for r in results]
+    return f"{len(results)} file(s) matching '{query}':\n" + "\n".join(lines)
+
+
+def _source_map_ingest(inp: dict, log) -> str:
+    sys.path.insert(0, str(ROOT / "core"))
+    from source_map import ingest_file_to_memory
+    path = inp["path"]
+    summary = inp["summary"]
+    category = inp.get("category", "source_map")
+    log("ACTION", f"source_map_ingest:{path}", approved=True)
+    ingest_file_to_memory(path, summary, category)
+    return f"Ingested into memory [{category}]: {Path(path).name}"
 
 
 # ── Computer Operator (SOV1) ──────────────────────────────────────────────────
