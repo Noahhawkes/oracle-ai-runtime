@@ -377,6 +377,23 @@ TOOL_DEFINITIONS = [
         },
     },
 
+    # ── Daemon ────────────────────────────────────────────────────────────────
+    {
+        "name": "daemon_cycle",
+        "description": (
+            "Run one autonomous daemon cycle manually: check source map freshness, "
+            "retrieve goal-relevant docs, ingest top findings into memory, and write "
+            "an action proposal file. Safe tools only — no file edits, shell commands, "
+            "or irreversible actions. Use when Noah says 'wake up', 'run a cycle', "
+            "or asks Oracle to scan and propose next steps."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+
     # ── Source Map (file intelligence) ───────────────────────────────────────
     {
         "name": "source_map_scan",

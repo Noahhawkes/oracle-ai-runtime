@@ -86,6 +86,8 @@ def execute_tool(tool_name: str, tool_input: dict) -> str:
             return _build_exe(tool_input, log)
         elif tool_name == "scheduler_control":
             return _scheduler_control(tool_input, log)
+        elif tool_name == "daemon_cycle":
+            return _daemon_cycle(tool_input, log)
         elif tool_name == "source_map_scan":
             return _source_map_scan(tool_input, log)
         elif tool_name == "source_map_search":
@@ -364,6 +366,27 @@ def _scheduler_control(inp: dict, log) -> str:
             inp.get("interval_minutes", 60),
         )
     return f"Unknown scheduler action: {action}"
+
+
+# ── Daemon ────────────────────────────────────────────────────────────────────
+
+def _daemon_cycle(inp: dict, log) -> str:
+    sys.path.insert(0, str(ROOT / "core"))
+    from daemon import run_autonomous_cycle, _preflight, _daemon_prompt
+    from memory import new_session, get_facts
+    from context_loader import build_system_prompt
+    from llm import is_local, make_client, get_model
+    log("ACTION", "daemon_cycle", approved=True)
+    try:
+        client = make_client()
+    except RuntimeError as e:
+        return f"Daemon cycle unavailable: {e}"
+    local = is_local()
+    model = get_model(vision=False)
+    system_prompt = build_system_prompt()
+    session_id = new_session()
+    proposal_path = run_autonomous_cycle(client, session_id, system_prompt, local, model)
+    return f"Daemon cycle complete. Proposal written to: {proposal_path}"
 
 
 # ── Source Map ────────────────────────────────────────────────────────────────
