@@ -1,9 +1,11 @@
 """
 Tool definitions for Claude tool-use API.
 These are the tools Oracle can call autonomously.
+Phase 2: Added browser, shell, filesystem, build, and scheduler tools.
 """
 
 TOOL_DEFINITIONS = [
+    # ── Phase 1 Core Tools ────────────────────────────────────────────────────
     {
         "name": "open_app",
         "description": (
@@ -143,6 +145,267 @@ TOOL_DEFINITIONS = [
                 },
             },
             "required": ["path"],
+        },
+    },
+
+    # ── Phase 2: Shell Agent ──────────────────────────────────────────────────
+    {
+        "name": "run_shell",
+        "description": (
+            "Execute any PowerShell or CMD command on Noah's machine. "
+            "Use for installs, file operations, git commands, builds, system info. "
+            "Full unrestricted shell access with audit logging."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "PowerShell command to execute",
+                },
+                "cwd": {
+                    "type": "string",
+                    "description": "Working directory for the command (optional)",
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Timeout in seconds (default 120)",
+                },
+            },
+            "required": ["command"],
+        },
+    },
+    {
+        "name": "install_package",
+        "description": "Install a software package using pip, npm, choco, or winget.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "package": {
+                    "type": "string",
+                    "description": "Package name to install",
+                },
+                "manager": {
+                    "type": "string",
+                    "enum": ["pip", "npm", "choco", "winget"],
+                    "description": "Package manager to use (default: pip)",
+                },
+            },
+            "required": ["package"],
+        },
+    },
+
+    # ── Phase 2: Browser Agent ────────────────────────────────────────────────
+    {
+        "name": "browser_navigate",
+        "description": (
+            "Open a URL in a browser and return the page text. "
+            "Use to read web pages, check sites, gather information from the web."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "URL to navigate to",
+                },
+                "headless": {
+                    "type": "boolean",
+                    "description": "Run browser headlessly (invisible). Default false = visible.",
+                },
+            },
+            "required": ["url"],
+        },
+    },
+    {
+        "name": "browser_search",
+        "description": "Perform a web search and return results text.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query",
+                },
+                "engine": {
+                    "type": "string",
+                    "enum": ["google", "bing", "duckduckgo"],
+                    "description": "Search engine to use (default: google)",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "browser_session",
+        "description": (
+            "Control a persistent browser session for multi-step web interactions. "
+            "Actions: start, stop, navigate, get_text, click, type, screenshot, scroll."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["start", "stop", "navigate", "get_text", "click", "type", "screenshot", "scroll"],
+                    "description": "Browser action to perform",
+                },
+                "url": {
+                    "type": "string",
+                    "description": "URL (for navigate action)",
+                },
+                "selector": {
+                    "type": "string",
+                    "description": "CSS selector or text (for click/type actions)",
+                },
+                "text": {
+                    "type": "string",
+                    "description": "Text to type (for type action)",
+                },
+                "headless": {
+                    "type": "boolean",
+                    "description": "Headless mode for start action",
+                },
+            },
+            "required": ["action"],
+        },
+    },
+
+    # ── Phase 2: Filesystem Mapper ────────────────────────────────────────────
+    {
+        "name": "filesystem_scan",
+        "description": (
+            "Scan and index Noah's file system. Learns what files and folders exist where. "
+            "Run once to build the index, then use filesystem_search to find files."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "paths": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Specific paths to scan (optional — defaults to Desktop, Documents, Downloads, Drive)",
+                },
+                "max_depth": {
+                    "type": "integer",
+                    "description": "How deep to recurse (default 4)",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "filesystem_search",
+        "description": "Search the filesystem index for files matching a query.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search term (filename or path fragment)",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "filesystem_summary",
+        "description": "Get a summary of the current filesystem index (drives, locations, file counts).",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+
+    # ── Phase 2: Build Agent ──────────────────────────────────────────────────
+    {
+        "name": "create_project",
+        "description": (
+            "Scaffold a new software project from a template. "
+            "Templates: python_cli, python_flask, python_desktop, node_api, html_site. "
+            "Creates all files, initializes git, installs dependencies."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Project name",
+                },
+                "template": {
+                    "type": "string",
+                    "enum": ["python_cli", "python_flask", "python_desktop", "node_api", "html_site"],
+                    "description": "Project template to use",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Project description",
+                },
+                "location": {
+                    "type": "string",
+                    "description": "Directory to create the project in (default: Desktop)",
+                },
+                "install_deps": {
+                    "type": "boolean",
+                    "description": "Auto-install dependencies (default: true)",
+                },
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "build_exe",
+        "description": "Build a Python project into a Windows .exe using PyInstaller.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project_path": {
+                    "type": "string",
+                    "description": "Path to the Python project",
+                },
+                "entry_file": {
+                    "type": "string",
+                    "description": "Main Python file (default: main.py)",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Output exe name (default: project folder name)",
+                },
+            },
+            "required": ["project_path"],
+        },
+    },
+
+    # ── Phase 2: Scheduler ────────────────────────────────────────────────────
+    {
+        "name": "scheduler_control",
+        "description": (
+            "Control ORACLE's autonomous background scheduler. "
+            "Start autonomous mode to run tasks on timers without Noah's input."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["start", "stop", "status", "add_task"],
+                    "description": "Scheduler action",
+                },
+                "task_name": {
+                    "type": "string",
+                    "description": "Task name (for add_task)",
+                },
+                "command": {
+                    "type": "string",
+                    "description": "Shell command to schedule (for add_task)",
+                },
+                "interval_minutes": {
+                    "type": "integer",
+                    "description": "How often to run in minutes (for add_task)",
+                },
+            },
+            "required": ["action"],
         },
     },
 ]
