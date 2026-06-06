@@ -59,6 +59,10 @@ def execute_tool(tool_name: str, tool_input: dict) -> str:
             return _recall_facts(tool_input, log)
         elif tool_name == "list_directory":
             return _list_directory(tool_input, log)
+        elif tool_name == "run_shell":
+            return _run_shell(tool_input, log)
+        elif tool_name == "install_package":
+            return _install_package(tool_input, log)
         else:
             return f"Unknown tool: {tool_name}"
     except Exception as e:
@@ -181,6 +185,48 @@ def _recall_facts(inp: dict, log) -> str:
     lines = [f"[{f['category']}] {f['key']}: {f['value']}" for f in facts]
     log("ACTION", f"recall_facts:{category or 'all'}", approved=True)
     return "\n".join(lines)
+
+
+def _run_shell(inp: dict, log) -> str:
+    command = inp["command"]
+    cwd = inp.get("cwd", str(ROOT))
+    timeout = inp.get("timeout", 120)
+
+    log("ACTION", f"run_shell: {command[:100]}", approved=True)
+    try:
+        result = subprocess.run(
+            ["powershell", "-ExecutionPolicy", "Bypass", "-Command", command],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        output = result.stdout.strip()
+        if result.returncode != 0 and result.stderr.strip():
+            output += f"\nSTDERR: {result.stderr.strip()}"
+        return output or "(command completed, no output)"
+    except subprocess.TimeoutExpired:
+        return f"Command timed out after {timeout}s"
+    except Exception as e:
+        return f"Shell error: {e}"
+
+
+def _install_package(inp: dict, log) -> str:
+    package = inp["package"]
+    manager = inp.get("manager", "pip")
+    cmd_map = {
+        "pip": f"pip install {package}",
+        "npm": f"npm install -g {package}",
+        "choco": f"choco install {package} -y",
+        "winget": f"winget install {package}",
+    }
+    command = cmd_map.get(manager, f"pip install {package}")
+    log("ACTION", f"install_package:{manager}:{package}", approved=True)
+    result = subprocess.run(
+        ["powershell", "-ExecutionPolicy", "Bypass", "-Command", command],
+        capture_output=True, text=True, timeout=180,
+    )
+    return result.stdout.strip() or result.stderr.strip() or "(install completed)"
 
 
 def _list_directory(inp: dict, log) -> str:
