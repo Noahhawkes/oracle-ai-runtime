@@ -314,9 +314,45 @@ def operate(client, goal, model=None, system=None):
     return None
 
 
-def operate_local(client, goal, model, system=None):
-    """OpenAI-compatible operate loop for local vision models (e.g. qwen2.5-vl via Ollama)."""
+def _observe(client, vision_model: str, goal: str, shot_block: dict) -> str:
+    """
+    Stage 1 of two-stage local loop.
+    Sends the screenshot to the vision model with NO tools argument.
+    Returns a plain-text description of what is on the screen.
+    qwen2.5-vl does not support tools — this call never passes them.
+    """
+    messages = [{"role": "user", "content": [
+        {"type": "text", "text": (
+            f"Goal context: {goal}\n\n"
+            "Describe exactly what you see on the screen right now. "
+            "List windows, text, buttons, and layout. Be specific. "
+            "Do not take any action — observation only."
+        )},
+        shot_block,
+    ]}]
+    resp = client.chat.completions.create(
+        model=vision_model,
+        max_tokens=1024,
+        messages=messages,
+        # No tools= — vision model does not support tool calling
+    )
+    return resp.choices[0].message.content or "(no observation returned)"
+
+
+def operate_local(client, goal, model, system=None, text_model=None):
+    """
+    Two-stage local operate loop.
+
+    Stage 1 — vision model (model): receives screenshot, no tools, returns plain-text observation.
+    Stage 2 — text model (text_model, default qwen2.5:7b): receives observation + goal + tools,
+               decides next action. No images are ever sent to the text model.
+
+    This split exists because qwen2.5-vl does not support the tools= parameter.
+    """
     import json
+
+    if text_model is None:
+        text_model = get_model(vision=False)
 
     system = system or SYSTEM
     lessons = load_lessons()
@@ -326,17 +362,23 @@ def operate_local(client, goal, model, system=None):
     oai_tools = to_openai_tools(TOOLS)
     log("SOV1", f"Goal (local): {goal}")
 
-    history = [{"role": "user", "content": [
-        {"type": "text", "text": f"Goal: {goal}\n\nLook at the screen and do it."},
-        _screenshot_block(),
-    ]}]
+    # Stage 1: get initial screen observation from vision model (no tools)
+    shot = _screenshot_block()
+    observation = _observe(client, model, goal, shot)
+    log("SOV1", f"Observation: {observation[:200]}")
+
+    # decision_history accumulates tool-call turns for the text model only (no images)
+    decision_history = []
     done_text = None
 
     for step in range(MAX_STEPS):
-        _prune_images(history)
-        messages = [{"role": "system", "content": system}] + history
+        # Stage 2: text model receives current observation + goal, decides tool or done
+        user_content = f"Goal: {goal}\n\nCurrent screen observation:\n{observation}"
+        decision_history.append({"role": "user", "content": user_content})
+
+        messages = [{"role": "system", "content": system}] + decision_history
         resp = client.chat.completions.create(
-            model=model, max_tokens=MAX_TOKENS,
+            model=text_model, max_tokens=MAX_TOKENS,
             messages=messages, tools=oai_tools,
         )
         msg = resp.choices[0].message
@@ -345,18 +387,18 @@ def operate_local(client, goal, model, system=None):
         if msg.content and msg.content.strip():
             print(f"\nSOV1: {msg.content.strip()}")
 
-        # Store assistant turn
-        assistant_entry = {"role": "assistant", "content": msg.content or ""}
-        if msg.tool_calls:
-            assistant_entry["tool_calls"] = [
-                {"id": tc.id, "type": "function",
-                 "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                for tc in msg.tool_calls
-            ]
-        history.append(assistant_entry)
-
+        # No tool calls — goal answered by observation alone, or model chose to stop
         if finish not in ("tool_calls", "tool_use") or not msg.tool_calls:
-            return
+            return msg.content or observation
+
+        # Store assistant tool-call turn (text only, no images)
+        assistant_entry = {"role": "assistant", "content": msg.content or ""}
+        assistant_entry["tool_calls"] = [
+            {"id": tc.id, "type": "function",
+             "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+            for tc in msg.tool_calls
+        ]
+        decision_history.append(assistant_entry)
 
         done = False
         for tc in msg.tool_calls:
@@ -366,16 +408,15 @@ def operate_local(client, goal, model, system=None):
             except (json.JSONDecodeError, TypeError):
                 inp = {}
             try:
-                text, shot, flag = _run_tool(tc.function.name, inp)
+                text, _shot, flag = _run_tool(tc.function.name, inp)
             except Exception as e:
                 log("ERROR", f"action {tc.function.name} failed: {e}")
-                text = f"That action errored: {e}. Take a fresh screenshot and try differently."
-                shot, flag = _screenshot_block(), None
-            content = [{"type": "text", "text": text}]
-            if shot:
-                content.append(shot)
-            history.append({"role": "tool", "tool_call_id": tc.id,
-                            "content": content if len(content) > 1 else text})
+                text = f"That action errored: {e}. Try a different approach."
+                _shot, flag = None, None
+
+            # Tool result is always text — screenshots go to vision model, not text model
+            decision_history.append({"role": "tool", "tool_call_id": tc.id, "content": text})
+
             if flag == "DONE":
                 print(f"\n=== DONE: {text} ===")
                 done = True
@@ -383,6 +424,11 @@ def operate_local(client, goal, model, system=None):
 
         if done:
             return done_text
+
+        # Stage 1 again: fresh screenshot → fresh observation for next decision step
+        shot = _screenshot_block()
+        observation = _observe(client, model, goal, shot)
+        log("SOV1", f"Observation step {step + 1}: {observation[:200]}")
 
     print("\n[Reached step limit. Tell me to continue if it's not finished.]")
     return None
