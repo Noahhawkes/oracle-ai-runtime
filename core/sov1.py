@@ -68,6 +68,24 @@ YOUR OPERATING RULES (Noah set these):
 
 You are decisive and competent. You are Noah's operator, acting as him, for him."""
 
+# Used in operate_local() for the text-model decision step only.
+# Screenshot instructions are removed because the two-stage loop provides a
+# text observation before each decision — the text model never takes screenshots.
+_LOCAL_DECISION_SYSTEM = """You are SOV1.AI's action planner for Noah Hawkes' Windows 11 PC.
+
+You will receive a text description of the current screen state and a goal.
+Your job: decide the single next action using the available tools.
+
+RULES:
+1. If the goal is already answered by the screen observation, call task_done with a clear summary.
+2. If you need to interact with the screen (click, type, open, focus), call the appropriate tool.
+3. ALWAYS use ask_confirmation before anything irreversible: sending, deleting, buying, posting.
+4. Use ask_noah only when you genuinely cannot determine what Noah wants.
+5. After each action the screen will be re-observed automatically — do NOT call take_screenshot.
+6. When the goal is complete, call task_done.
+
+You are decisive and competent. Act on the screen description you are given."""
+
 TOOLS = [
     {"name": "take_screenshot", "description": "Capture the current screen to see what's on it. Do this first and after actions.",
      "input_schema": {"type": "object", "properties": {}}},
@@ -354,18 +372,26 @@ def operate_local(client, goal, model, system=None, text_model=None):
     if text_model is None:
         text_model = get_model(vision=False)
 
-    system = system or SYSTEM
+    # Vision model uses the full SYSTEM prompt; text decision model gets a stripped
+    # version that removes all screenshot instructions (the loop handles that via _observe).
+    vision_system = system or SYSTEM
+    decision_system = _LOCAL_DECISION_SYSTEM
     lessons = load_lessons()
     if lessons:
-        system += ("\n\nLESSONS YOU'VE ALREADY LEARNED:\n" + "\n".join(f"- {l}" for l in lessons))
+        lesson_block = "\n\nLESSONS YOU'VE ALREADY LEARNED:\n" + "\n".join(f"- {l}" for l in lessons)
+        vision_system += lesson_block
+        decision_system += lesson_block
 
-    oai_tools = to_openai_tools(TOOLS)
+    # take_screenshot is excluded: the two-stage loop handles screenshots via _observe()
+    # before each decision step — the text model must not call it
+    oai_tools = [t for t in to_openai_tools(TOOLS) if t["function"]["name"] != "take_screenshot"]
     log("SOV1", f"Goal (local): {goal}")
 
     # Stage 1: get initial screen observation from vision model (no tools)
     shot = _screenshot_block()
     observation = _observe(client, model, goal, shot)
     log("SOV1", f"Observation: {observation[:200]}")
+    print(f"\n[SOV1 observation]: {observation[:300]}{'...' if len(observation) > 300 else ''}")
 
     # decision_history accumulates tool-call turns for the text model only (no images)
     decision_history = []
@@ -376,7 +402,7 @@ def operate_local(client, goal, model, system=None, text_model=None):
         user_content = f"Goal: {goal}\n\nCurrent screen observation:\n{observation}"
         decision_history.append({"role": "user", "content": user_content})
 
-        messages = [{"role": "system", "content": system}] + decision_history
+        messages = [{"role": "system", "content": decision_system}] + decision_history
         resp = client.chat.completions.create(
             model=text_model, max_tokens=MAX_TOKENS,
             messages=messages, tools=oai_tools,
