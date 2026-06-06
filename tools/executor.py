@@ -503,10 +503,12 @@ def _computer_operator(inp: dict, log) -> str:
         return f"Computer operator unavailable: {e}"
     if is_local():
         model = get_model(vision=True)
-        sov1.operate_local(client, goal, model)
+        result = sov1.operate_local(client, goal, model)
     else:
         model = get_model(vision=True)
-        sov1.operate(client, goal, model)
+        result = sov1.operate(client, goal, model)
+    if result:
+        return result
     return f"Computer operator finished: {goal}"
 
 
