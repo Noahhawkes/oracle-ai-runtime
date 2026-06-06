@@ -81,6 +81,13 @@ DO FREELY (no need to ask):
    message box and send it, so ChatGPT can give the next step.
 5. Call task_done with a one-line summary of this cycle.
 
+SENDING MESSAGES (important): When you type a reply into ChatGPT's message box,
+you MUST send it — press the 'enter' key, or click the send button (the small
+arrow/paper-plane icon at the right or bottom of the box). Typing without sending
+does nothing. After sending, take a screenshot to CONFIRM the message posted and
+that ChatGPT starts responding. If it didn't send, click the send button directly.
+Never assume it sent — verify with a screenshot.
+
 Work in small visible steps. After acting, take a fresh screenshot to confirm
 before continuing. Be decisive. You are Noah's operator."""
 
