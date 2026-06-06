@@ -14,10 +14,15 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).parent.parent
 load_dotenv(ROOT / ".env")
 
+# Add project root to path so tools/ package resolves correctly
+sys.path.insert(0, str(ROOT))
+
 import anthropic
 from memory import init_db, new_session, save_message, get_recent_messages
 from context_loader import build_system_prompt, load_identity, index_summary
 from audit_log import log
+from tools.definitions import TOOL_DEFINITIONS
+from tools.executor import execute_tool
 
 MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 4096
@@ -165,19 +170,45 @@ def chat(client, session_id, system_prompt, history, user_input):
     save_message(session_id, "user", user_input)
     log("INPUT", user_input)
 
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=MAX_TOKENS,
-        system=system_prompt,
-        messages=history,
-    )
+    # Agentic tool-use loop — Oracle keeps going until it produces a final text reply
+    while True:
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=MAX_TOKENS,
+            system=system_prompt,
+            messages=history,
+            tools=TOOL_DEFINITIONS,
+        )
 
-    reply = response.content[0].text
-    history.append({"role": "assistant", "content": reply})
-    save_message(session_id, "assistant", reply)
-    log("OUTPUT", reply[:200] + ("..." if len(reply) > 200 else ""))
+        # Append whatever Claude returned to history
+        history.append({"role": "assistant", "content": response.content})
 
-    return reply, history
+        if response.stop_reason == "tool_use":
+            # Execute each tool call and collect results
+            tool_results = []
+            for block in response.content:
+                if block.type == "tool_use":
+                    print(f"\n[Oracle → Tool: {block.name}]")
+                    result = execute_tool(block.name, block.input)
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": result,
+                    })
+            history.append({"role": "user", "content": tool_results})
+            # Loop — let Claude respond to the tool results
+            continue
+
+        # stop_reason == "end_turn" — extract the final text reply
+        reply = ""
+        for block in response.content:
+            if hasattr(block, "text"):
+                reply = block.text
+                break
+
+        save_message(session_id, "assistant", reply)
+        log("OUTPUT", reply[:200] + ("..." if len(reply) > 200 else ""))
+        return reply, history
 
 
 def main():
@@ -250,6 +281,15 @@ Commands:
   /person recall <name>              Show person and all notes
   /clear                             Clear conversation history
   /quit                              Exit Oracle
+
+Tools Oracle can execute autonomously:
+  open_app    Launch approved apps (chrome, vscode, notepad, explorer)
+  run_script  Run approved PowerShell scripts
+  read_file   Read any file on disk
+  write_file  Write or append to a file (confirms before overwriting)
+  remember_fact  Persist a fact to memory
+  recall_facts   Query memory
+  list_directory List folder contents
 """)
             continue
 
