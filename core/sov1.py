@@ -267,6 +267,7 @@ def operate(client, goal, system=None):
         {"type": "text", "text": f"Goal: {goal}\n\nLook at the screen and do it."},
         _screenshot_block(),
     ]}]
+    done_text = None
 
     for step in range(MAX_STEPS):
         _prune_images(history)  # keep only the latest screenshots — saves tokens
@@ -303,11 +304,13 @@ def operate(client, goal, system=None):
                 if flag == "DONE":
                     print(f"\n=== DONE: {text} ===")
                     done = True
+                    done_text = text
         history.append({"role": "user", "content": results})
         if done:
-            return
+            return done_text
 
     print("\n[Reached step limit. Tell me to continue if it's not finished.]")
+    return None
 
 
 def operate_local(client, goal, model, system=None):
@@ -326,6 +329,7 @@ def operate_local(client, goal, model, system=None):
         {"type": "text", "text": f"Goal: {goal}\n\nLook at the screen and do it."},
         _screenshot_block(),
     ]}]
+    done_text = None
 
     for step in range(MAX_STEPS):
         _prune_images(history)
@@ -374,11 +378,13 @@ def operate_local(client, goal, model, system=None):
             if flag == "DONE":
                 print(f"\n=== DONE: {text} ===")
                 done = True
+                done_text = text
 
         if done:
-            return
+            return done_text
 
     print("\n[Reached step limit. Tell me to continue if it's not finished.]")
+    return None
 
 
 def main():

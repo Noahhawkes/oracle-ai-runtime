@@ -377,6 +377,36 @@ TOOL_DEFINITIONS = [
         },
     },
 
+    # ── ChatGPT Bridge ────────────────────────────────────────────────────────
+    {
+        "name": "ask_chatgpt",
+        "description": (
+            "Send a question to Noah's ChatGPT and return its response. "
+            "SOV1 operates the ChatGPT browser tab directly — focuses the window, "
+            "types the question, sends it, waits for the full response to stream, "
+            "and reads the answer back. "
+            "ChatGPT has access to thousands of Noah's past threads and deep context "
+            "on Noah.AI, SOV1, TOUCHFLAME, consulting, and every prior project. "
+            "Use when you need to draw on that history or get a second perspective. "
+            "Requires Chrome open with a ChatGPT tab. "
+            "Very long responses may be truncated to what fits on screen."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "The exact question or prompt to send to ChatGPT",
+                },
+                "context": {
+                    "type": "string",
+                    "description": "Optional context to prepend before the question (e.g. what you're working on)",
+                },
+            },
+            "required": ["question"],
+        },
+    },
+
     # ── Daemon ────────────────────────────────────────────────────────────────
     {
         "name": "daemon_cycle",

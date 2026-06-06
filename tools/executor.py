@@ -86,6 +86,8 @@ def execute_tool(tool_name: str, tool_input: dict) -> str:
             return _build_exe(tool_input, log)
         elif tool_name == "scheduler_control":
             return _scheduler_control(tool_input, log)
+        elif tool_name == "ask_chatgpt":
+            return _ask_chatgpt(tool_input, log)
         elif tool_name == "daemon_cycle":
             return _daemon_cycle(tool_input, log)
         elif tool_name == "source_map_scan":
@@ -366,6 +368,52 @@ def _scheduler_control(inp: dict, log) -> str:
             inp.get("interval_minutes", 60),
         )
     return f"Unknown scheduler action: {action}"
+
+
+# ── ChatGPT Bridge ────────────────────────────────────────────────────────────
+
+_ASK_CHATGPT_GOAL = """Focus the ChatGPT tab in Chrome (open chatgpt.com if it isn't open already).
+
+TYPE THIS EXACT MESSAGE into the ChatGPT message input box at the bottom of the page, then send it:
+
+---
+{message}
+---
+
+After sending, WAIT for ChatGPT to finish its complete response — the response is done when the send button re-appears and there is no more text streaming in. Then read the FULL response text carefully from the screen. Call task_done with the complete response text as the summary. Do not summarize or shorten it — copy the full response."""
+
+def _ask_chatgpt(inp: dict, log) -> str:
+    try:
+        import computer_control as cc
+        if not cc.HANDS_AVAILABLE:
+            return "ask_chatgpt unavailable: pyautogui/PIL not installed."
+    except ImportError:
+        return "ask_chatgpt unavailable: computer_control module not found."
+    import sov1
+    from llm import is_local, make_client, get_model
+
+    question = inp["question"].strip()
+    context = inp.get("context", "").strip()
+    message = f"{context}\n\n{question}".strip() if context else question
+
+    log("BRIDGE", f"Asking ChatGPT: {question[:100]}")
+    goal = _ASK_CHATGPT_GOAL.format(message=message)
+
+    try:
+        client = make_client()
+    except RuntimeError as e:
+        return f"ask_chatgpt unavailable: {e}"
+
+    if is_local():
+        model = get_model(vision=True)
+        result = sov1.operate_local(client, goal, model)
+    else:
+        result = sov1.operate(client, goal)
+
+    if result:
+        log("BRIDGE", f"ChatGPT response received ({len(result)} chars)")
+        return f"ChatGPT says:\n\n{result}"
+    return "ChatGPT did not return a response (step limit reached or task_done not called)."
 
 
 # ── Daemon ────────────────────────────────────────────────────────────────────

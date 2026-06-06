@@ -34,10 +34,10 @@ sys.path.insert(0, str(ROOT / "core"))
 from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
 
-import anthropic
 import computer_control as cc
 import sov1
 from audit_log import log
+from llm import is_local, make_client, get_model
 
 MAX_CYCLES = 10  # how many back-and-forth rounds before pausing for Noah
 
@@ -95,15 +95,17 @@ before continuing. Be decisive. You are Noah's operator."""
 
 
 def main():
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("ERROR: ANTHROPIC_API_KEY not found in .env")
-        sys.exit(1)
     if not cc.HANDS_AVAILABLE:
         print(cc._require_hands())
         sys.exit(1)
 
-    client = anthropic.Anthropic(api_key=api_key)
+    try:
+        client = make_client()
+    except RuntimeError as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
+    local = is_local()
+    model = get_model(vision=True)
     log("BRIDGE", "ChatGPT <-> SOV1 bridge started")
 
     print("=" * 60)
@@ -137,7 +139,10 @@ def main():
         print(f"\n========== BRIDGE ROUND {i + 1} of {cycles} ==========")
         log("BRIDGE", f"Round {i + 1}")
         try:
-            sov1.operate(client, cycle_goal, system=BRIDGE_SYSTEM)
+            if local:
+                sov1.operate_local(client, cycle_goal, model, system=BRIDGE_SYSTEM)
+            else:
+                sov1.operate(client, cycle_goal, system=BRIDGE_SYSTEM)
         except Exception as e:
             log("ERROR", f"Bridge round failed: {e}")
             print(f"\n[Bridge hit an error: {e}]")
