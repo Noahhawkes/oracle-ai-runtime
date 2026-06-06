@@ -365,6 +365,17 @@ def main():
             handle_person_command(user_input[8:].strip())
             continue
 
+        if user_input.lower() == "/propose-build":
+            print("\n[propose-build] Starting read-only build recommendation...\n")
+            try:
+                from propose_build import run_propose_build
+                proposal = run_propose_build(client, model, local)
+                print(proposal)
+            except Exception as e:
+                log("ERROR", f"/propose-build failed: {e}")
+                print(f"\n[propose-build error: {e}]\n")
+            continue
+
         if user_input.lower() == "/help":
             print("""
 Commands:
@@ -377,6 +388,7 @@ Commands:
   /person note <name> <note>         Add a note about a person
   /person recall <name>              Show person and all notes
   /clear                             Clear conversation history
+  /propose-build                     Read build docs and recommend one next task (read-only)
   /quit                              Exit
 
 Brain tools (reasoning, files, web):
