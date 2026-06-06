@@ -5,6 +5,7 @@ Gives ORACLE the ability to CREATE software autonomously.
 """
 
 import os
+import sys
 import json
 import shutil
 from pathlib import Path
@@ -13,8 +14,6 @@ from datetime import datetime
 ROOT = Path(__file__).parent.parent
 
 # Import shell agent for command execution
-sys._path_patched = True
-import sys
 sys.path.insert(0, str(ROOT / "tools"))
 from shell_agent import run_powershell, pip_install, format_result
 

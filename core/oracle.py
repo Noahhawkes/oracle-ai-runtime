@@ -170,6 +170,35 @@ def handle_person_command(args):
         print("  Commands: /person add <name> [role] | /person note <name> <note> | /person recall <name>\n")
 
 
+def _has_tool_use(content):
+    """True if an assistant message's content contains a tool_use block."""
+    if not isinstance(content, list):
+        return False
+    for block in content:
+        btype = getattr(block, "type", None) or (block.get("type") if isinstance(block, dict) else None)
+        if btype == "tool_use":
+            return True
+    return False
+
+
+def _repair_history(history):
+    """
+    Trim history back to the last clean boundary after an interrupted tool call.
+    A clean boundary is an assistant message with no dangling tool_use blocks.
+    Drops the trailing (now-stale) user input so the retry re-adds it cleanly.
+    """
+    repaired = list(history)
+    # Walk backward, dropping messages until we land on a complete assistant turn
+    while repaired:
+        last = repaired[-1]
+        role = last.get("role")
+        content = last.get("content")
+        if role == "assistant" and not _has_tool_use(content):
+            break  # clean end_turn assistant message — safe stopping point
+        repaired.pop()
+    return repaired
+
+
 def chat(client, session_id, system_prompt, history, user_input):
     history.append({"role": "user", "content": user_input})
     save_message(session_id, "user", user_input)
@@ -302,8 +331,24 @@ Tools Oracle can execute autonomously:
             reply, history = chat(client, session_id, system_prompt, history, user_input)
             print(f"\nOracle: {reply}\n")
         except anthropic.APIError as e:
-            print(f"\n[API Error: {e}]\n")
-            log("ERROR", str(e))
+            msg = str(e)
+            log("ERROR", msg)
+            # Self-heal: a crash mid-tool-call leaves a dangling tool_use with no
+            # tool_result, which 400s every following turn. Roll history back to the
+            # last clean exchange and retry once.
+            if "tool_use" in msg and "tool_result" in msg:
+                history = _repair_history(history)
+                print("\n[Oracle recovered from an interrupted tool call. Retrying...]\n")
+                try:
+                    reply, history = chat(client, session_id, system_prompt, history, user_input)
+                    print(f"\nOracle: {reply}\n")
+                    continue
+                except anthropic.APIError as e2:
+                    log("ERROR", f"Retry failed: {e2}")
+                    history = []
+                    print("\n[Oracle reset its conversation buffer. Memory is intact. Try again.]\n")
+            else:
+                print(f"\n[API Error: {e}]\n")
 
 
 if __name__ == "__main__":

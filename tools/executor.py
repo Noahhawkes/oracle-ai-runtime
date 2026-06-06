@@ -15,6 +15,11 @@ if getattr(sys, "frozen", False):
 else:
     ROOT = Path(__file__).parent.parent
 
+# Ensure tools/ and core/ are importable for Phase 2 module imports
+for _p in (str(ROOT), str(ROOT / "core"), str(ROOT / "tools")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 # Lazy-load config to avoid circular imports
 _config = None
 
@@ -63,6 +68,24 @@ def execute_tool(tool_name: str, tool_input: dict) -> str:
             return _run_shell(tool_input, log)
         elif tool_name == "install_package":
             return _install_package(tool_input, log)
+        elif tool_name == "browser_navigate":
+            return _browser_navigate(tool_input, log)
+        elif tool_name == "browser_search":
+            return _browser_search(tool_input, log)
+        elif tool_name == "browser_session":
+            return _browser_session(tool_input, log)
+        elif tool_name == "filesystem_scan":
+            return _filesystem_scan(tool_input, log)
+        elif tool_name == "filesystem_search":
+            return _filesystem_search(tool_input, log)
+        elif tool_name == "filesystem_summary":
+            return _filesystem_summary(tool_input, log)
+        elif tool_name == "create_project":
+            return _create_project(tool_input, log)
+        elif tool_name == "build_exe":
+            return _build_exe(tool_input, log)
+        elif tool_name == "scheduler_control":
+            return _scheduler_control(tool_input, log)
         else:
             return f"Unknown tool: {tool_name}"
     except Exception as e:
@@ -227,6 +250,112 @@ def _install_package(inp: dict, log) -> str:
         capture_output=True, text=True, timeout=180,
     )
     return result.stdout.strip() or result.stderr.strip() or "(install completed)"
+
+
+# ── Phase 2: Browser ──────────────────────────────────────────────────────────
+
+def _browser_navigate(inp: dict, log) -> str:
+    from browser_agent import browser_navigate
+    log("ACTION", f"browser_navigate:{inp['url']}", approved=True)
+    return browser_navigate(inp["url"], inp.get("headless", False))
+
+
+def _browser_search(inp: dict, log) -> str:
+    from browser_agent import browser_search
+    log("ACTION", f"browser_search:{inp['query']}", approved=True)
+    return browser_search(inp["query"], inp.get("engine", "google"))
+
+
+def _browser_session(inp: dict, log) -> str:
+    import browser_agent as ba
+    action = inp["action"]
+    log("ACTION", f"browser_session:{action}", approved=True)
+    if action == "start":
+        return ba.session_start(inp.get("headless", False))
+    elif action == "stop":
+        return ba.session_stop()
+    elif action == "navigate":
+        return ba.session_navigate(inp["url"])
+    elif action == "get_text":
+        return ba.session_get_text()
+    elif action == "click":
+        return ba.session_click(inp["selector"])
+    elif action == "type":
+        return ba.session_type(inp["selector"], inp.get("text", ""))
+    elif action == "screenshot":
+        return ba.session_screenshot()
+    return f"Unknown browser action: {action}"
+
+
+# ── Phase 2: Filesystem Mapper ────────────────────────────────────────────────
+
+def _filesystem_scan(inp: dict, log) -> str:
+    from filesystem_mapper import build_index, save_index, get_summary
+    log("ACTION", "filesystem_scan", approved=True)
+    index = build_index(inp.get("paths"), inp.get("max_depth", 4))
+    save_index(index)
+    return get_summary(index)
+
+
+def _filesystem_search(inp: dict, log) -> str:
+    from filesystem_mapper import search_index
+    log("ACTION", f"filesystem_search:{inp['query']}", approved=True)
+    results = search_index(inp["query"])
+    if not results:
+        return f"No files found matching '{inp['query']}'. (Run filesystem_scan first if index is empty.)"
+    lines = [f"{r['path']} ({r.get('size_kb', '?')} KB)" for r in results]
+    return f"{len(results)} match(es):\n" + "\n".join(lines)
+
+
+def _filesystem_summary(inp: dict, log) -> str:
+    from filesystem_mapper import get_summary
+    log("ACTION", "filesystem_summary", approved=True)
+    return get_summary()
+
+
+# ── Phase 2: Build Agent ──────────────────────────────────────────────────────
+
+def _create_project(inp: dict, log) -> str:
+    from build_agent import create_project
+    log("ACTION", f"create_project:{inp['name']}", approved=True)
+    return create_project(
+        name=inp["name"],
+        template=inp.get("template", "python_cli"),
+        description=inp.get("description", ""),
+        location=inp.get("location"),
+        install_deps=inp.get("install_deps", True),
+    )
+
+
+def _build_exe(inp: dict, log) -> str:
+    from build_agent import build_python_exe
+    log("ACTION", f"build_exe:{inp['project_path']}", approved=True)
+    return build_python_exe(
+        inp["project_path"],
+        inp.get("entry_file", "main.py"),
+        inp.get("name"),
+    )
+
+
+# ── Phase 2: Scheduler ────────────────────────────────────────────────────────
+
+def _scheduler_control(inp: dict, log) -> str:
+    import scheduler as sch
+    action = inp["action"]
+    log("ACTION", f"scheduler_control:{action}", approved=True)
+    if action == "start":
+        return sch.start_autonomous_mode()
+    elif action == "stop":
+        return sch.stop_autonomous_mode()
+    elif action == "status":
+        return sch.scheduler_status()
+    elif action == "add_task":
+        return sch.add_custom_task(
+            inp["task_name"],
+            inp["command"],
+            inp.get("interval_minutes", 60),
+        )
+    return f"Unknown scheduler action: {action}"
 
 
 def _list_directory(inp: dict, log) -> str:
