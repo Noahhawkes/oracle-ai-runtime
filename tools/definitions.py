@@ -377,6 +377,28 @@ TOOL_DEFINITIONS = [
         },
     },
 
+    # ── Computer Operator (SOV1) ──────────────────────────────────────────────
+    {
+        "name": "computer_operator",
+        "description": (
+            "Operate Noah's Windows PC directly — look at the screen and control the "
+            "mouse and keyboard to accomplish a goal. Use when Noah asks you to open an "
+            "app, click something, type in a window, navigate a UI, send a message via "
+            "an app, or do anything that requires actually touching the screen. "
+            "Pass a plain-English goal; the operator figures out the steps."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "goal": {
+                    "type": "string",
+                    "description": "What to accomplish on screen, e.g. 'Open Chrome and go to gmail.com'",
+                },
+            },
+            "required": ["goal"],
+        },
+    },
+
     # ── Phase 2: Scheduler ────────────────────────────────────────────────────
     {
         "name": "scheduler_control",

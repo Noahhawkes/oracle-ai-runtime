@@ -33,8 +33,7 @@ load_dotenv(ROOT / ".env")
 import anthropic
 import computer_control as cc
 from audit_log import log
-
-MODEL = "claude-sonnet-4-6"
+from llm import is_local, make_client, get_model, to_openai_tools, image_block
 MAX_TOKENS = 2048
 MAX_STEPS = 25  # safety cap on actions per goal
 
@@ -148,8 +147,8 @@ def _hard_block_text(text: str):
 
 def _screenshot_block():
     """
-    Screenshot the screen, shrink it to cut token cost, and return an image block.
-    Records the scale factor so click coordinates map back to the real screen.
+    Screenshot the screen, shrink to cut token cost, return image block in correct format.
+    Records scale factor so click coords map back to the real screen.
     """
     global _scale
     import pyautogui
@@ -165,7 +164,7 @@ def _screenshot_block():
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     b64 = base64.standard_b64encode(buf.getvalue()).decode()
-    return {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}}
+    return image_block(b64, "image/png")
 
 
 def _prune_images(history, keep_last=2):
@@ -311,19 +310,95 @@ def operate(client, goal, system=None):
     print("\n[Reached step limit. Tell me to continue if it's not finished.]")
 
 
+def operate_local(client, goal, model, system=None):
+    """OpenAI-compatible operate loop for local vision models (e.g. qwen2.5-vl via Ollama)."""
+    import json
+
+    system = system or SYSTEM
+    lessons = load_lessons()
+    if lessons:
+        system += ("\n\nLESSONS YOU'VE ALREADY LEARNED:\n" + "\n".join(f"- {l}" for l in lessons))
+
+    oai_tools = to_openai_tools(TOOLS)
+    log("SOV1", f"Goal (local): {goal}")
+
+    history = [{"role": "user", "content": [
+        {"type": "text", "text": f"Goal: {goal}\n\nLook at the screen and do it."},
+        _screenshot_block(),
+    ]}]
+
+    for step in range(MAX_STEPS):
+        _prune_images(history)
+        messages = [{"role": "system", "content": system}] + history
+        resp = client.chat.completions.create(
+            model=model, max_tokens=MAX_TOKENS,
+            messages=messages, tools=oai_tools,
+        )
+        msg = resp.choices[0].message
+        finish = resp.choices[0].finish_reason
+
+        if msg.content and msg.content.strip():
+            print(f"\nSOV1: {msg.content.strip()}")
+
+        # Store assistant turn
+        assistant_entry = {"role": "assistant", "content": msg.content or ""}
+        if msg.tool_calls:
+            assistant_entry["tool_calls"] = [
+                {"id": tc.id, "type": "function",
+                 "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                for tc in msg.tool_calls
+            ]
+        history.append(assistant_entry)
+
+        if finish not in ("tool_calls", "tool_use") or not msg.tool_calls:
+            return
+
+        done = False
+        for tc in msg.tool_calls:
+            print(f"  [SOV1 action: {tc.function.name}]")
+            try:
+                inp = json.loads(tc.function.arguments)
+            except (json.JSONDecodeError, TypeError):
+                inp = {}
+            try:
+                text, shot, flag = _run_tool(tc.function.name, inp)
+            except Exception as e:
+                log("ERROR", f"action {tc.function.name} failed: {e}")
+                text = f"That action errored: {e}. Take a fresh screenshot and try differently."
+                shot, flag = _screenshot_block(), None
+            content = [{"type": "text", "text": text}]
+            if shot:
+                content.append(shot)
+            history.append({"role": "tool", "tool_call_id": tc.id,
+                            "content": content if len(content) > 1 else text})
+            if flag == "DONE":
+                print(f"\n=== DONE: {text} ===")
+                done = True
+
+        if done:
+            return
+
+    print("\n[Reached step limit. Tell me to continue if it's not finished.]")
+
+
 def main():
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("ERROR: ANTHROPIC_API_KEY not found in .env")
-        sys.exit(1)
     if not cc.HANDS_AVAILABLE:
         print(cc._require_hands())
         sys.exit(1)
 
-    client = anthropic.Anthropic(api_key=api_key)
+    local = is_local()
+    try:
+        client = make_client()
+    except RuntimeError as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
+    model = get_model(vision=True)
+
     print("=" * 56)
     print("  SOV1.AI — OPERATOR ONLINE")
     print("=" * 56)
+    if local:
+        print(f"  LOCAL MODE — model: {model}")
     print("  Type what you want done. I'll operate the screen.")
     print("  Abort anytime: slam the mouse into a screen corner.")
     print("  Type /quit to exit.\n")
@@ -338,7 +413,10 @@ def main():
         if goal.lower() in ("/quit", "/exit", "quit", "exit"):
             break
         try:
-            operate(client, goal)
+            if local:
+                operate_local(client, goal, model)
+            else:
+                operate(client, goal)
         except Exception as e:
             log("ERROR", f"SOV1 operate failed: {e}")
             print(f"\n[SOV1 hit an error: {e}]\n")

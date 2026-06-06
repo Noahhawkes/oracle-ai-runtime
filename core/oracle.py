@@ -28,8 +28,8 @@ from context_loader import build_system_prompt, load_identity, index_summary
 from audit_log import log
 from tools.definitions import TOOL_DEFINITIONS
 from tools.executor import execute_tool
+from llm import is_local, make_client, get_model, to_openai_tools
 
-MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 4096
 
 
@@ -39,17 +39,25 @@ def banner(identity):
     hour = datetime.now().hour
     greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
 
-    print("\n" + "=" * 50)
-    print("  ORACLE.AI ONLINE")
-    print("=" * 50)
+    try:
+        import computer_control as cc
+        hands = "SOV1 ONLINE — computer control active" if cc.HANDS_AVAILABLE else "SOV1 LIMITED — install pyautogui+pillow for screen control"
+    except ImportError:
+        hands = "SOV1 UNAVAILABLE"
+
+    print("\n" + "=" * 56)
+    print("  ORACLE.AI  |  SOV1 OPERATOR")
+    print("=" * 56)
     print("  Identity Anchor Loaded")
     print("  Memory Database Connected")
     print(f"  Context Repository Indexed")
-    print("═" * 50)
+    print(f"  {hands}")
+    print("═" * 56)
     print(f"\n{greeting}, {name.split()[0]}.\n")
     if constructs:
         print(f"Echo constructs available: {', '.join(constructs[:4])}")
-    print("\nType your message. Commands: /help /memory /projects /quit\n")
+    print("\nType your message or tell me to do something on screen.")
+    print("Commands: /help /memory /projects /quit\n")
 
 
 def show_memory(session_id):
@@ -245,22 +253,77 @@ def chat(client, session_id, system_prompt, history, user_input):
         return reply, history
 
 
+def chat_local(client, session_id, system_prompt, history, user_input, model):
+    """OpenAI-compatible agentic loop for local Ollama models."""
+    import json
+
+    history.append({"role": "user", "content": user_input})
+    save_message(session_id, "user", user_input)
+    log("INPUT", user_input)
+
+    oai_tools = to_openai_tools(TOOL_DEFINITIONS)
+
+    while True:
+        messages = [{"role": "system", "content": system_prompt}] + history
+        response = client.chat.completions.create(
+            model=model,
+            max_tokens=MAX_TOKENS,
+            messages=messages,
+            tools=oai_tools,
+        )
+        msg = response.choices[0].message
+        finish = response.choices[0].finish_reason
+
+        # Store assistant turn in history
+        assistant_entry = {"role": "assistant", "content": msg.content or ""}
+        if msg.tool_calls:
+            assistant_entry["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                }
+                for tc in msg.tool_calls
+            ]
+        history.append(assistant_entry)
+
+        if finish in ("tool_calls", "tool_use") and msg.tool_calls:
+            for tc in msg.tool_calls:
+                print(f"\n[Oracle → Tool: {tc.function.name}]")
+                try:
+                    inp = json.loads(tc.function.arguments)
+                except (json.JSONDecodeError, TypeError):
+                    inp = {}
+                result = execute_tool(tc.function.name, inp)
+                history.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+            continue
+
+        reply = msg.content or ""
+        save_message(session_id, "assistant", reply)
+        log("OUTPUT", reply[:200] + ("..." if len(reply) > 200 else ""))
+        return reply, history
+
+
 def main():
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("ERROR: ANTHROPIC_API_KEY not found in .env")
-        print(f"Create {ROOT / '.env'} with: ANTHROPIC_API_KEY=your_key_here")
-        sys.exit(1)
-
-    # Change working dir so relative imports work
     os.chdir(Path(__file__).parent)
-
     init_db()
     session_id = new_session()
     identity = load_identity()
     system_prompt = build_system_prompt()
-    client = anthropic.Anthropic(api_key=api_key)
     history = []
+
+    local = is_local()
+    try:
+        client = make_client()
+    except RuntimeError as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
+    model = get_model(vision=False)
+
+    if local:
+        print(f"\n[LOCAL MODE] Using Ollama model: {model}")
+        print("[LOCAL MODE] Make sure Ollama is running and the model is pulled.")
+        print(f"[LOCAL MODE] Pull command: ollama pull {model}\n")
 
     banner(identity)
     log("SESSION_START", f"Session {session_id} started")
@@ -314,28 +377,32 @@ Commands:
   /person note <name> <note>         Add a note about a person
   /person recall <name>              Show person and all notes
   /clear                             Clear conversation history
-  /quit                              Exit Oracle
+  /quit                              Exit
 
-Tools Oracle can execute autonomously:
-  open_app    Launch approved apps (chrome, vscode, notepad, explorer)
-  run_script  Run approved PowerShell scripts
-  read_file   Read any file on disk
-  write_file  Write or append to a file (confirms before overwriting)
-  remember_fact  Persist a fact to memory
-  recall_facts   Query memory
-  list_directory List folder contents
+Brain tools (reasoning, files, web):
+  read_file / write_file / list_directory
+  run_shell       Run any PowerShell command
+  browser_navigate / browser_search
+  filesystem_scan / filesystem_search
+  remember_fact / recall_facts
+  scheduler_control
+
+Hands tools (SOV1 — operates the screen):
+  computer_operator   Tell Oracle to do something on screen and it uses SOV1.
+                      Just speak naturally: "open Chrome", "click X", etc.
+                      Abort anytime: slam mouse into a screen corner.
 """)
             continue
 
         try:
-            reply, history = chat(client, session_id, system_prompt, history, user_input)
+            if local:
+                reply, history = chat_local(client, session_id, system_prompt, history, user_input, model)
+            else:
+                reply, history = chat(client, session_id, system_prompt, history, user_input)
             print(f"\nOracle: {reply}\n")
         except anthropic.APIError as e:
             msg = str(e)
             log("ERROR", msg)
-            # Self-heal: a crash mid-tool-call leaves a dangling tool_use with no
-            # tool_result, which 400s every following turn. Roll history back to the
-            # last clean exchange and retry once.
             if "tool_use" in msg and "tool_result" in msg:
                 history = _repair_history(history)
                 print("\n[Oracle recovered from an interrupted tool call. Retrying...]\n")
@@ -349,6 +416,9 @@ Tools Oracle can execute autonomously:
                     print("\n[Oracle reset its conversation buffer. Memory is intact. Try again.]\n")
             else:
                 print(f"\n[API Error: {e}]\n")
+        except Exception as e:
+            log("ERROR", str(e))
+            print(f"\n[Error: {e}]\n")
 
 
 if __name__ == "__main__":

@@ -86,6 +86,8 @@ def execute_tool(tool_name: str, tool_input: dict) -> str:
             return _build_exe(tool_input, log)
         elif tool_name == "scheduler_control":
             return _scheduler_control(tool_input, log)
+        elif tool_name == "computer_operator":
+            return _computer_operator(tool_input, log)
         else:
             return f"Unknown tool: {tool_name}"
     except Exception as e:
@@ -356,6 +358,31 @@ def _scheduler_control(inp: dict, log) -> str:
             inp.get("interval_minutes", 60),
         )
     return f"Unknown scheduler action: {action}"
+
+
+# ── Computer Operator (SOV1) ──────────────────────────────────────────────────
+
+def _computer_operator(inp: dict, log) -> str:
+    try:
+        import computer_control as cc
+        if not cc.HANDS_AVAILABLE:
+            return "Computer operator unavailable: pyautogui/PIL not installed. Run: pip install pyautogui pillow"
+    except ImportError:
+        return "Computer operator unavailable: computer_control module not found."
+    import sov1
+    from llm import is_local, make_client, get_model
+    goal = inp["goal"]
+    log("SOV1", f"Delegating to computer operator: {goal}")
+    try:
+        client = make_client()
+    except RuntimeError as e:
+        return f"Computer operator unavailable: {e}"
+    if is_local():
+        model = get_model(vision=True)
+        sov1.operate_local(client, goal, model)
+    else:
+        sov1.operate(client, goal)
+    return f"Computer operator finished: {goal}"
 
 
 def _list_directory(inp: dict, log) -> str:
