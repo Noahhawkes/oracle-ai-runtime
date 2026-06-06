@@ -39,9 +39,9 @@ def banner(identity):
     hour = datetime.now().hour
     greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
 
-    print("\n" + "═" * 50)
+    print("\n" + "=" * 50)
     print("  ORACLE.AI ONLINE")
-    print("═" * 50)
+    print("=" * 50)
     print("  Identity Anchor Loaded")
     print("  Memory Database Connected")
     print(f"  Context Repository Indexed")
@@ -180,7 +180,7 @@ def chat(client, session_id, system_prompt, history, user_input):
         response = client.messages.create(
             model=MODEL,
             max_tokens=MAX_TOKENS,
-            system=system_prompt,
+            system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
             messages=history,
             tools=TOOL_DEFINITIONS,
         )
