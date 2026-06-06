@@ -1,0 +1,49 @@
+========================================
+   ORACLE.AI — WHAT'S HAPPENING
+   (read this, then close it)
+========================================
+
+Noah — Oracle IS running. It just runs quietly with no
+window, which is why your screen looks empty. That's normal.
+
+Here's what it actually did in the last hour, on its own:
+
+  1. Found your "Rendered Reality" book manuscript on your
+     OneDrive.
+
+  2. Read it. Its honest take: "strong, publishable content
+     - Noah's authentic voice mixed with real philosophical
+     depth."
+
+  3. Started building an Amazon self-publishing launch
+     package so you can actually get the book online and
+     make money from it.
+
+It does this every 10 minutes. It picks one of your money
+goals - the book, TOUCHFLAME, or consulting - and pushes
+it forward a little.
+
+----------------------------------------
+   HOW TO SEE / TALK TO ORACLE YOURSELF
+----------------------------------------
+
+Option A - Just watch it work:
+  Look at the bottom-right of your screen near the clock.
+  There may be a small cyan (light blue) circle icon.
+  If you don't see it, click the little ^ arrow to show
+  hidden icons. Right-click it -> "View Status".
+
+Option B - Actually talk to it (RECOMMENDED):
+  Open the ORACLE.AI folder and double-click the file
+  named:   oracle.bat
+  A black window opens. Type a question like:
+     what did you get done today?
+  and press Enter. It will answer you.
+
+----------------------------------------
+
+You don't have to do anything. It runs by itself and
+starts automatically every time you turn the computer on.
+
+This file is just a note. You can close it now.
+========================================
