@@ -14,6 +14,7 @@ Abort anytime: slam the mouse into a screen corner.
 
 import os
 import sys
+import io
 import time
 import base64
 from pathlib import Path
@@ -51,6 +52,9 @@ YOUR OPERATING RULES (Noah set these):
 4. Work in small visible steps. After acting, look at a fresh screenshot to confirm
    it worked before continuing.
 5. When the goal is achieved, call task_done with a short summary.
+6. Screenshots may be scaled down to save space. Give click coordinates exactly
+   as they appear ON THE SCREENSHOT you see — the system scales them to the real
+   screen for you. Don't try to compensate for resolution yourself.
 
 You are decisive and competent. You are Noah's operator, acting as him, for him."""
 
@@ -82,12 +86,74 @@ TOOLS = [
 ]
 
 
+# Scale factor between the downscaled screenshot SOV1 sees and the real screen.
+# Click coordinates come back in screenshot-space and are multiplied by this.
+_scale = 1.0
+MAX_SHOT_WIDTH = 1280
+
+
+import re
+
+# Code-level rail: never type these, no matter who asks (including ChatGPT).
+_CARD_RE = re.compile(r"\b(?:\d[ -]?){13,16}\b")
+_SSN_RE = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
+
+
+def _hard_block_text(text: str):
+    """Return a label if the text contains secrets that must never be typed."""
+    if _CARD_RE.search(text):
+        return "a credit/debit card number"
+    if _SSN_RE.search(text):
+        return "a Social Security number"
+    return None
+
+
 def _screenshot_block():
-    """Take a screenshot and return it as an image content block for the API."""
-    path = cc.screenshot()
-    data = Path(path).read_bytes()
-    b64 = base64.standard_b64encode(data).decode()
+    """
+    Screenshot the screen, shrink it to cut token cost, and return an image block.
+    Records the scale factor so click coordinates map back to the real screen.
+    """
+    global _scale
+    import pyautogui
+    from PIL import Image  # noqa
+    img = pyautogui.screenshot()
+    real_w, real_h = img.size
+    if real_w > MAX_SHOT_WIDTH:
+        ratio = MAX_SHOT_WIDTH / real_w
+        img = img.resize((MAX_SHOT_WIDTH, int(real_h * ratio)))
+        _scale = real_w / MAX_SHOT_WIDTH
+    else:
+        _scale = 1.0
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.standard_b64encode(buf.getvalue()).decode()
     return {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}}
+
+
+def _prune_images(history, keep_last=2):
+    """
+    Strip screenshots from all but the most recent `keep_last` tool results.
+    SOV1 only needs to see the current screen — old screenshots just burn tokens
+    and trip the rate limit. Replaces stripped images with a short text note.
+    """
+    image_blocks = []
+    for msg in history:
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "image":
+                image_blocks.append(("msg", msg, block))
+            elif block.get("type") == "tool_result" and isinstance(block.get("content"), list):
+                for c in block["content"]:
+                    if isinstance(c, dict) and c.get("type") == "image":
+                        image_blocks.append(("tr", block, c))
+    strip = image_blocks[:-keep_last] if keep_last else image_blocks
+    for kind, parent, blk in strip:
+        parent["content"] = [b for b in parent["content"] if b is not blk]
+        parent["content"].append({"type": "text", "text": "[earlier screenshot omitted]"})
 
 
 def _run_tool(name, inp):
@@ -100,6 +166,8 @@ def _run_tool(name, inp):
         except (KeyError, ValueError, TypeError):
             return (f"Bad coordinates {inp!r}. Pass x and y as separate integers, "
                     f"e.g. {{'x': 186, 'y': 45}}."), _screenshot_block(), None
+        # Map screenshot-space coordinates back to the real (full-res) screen
+        x, y = int(round(x * _scale)), int(round(y * _scale))
         btn = inp.get("button", "left")
         if inp.get("double"):
             r = cc.double_click(x, y)
@@ -108,6 +176,11 @@ def _run_tool(name, inp):
         time.sleep(0.4)
         return r, _screenshot_block(), None
     if name == "type_text":
+        blocked = _hard_block_text(inp["text"])
+        if blocked:
+            log("BLOCKED", f"refused to type: {blocked}")
+            return (f"REFUSED to type that — it looks like {blocked}. "
+                    f"I never type passwords, card numbers, or SSNs. Skipping."), _screenshot_block(), None
         r = cc.type_text(inp["text"])
         return r, _screenshot_block(), None
     if name == "press_key":
@@ -139,7 +212,8 @@ def _run_tool(name, inp):
     return f"Unknown tool: {name}", None, None
 
 
-def operate(client, goal):
+def operate(client, goal, system=None):
+    system = system or SYSTEM
     log("SOV1", f"Goal: {goal}")
     history = [{"role": "user", "content": [
         {"type": "text", "text": f"Goal: {goal}\n\nLook at the screen and do it."},
@@ -147,9 +221,10 @@ def operate(client, goal):
     ]}]
 
     for step in range(MAX_STEPS):
+        _prune_images(history)  # keep only the latest screenshots — saves tokens
         resp = client.messages.create(
             model=MODEL, max_tokens=MAX_TOKENS,
-            system=SYSTEM, messages=history, tools=TOOLS,
+            system=system, messages=history, tools=TOOLS,
         )
         history.append({"role": "assistant", "content": resp.content})
 
