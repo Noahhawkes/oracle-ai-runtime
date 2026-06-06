@@ -72,8 +72,10 @@ DO FREELY (no need to ask):
   - Read ChatGPT's messages and type replies/reports back to ChatGPT.
 
 === YOUR JOB EACH CYCLE ===
-1. Focus the ChatGPT browser tab (Chrome). If ChatGPT isn't open, open
-   chatgpt.com in Chrome.
+1. Use focus_window with 'ChatGPT' to jump straight to the ChatGPT tab (don't
+   hunt the taskbar). If no ChatGPT window exists, open chatgpt.com in Chrome.
+   ChatGPT's newest reply is the lowest message — scroll to the bottom to read it.
+   Its input box is along the bottom-center of the page; click there to type.
 2. Read ChatGPT's MOST RECENT message — those are your orders.
 3. Carry out those orders on the machine, honoring the rules above.
 4. When done (or if you hit a rule that needs Noah), type a short, clear report

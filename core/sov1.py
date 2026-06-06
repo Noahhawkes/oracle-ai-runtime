@@ -61,6 +61,12 @@ YOUR OPERATING RULES (Noah set these):
    box). Typing without sending does nothing. After sending, take a screenshot to
    CONFIRM the message actually posted. If it didn't send, click directly on the
    send button. Never assume it sent — verify.
+8. FINDING WINDOWS: To get to an app (ChatGPT, Chrome, etc.), use focus_window
+   with a word from its title FIRST — don't hunt the taskbar. It's reliable.
+9. LEARN AND SPEED UP: The instant something fails and you find what works, call
+   remember_lesson with a short, concrete note (e.g. what to click, what to
+   avoid). Those lessons load on every future run so you get faster. Also record
+   a lesson when you discover a faster path.
 
 You are decisive and competent. You are Noah's operator, acting as him, for him."""
 
@@ -81,6 +87,10 @@ TOOLS = [
      "input_schema": {"type": "object", "properties": {"keys": {"type": "array", "items": {"type": "string"}}}, "required": ["keys"]}},
     {"name": "open_program", "description": "Open a program by name via the Run dialog, e.g. 'notepad', 'chrome', 'explorer'.",
      "input_schema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}},
+    {"name": "focus_window", "description": "Jump straight to a window by a word in its title, e.g. 'ChatGPT' or 'Chrome'. Use this instead of hunting the taskbar — it's far more reliable.",
+     "input_schema": {"type": "object", "properties": {"title": {"type": "string"}}, "required": ["title"]}},
+    {"name": "remember_lesson", "description": "Save a lesson the moment you learn what works or what failed, so you're faster next time. e.g. 'ChatGPT input box is bottom-center — click there to focus.'",
+     "input_schema": {"type": "object", "properties": {"lesson": {"type": "string"}}, "required": ["lesson"]}},
     {"name": "scroll", "description": "Scroll the screen. Positive scrolls up, negative scrolls down.",
      "input_schema": {"type": "object", "properties": {"amount": {"type": "integer"}}, "required": ["amount"]}},
     {"name": "ask_confirmation", "description": "REQUIRED before any irreversible action (send/delete/buy/post/submit). Ask Noah yes/no.",
@@ -99,6 +109,28 @@ MAX_SHOT_WIDTH = 1280
 
 
 import re
+
+# ── Lessons: SOV1 learns from failures and gets faster across runs ─────────────
+LESSONS_FILE = ROOT / "Memory" / "sov1_lessons.txt"
+
+
+def _save_lesson(text: str):
+    LESSONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    line = text.strip().replace("\n", " ")
+    # Avoid duplicates
+    existing = load_lessons(limit=500)
+    if line and line not in existing:
+        with open(LESSONS_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    log("LESSON", line[:120])
+
+
+def load_lessons(limit=25):
+    if not LESSONS_FILE.exists():
+        return []
+    lines = [l.strip() for l in LESSONS_FILE.read_text(encoding="utf-8").splitlines() if l.strip()]
+    return lines[-limit:]
+
 
 # Code-level rail: never type these, no matter who asks (including ChatGPT).
 _CARD_RE = re.compile(r"\b(?:\d[ -]?){13,16}\b")
@@ -201,6 +233,13 @@ def _run_tool(name, inp):
         r = cc.open_program(inp["name"])
         time.sleep(1.5)
         return r, _screenshot_block(), None
+    if name == "focus_window":
+        r = cc.focus_window(inp["title"])
+        time.sleep(0.6)
+        return r, _screenshot_block(), None
+    if name == "remember_lesson":
+        _save_lesson(inp["lesson"])
+        return f"Lesson saved — I'll remember this next time: {inp['lesson']}", None, None
     if name == "scroll":
         r = cc.scroll(inp["amount"])
         return r, _screenshot_block(), None
@@ -220,6 +259,10 @@ def _run_tool(name, inp):
 
 def operate(client, goal, system=None):
     system = system or SYSTEM
+    lessons = load_lessons()
+    if lessons:
+        system += ("\n\nLESSONS YOU'VE ALREADY LEARNED (apply these to move fast and "
+                   "avoid repeating mistakes):\n" + "\n".join(f"- {l}" for l in lessons))
     log("SOV1", f"Goal: {goal}")
     history = [{"role": "user", "content": [
         {"type": "text", "text": f"Goal: {goal}\n\nLook at the screen and do it."},
