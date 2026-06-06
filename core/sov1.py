@@ -255,7 +255,9 @@ def _run_tool(name, inp):
     return f"Unknown tool: {name}", None, None
 
 
-def operate(client, goal, system=None):
+def operate(client, goal, model=None, system=None):
+    if model is None:
+        model = get_model(vision=True)
     system = system or SYSTEM
     lessons = load_lessons()
     if lessons:
@@ -271,7 +273,7 @@ def operate(client, goal, system=None):
     for step in range(MAX_STEPS):
         _prune_images(history)  # keep only the latest screenshots — saves tokens
         resp = client.messages.create(
-            model=MODEL, max_tokens=MAX_TOKENS,
+            model=model, max_tokens=MAX_TOKENS,
             system=system, messages=history, tools=TOOLS,
         )
         history.append({"role": "assistant", "content": resp.content})
@@ -421,7 +423,7 @@ def main():
             if local:
                 operate_local(client, goal, model)
             else:
-                operate(client, goal)
+                operate(client, goal, model)
         except Exception as e:
             log("ERROR", f"SOV1 operate failed: {e}")
             print(f"\n[SOV1 hit an error: {e}]\n")

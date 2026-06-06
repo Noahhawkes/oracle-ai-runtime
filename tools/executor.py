@@ -408,7 +408,8 @@ def _ask_chatgpt(inp: dict, log) -> str:
         model = get_model(vision=True)
         result = sov1.operate_local(client, goal, model)
     else:
-        result = sov1.operate(client, goal)
+        model = get_model(vision=True)
+        result = sov1.operate(client, goal, model)
 
     if result:
         log("BRIDGE", f"ChatGPT response received ({len(result)} chars)")
@@ -499,7 +500,8 @@ def _computer_operator(inp: dict, log) -> str:
         model = get_model(vision=True)
         sov1.operate_local(client, goal, model)
     else:
-        sov1.operate(client, goal)
+        model = get_model(vision=True)
+        sov1.operate(client, goal, model)
     return f"Computer operator finished: {goal}"
 
 
