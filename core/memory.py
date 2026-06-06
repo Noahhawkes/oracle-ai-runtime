@@ -2,8 +2,9 @@ import sqlite3
 import json
 from datetime import datetime
 from pathlib import Path
+from root import ROOT
 
-DB_PATH = Path(__file__).parent.parent / "Memory" / "oracle_memory.db"
+DB_PATH = ROOT / "Memory" / "oracle_memory.db"
 
 
 def get_conn():

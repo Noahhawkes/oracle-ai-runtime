@@ -24,6 +24,11 @@ Memory/
 # User identity and personal documents (privacy — reviewed separately)
 Users/
 
+# PyInstaller build artifacts
+dist/
+build/
+*.spec.bak
+
 # Temporary files
 *.tmp
 *.bak

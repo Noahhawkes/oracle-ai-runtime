@@ -1,7 +1,8 @@
 from datetime import datetime
 from pathlib import Path
+from root import ROOT
 
-LOGS_DIR = Path(__file__).parent.parent / "Logs"
+LOGS_DIR = ROOT / "Logs"
 
 
 def _log_file():

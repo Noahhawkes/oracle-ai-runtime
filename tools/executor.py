@@ -8,7 +8,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).parent.parent
+# When frozen by PyInstaller, use the exe's directory as ROOT.
+# When running from source, ROOT is two levels up from tools/.
+if getattr(sys, "frozen", False):
+    ROOT = Path(sys.executable).parent
+else:
+    ROOT = Path(__file__).parent.parent
 
 # Lazy-load config to avoid circular imports
 _config = None

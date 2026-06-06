@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
-
-ROOT = Path(__file__).parent.parent
+from root import ROOT
 IDENTITY_ANCHOR = ROOT / "Users" / "Noah.Self" / "Noah.Self Upload Repository" / "Noah.Identity.Anchor.json"
 CONTEXT_DOCS = ROOT / "Users" / "Noah.Self" / "Noah.Self Upload Repository"
 

@@ -10,12 +10,17 @@ from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load .env from project root
-ROOT = Path(__file__).parent.parent
+# ROOT resolves correctly for both source and frozen (PyInstaller) builds
+if getattr(sys, "frozen", False):
+    ROOT = Path(sys.executable).parent
+else:
+    ROOT = Path(__file__).parent.parent
+
 load_dotenv(ROOT / ".env")
 
-# Add project root to path so tools/ package resolves correctly
+# Add project root and core/ to path so all local imports resolve
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "core"))
 
 import anthropic
 from memory import init_db, new_session, save_message, get_recent_messages
