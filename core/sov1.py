@@ -58,6 +58,16 @@ from action_batch import (
 # Module-level controller so main() can send commands to a running task
 _active_bc: BatchController = reset_batch_controller()
 
+# ── Targeted input — Notepad gate + typing loop guard ─────────────────────────
+from targeted_input import (
+    check_notepad_fallback, get_typing_guard, reset_typing_guard,
+    inject_text, action_diagnostic, TypingLoopGuard,
+)
+_typing_guard: TypingLoopGuard = get_typing_guard()
+
+# Current task goal — used by Notepad gate and ACTION_DIAGNOSTIC
+_current_goal: str = ""
+
 SYSTEM = """You are SOV1.AI, operating Noah Hawkes' Windows 11 PC directly.
 You see the screen through screenshots and control the real mouse and keyboard.
 
@@ -87,6 +97,15 @@ YOUR OPERATING RULES (Noah set these):
    remember_lesson with a short, concrete note (e.g. what to click, what to
    avoid). Those lessons load on every future run so you get faster. Also record
    a lesson when you discover a faster path.
+10. TYPING RULES — READ CAREFULLY:
+    - NEVER open Notepad as a workaround for typing into Claude, ChatGPT, or any browser.
+      If you can't type into an app, stop and report — do not fall back to Notepad.
+    - To type into ChatGPT or Claude:  focus_window("ChatGPT") → paste_text("your text")
+    - To type into a terminal:         focus_window("PowerShell") → paste_text("command")
+    - To write a file:                 use write_file() directly, never via Notepad
+    - Only open Notepad if Noah says "open Notepad" or "use Notepad" explicitly.
+    - After paste_text(), check the screenshot to verify the text appeared before continuing.
+    - If text did not appear after 2 tries, call ask_noah — do NOT keep clicking.
 
 You are decisive and competent. You are Noah's operator, acting as him, for him."""
 
@@ -342,16 +361,27 @@ def _run_tool(name, inp):
             return (f"REFUSED to type that — it looks like {blocked}. "
                     f"I never type passwords, card numbers, or SSNs. Skipping."), _screenshot_block(), None
 
-        # Loop guard: stop if type_text keeps firing without progress
+        # Typing loop guard — check unverified count
+        typing_stop = _typing_guard.check(current_goal=_current_goal)
+        if typing_stop:
+            return (f"{typing_stop}\n\n"
+                    f"{action_diagnostic(intended_target=_current_goal, guard=_typing_guard)}"), \
+                   _screenshot_block(), None
+
+        # Legacy loop guard
         if _loop_guard_check("type_text", inp["text"][:30]):
             return ("Loop guard: type_text repeated 3 times without confirmed progress. "
                     "Stopping browser input chain. No further typing attempted."), _screenshot_block(), None
 
+        from targeted_input import _screen_hash as _sh
+        h_before = _sh()
         r = cc.type_text(inp["text"])
-        time.sleep(TYPE_SETTLE_WAIT)    # let the UI settle before screenshot
+        time.sleep(TYPE_SETTLE_WAIT)
+        h_after = _sh()
+        verified = h_before != h_after
+        _typing_guard.record("type_text", inp["text"][:30], verified=verified)
         shot = _screenshot_block()
-        # Append a note to the result so the model knows to verify
-        r += " | Verify the text appeared in the screenshot before continuing."
+        r += f" | {'Text verified — screen changed.' if verified else 'UNVERIFIED — screen hash unchanged. Check that the input field has focus before typing.'}"
         return r, shot, None
 
     if name == "press_key":
@@ -365,7 +395,21 @@ def _run_tool(name, inp):
         return r, _screenshot_block(), None
 
     if name == "open_program":
-        prog = inp["name"].lower()
+        prog = inp["name"].lower().strip()
+
+        # ── Notepad gate — block Notepad unless Noah explicitly requested it ──
+        notepad_block = check_notepad_fallback(prog, current_goal=_current_goal)
+        if notepad_block:
+            _typing_guard.record("open_program", prog, verified=False)
+            return notepad_block, _screenshot_block(), None
+
+        # ── Record for typing loop guard ──────────────────────────────────────
+        _typing_guard.record("open_program", prog, verified=False)
+        typing_stop = _typing_guard.check(current_goal=_current_goal)
+        if typing_stop:
+            return (f"{typing_stop}\n\n"
+                    f"{action_diagnostic(intended_target=_current_goal, guard=_typing_guard)}"), \
+                   _screenshot_block(), None
 
         # ── Browser state check: focus existing instead of opening another ────
         if any(b in prog for b in _BROWSER_NAMES) or prog == "chrome":
@@ -398,6 +442,12 @@ def _run_tool(name, inp):
 
     if name == "focus_window":
         title = inp["title"]
+        _typing_guard.record("focus_window", title.lower()[:30], verified=False)
+        typing_stop = _typing_guard.check(current_goal=_current_goal)
+        if typing_stop:
+            return (f"{typing_stop}\n\n"
+                    f"{action_diagnostic(intended_target=title, guard=_typing_guard)}"), \
+                   _screenshot_block(), None
         if _loop_guard_check("focus_window", title.lower()[:20]):
             return (f"Loop guard: focus_window('{title}') repeated 3 times without confirmed "
                     f"focus. Try open_program instead, or check if window title changed."), _screenshot_block(), None
@@ -430,12 +480,25 @@ def _run_tool(name, inp):
     # ── New hands ─────────────────────────────────────────────────────────────
 
     if name == "paste_text":
+        # Typing loop guard
+        typing_stop = _typing_guard.check(current_goal=_current_goal)
+        if typing_stop:
+            return (f"{typing_stop}\n\n"
+                    f"{action_diagnostic(intended_target=_current_goal, guard=_typing_guard)}"), \
+                   _screenshot_block(), None
         if _loop_guard_check("paste_text", inp["text"][:30]):
             return "Loop guard: paste_text repeated 3 times. Stopping.", _screenshot_block(), None
+
+        from targeted_input import _screen_hash as _sh
+        h_before = _sh()
         r = cc.paste_text(inp["text"])
         time.sleep(TYPE_SETTLE_WAIT)
+        h_after = _sh()
+        verified = h_before != h_after
+        _typing_guard.record("paste_text", inp["text"][:30], verified=verified)
         shot = _screenshot_block()
-        return r + " | Verify the text appeared before continuing.", shot, None
+        r += f" | {'Text verified — screen changed.' if verified else 'UNVERIFIED — screen unchanged. Focus the input field first, then paste again.'}"
+        return r, shot, None
 
     if name == "right_click":
         x, y = int(inp.get("x", 0) * _scale), int(inp.get("y", 0) * _scale)
@@ -491,7 +554,9 @@ def _run_tool(name, inp):
 
 
 def operate(client, goal, model=None, system=None, batch_limit=None):
-    global _active_bc
+    global _active_bc, _current_goal
+    _current_goal = goal
+    reset_typing_guard()
     if model is None:
         model = get_model(vision=True)
     system = system or SYSTEM
@@ -644,7 +709,9 @@ def operate_local(client, goal, model, system=None, text_model=None, batch_limit
     This split exists because qwen2.5-vl does not support the tools= parameter.
     """
     import json
-    global _active_bc
+    global _active_bc, _current_goal
+    _current_goal = goal
+    reset_typing_guard()
 
     if text_model is None:
         text_model = get_model(vision=False)
@@ -830,24 +897,29 @@ def _smoke_test():
     SAFE_SLEEP_MODE = False
 
     # 2. Loop guard triggers after 3 identical open_program calls
+    # Use a non-Notepad dummy name so Notepad gate doesn't fire first
     _recent_actions.clear()
+    reset_typing_guard()
     for _ in range(3):
-        r, _, _ = _run_tool("open_program", {"name": "notepad_fake_for_test"})
+        r, _, _ = _run_tool("open_program", {"name": "fakeprog_smoke_test"})
     check("Loop guard triggers on 3rd identical open_program", r, "loop guard")
 
     # 3. Loop guard triggers on repeated focus_window
     _recent_actions.clear()
+    reset_typing_guard()
     for _ in range(3):
         r, _, _ = _run_tool("focus_window", {"title": "FakeWindowTitleTest"})
     check("Loop guard triggers on 3rd identical focus_window", r, "loop guard")
 
     # 4. Hard block still works (SSN)
     _recent_actions.clear()
+    reset_typing_guard()
     r, _, _ = _run_tool("type_text", {"text": "my SSN is 123-45-6789"})
     check("Hard block refuses SSN", r, "refused")
 
     # 5. Loop guard resets between goals (simulate _recent_actions.clear())
     _recent_actions.clear()
+    reset_typing_guard()
     # After clear, one call should NOT trigger guard
     r, _, _ = _run_tool("focus_window", {"title": "FakeWindowAfterReset"})
     check("Loop guard does not trigger after reset", r, "no window matching")  # pygetwindow error, not loop guard
@@ -937,8 +1009,21 @@ def main():
             print(f"\n{_active_bc.status()}\n")
             continue
 
-        # Reset loop guard between goals — fresh start each task
+        # ── ACTION_DIAGNOSTIC command ─────────────────────────────────────────
+        if goal.lower() in ("action_diagnostic", "/diagnostic", "/diag", "action diagnostic"):
+            from targeted_input import action_diagnostic, get_active_window_title, get_typing_guard
+            diag = action_diagnostic(
+                intended_target=_current_goal,
+                last_actions=[f"{a}({b})[{'ok' if v else 'unverified'}]"
+                              for a, b, v in get_typing_guard().history()],
+                guard=get_typing_guard(),
+            )
+            print(diag)
+            continue
+
+        # Reset loop guard and typing guard between goals — fresh start each task
         _recent_actions.clear()
+        reset_typing_guard()
 
         try:
             if local:
