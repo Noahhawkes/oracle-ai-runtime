@@ -470,6 +470,13 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
             max_tokens=MAX_TOKENS,
             messages=messages,
             tools=oai_tools,
+            temperature=0.7,
+            extra_body={
+                "num_ctx": 16384,      # large context window
+                "num_predict": MAX_TOKENS,
+                "repeat_penalty": 1.1, # reduce repetition
+                "top_p": 0.9,
+            },
         )
         msg = response.choices[0].message
         finish = response.choices[0].finish_reason
@@ -509,7 +516,6 @@ def main():
     init_db()
     session_id = new_session()
     identity = load_identity()
-    system_prompt = build_system_prompt()
     history = []
 
     local = is_local()
@@ -519,6 +525,7 @@ def main():
         print(f"ERROR: {e}")
         sys.exit(1)
     model = get_model(vision=False)
+    system_prompt = build_system_prompt(local=local)
 
     if local:
         print(f"\n[LOCAL MODE] Using Ollama model: {model}")
