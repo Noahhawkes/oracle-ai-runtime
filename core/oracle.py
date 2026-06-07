@@ -30,6 +30,7 @@ from audit_log import log
 from tools.definitions import TOOL_DEFINITIONS
 from tools.executor import execute_tool
 from llm import is_local, make_client, get_model, to_openai_tools, startup_status
+from voice import speak, set_voice_enabled, is_voice_enabled
 
 MAX_TOKENS = 4096
 
@@ -546,6 +547,8 @@ def main():
         if user_input.lower() in ("/quit", "/exit"):
             print("\nOracle offline. Session saved.")
             log("SESSION_END", f"Session {session_id} ended")
+            from voice import shutdown as voice_shutdown
+            voice_shutdown()
             break
 
         if user_input.lower() == "/memory":
@@ -622,6 +625,16 @@ def main():
                 print()
             continue
 
+        if user_input.lower() in ("/voice on", "/voice"):
+            set_voice_enabled(True)
+            print("\n  Voice ON — Oracle will speak her replies.\n")
+            continue
+
+        if user_input.lower() == "/voice off":
+            set_voice_enabled(False)
+            print("\n  Voice OFF — text only.\n")
+            continue
+
         if user_input.lower().startswith("/lootdrop"):
             _handle_lootdrop(user_input)
             continue
@@ -658,6 +671,7 @@ Commands:
   /resume-context                    Resume context updates
   /purge-buffer                      Discard live context buffer without approving candidates
   /pending                           List external integration candidates pending approval
+  /voice on | /voice off             Toggle voice output (Oracle speaks replies)
   /quit                              Exit
 
 Brain tools (reasoning, files, web):
@@ -683,6 +697,7 @@ Hands tools (SOV1 — operates the screen):
         governance_response = handle_in_repl(user_input)
         if governance_response is not None:
             print(governance_response)
+            speak(governance_response)
             continue
 
         try:
@@ -691,6 +706,7 @@ Hands tools (SOV1 — operates the screen):
             else:
                 reply, history = chat(client, session_id, system_prompt, history, user_input)
             print(f"\nOracle: {reply}\n")
+            speak(reply)
         except Exception as e:
             msg = str(e)
             log("ERROR", msg)
@@ -701,6 +717,7 @@ Hands tools (SOV1 — operates the screen):
                 try:
                     reply, history = chat(client, session_id, system_prompt, history, user_input)
                     print(f"\nOracle: {reply}\n")
+                    speak(reply)
                     continue
                 except Exception as e2:
                     log("ERROR", f"Retry failed: {e2}")
