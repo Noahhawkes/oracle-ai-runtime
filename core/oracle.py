@@ -6,6 +6,7 @@ Run: python core/oracle.py
 
 import os
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
@@ -33,32 +34,199 @@ from llm import is_local, make_client, get_model, to_openai_tools, startup_statu
 MAX_TOKENS = 4096
 
 
+def _ansi(code: str) -> str:
+    """Return ANSI escape string. Safe on Windows 10+ terminals."""
+    return f"\033[{code}m"
+
+
+C = {
+    "reset":   _ansi("0"),
+    "bold":    _ansi("1"),
+    "dim":     _ansi("2"),
+    "cyan":    _ansi("36"),
+    "bcyan":   _ansi("96"),
+    "green":   _ansi("32"),
+    "bgreen":  _ansi("92"),
+    "yellow":  _ansi("33"),
+    "byellow": _ansi("93"),
+    "red":     _ansi("31"),
+    "bred":    _ansi("91"),
+    "magenta": _ansi("35"),
+    "bmagenta":_ansi("95"),
+    "white":   _ansi("97"),
+    "grey":    _ansi("90"),
+}
+
+
+def _print_slow(text: str, delay: float = 0.018, end: str = "\n"):
+    import sys
+    for ch in text:
+        sys.stdout.write(ch)
+        sys.stdout.flush()
+        time.sleep(delay)
+    sys.stdout.write(end)
+    sys.stdout.flush()
+
+
+def _startup_stats():
+    """Pull live numbers from the DB for the boot screen."""
+    try:
+        from memory import get_conn
+        with get_conn() as conn:
+            fact_count   = conn.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
+            session_count= conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+            msg_count    = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+            project_count= conn.execute("SELECT COUNT(*) FROM projects WHERE status='active'").fetchone()[0]
+            last_msg     = conn.execute(
+                "SELECT content FROM messages WHERE role='assistant' ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        last_line = (last_msg[0][:72] + "…") if last_msg and len(last_msg[0]) > 72 else (last_msg[0] if last_msg else None)
+        return dict(facts=fact_count, sessions=session_count, messages=msg_count,
+                    projects=project_count, last=last_line)
+    except Exception:
+        return dict(facts=0, sessions=0, messages=0, projects=0, last=None)
+
+
+def _top_lootdrop():
+    """Return the single highest-tier recent lootdrop, or None."""
+    try:
+        from lootdrop import last_drops
+        drops = last_drops(n=1, min_tier="rare")
+        return drops[0] if drops else None
+    except Exception:
+        return None
+
+
+def _pending_count():
+    try:
+        from integration_gate import ApprovalGate
+        return len(ApprovalGate().list_pending())
+    except Exception:
+        return 0
+
+
 def banner(identity):
-    name = identity.get("name", "Noah")
+    import time as _time
+
+    # Enable ANSI + UTF-8 on Windows
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+        kernel32.SetConsoleOutputCP(65001)
+    except Exception:
+        pass
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+    name       = identity.get("name", "Noah")
+    first      = name.split()[0]
     constructs = identity.get("echo_constructs", [])
-    hour = datetime.now().hour
-    greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
+    hour       = datetime.now().hour
+    now        = datetime.now()
 
-    st = startup_status()
+    if hour < 5:
+        greeting, tone = "Still burning the midnight oil", "[LATE]"
+    elif hour < 12:
+        greeting, tone = "Good morning", "[AM]"
+    elif hour < 18:
+        greeting, tone = "Good afternoon", "[PM]"
+    else:
+        greeting, tone = "Good evening", "[EVE]"
 
-    print("\n" + "═" * 56)
-    print("  ORACLE.AI  |  SOV1 OPERATOR MODULE")
-    print("═" * 56)
-    print(f"  Mode        : {st['mode']}")
-    print(f"  Text model  : {st['model']}")
-    print(f"  Vision model: {st['vision_model']}")
-    if st["mode"] == "LOCAL":
-        ollama_icon = "[OK]" if st.get("ollama_ok") else "[!!]"
-        print(f"  Ollama      : {ollama_icon} {st.get('ollama_msg', '')}")
-    sov1_icon = "[OK]" if st["sov1_available"] else "[--]"
-    print(f"  SOV1 hands  : {sov1_icon} {st['sov1_msg']}")
-    print("  Memory DB   : connected")
-    print("═" * 56)
-    print(f"\n{greeting}, {name.split()[0]}.\n")
+    st   = startup_status()
+    db   = _startup_stats()
+    drop = _top_lootdrop()
+    pend = _pending_count()
+
+    W = C["reset"]
+    print()
+
+    # ── ASCII header ────────────────────────────────────────────────────────
+    header_lines = [
+        f"{C['bcyan']}  ██████╗ ██████╗  █████╗  ██████╗██╗     ███████╗{W}",
+        f"{C['bcyan']} ██╔═══██╗██╔══██╗██╔══██╗██╔════╝██║     ██╔════╝{W}",
+        f"{C['cyan']} ██║   ██║██████╔╝███████║██║     ██║     █████╗  {W}",
+        f"{C['cyan']} ██║   ██║██╔══██╗██╔══██║██║     ██║     ██╔══╝  {W}",
+        f"{C['bmagenta']} ╚██████╔╝██║  ██║██║  ██║╚██████╗███████╗███████╗{W}",
+        f"{C['bmagenta']}  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚══════╝{W}",
+    ]
+    for line in header_lines:
+        print(line)
+        _time.sleep(0.06)
+
+    print(f"\n{C['grey']}  {'─' * 50}{W}")
+    print(f"  {C['bold']}{C['white']}SOVEREIGN OPERATOR LAYER  |  v2.0  |  GOVERNED{W}")
+    print(f"{C['grey']}  {'─' * 50}{W}\n")
+    _time.sleep(0.15)
+
+    # ── System boot checks ──────────────────────────────────────────────────
+    checks = []
+    mode_color = C["bgreen"] if st["mode"] == "CLOUD" else C["byellow"]
+    checks.append((f"  MODE", f"{mode_color}{st['mode']}{W}  {C['grey']}{st['model']}{W}"))
+
+    vision_ok = bool(st.get("vision_model"))
+    checks.append(("  VISION", f"{C['bgreen']}READY{W}  {C['grey']}{st.get('vision_model','')}{W}" if vision_ok
+                               else f"{C['yellow']}OFFLINE{W}"))
+
+    sov1_color = C["bgreen"] if st["sov1_available"] else C["grey"]
+    sov1_label = "HANDS READY" if st["sov1_available"] else "HANDS OFFLINE"
+    checks.append(("  SOV1", f"{sov1_color}{sov1_label}{W}"))
+
+    if st["mode"] == "LOCAL" and not st.get("ollama_ok"):
+        checks.append(("  OLLAMA", f"{C['bred']}NOT RUNNING{W}  {C['grey']}run: ollama serve{W}"))
+
+    mem_color = C["bgreen"] if db["facts"] > 0 else C["yellow"]
+    checks.append(("  MEMORY", f"{mem_color}CONNECTED{W}  "
+                               f"{C['grey']}{db['facts']} facts · {db['messages']} messages · "
+                               f"{db['sessions']} sessions{W}"))
+
+    proj_label = f"{db['projects']} active project{'s' if db['projects'] != 1 else ''}"
+    checks.append(("  PROJECTS", f"{C['bgreen']}{proj_label}{W}" if db["projects"] > 0 else f"{C['grey']}none{W}"))
+
+    if pend > 0:
+        checks.append(("  PENDING", f"{C['byellow']}{pend} candidate{'s' if pend!=1 else ''} await approval{W}"))
+
+    label_w = max(len(k) for k, _ in checks) + 2
+    for label, value in checks:
+        padded = label.ljust(label_w)
+        print(f"{C['grey']}{padded}{W}  {value}")
+        _time.sleep(0.07)
+
+    # ── Top lootdrop callout ─────────────────────────────────────────────────
+    if drop:
+        tier_label = drop.get("tier", "").upper()
+        reason     = drop.get("reason_earned", "")[:60]
+        project    = drop.get("related_project", "")
+        print(f"\n{C['grey']}  {'─' * 50}{W}")
+        print(f"  {C['byellow']}◆ LAST MILESTONE{W}  {C['bold']}{C['white']}{tier_label}{W}  "
+              f"{C['grey']}{project}{W}")
+        if reason:
+            print(f"  {C['dim']}{reason}{W}")
+        _time.sleep(0.1)
+
+    # ── Last session echo ─────────────────────────────────────────────────────
+    if db["last"]:
+        print(f"\n{C['grey']}  {'─' * 50}{W}")
+        print(f"  {C['grey']}Last session:{W}")
+        _print_slow(f"  {C['dim']}{db['last']}{W}", delay=0.008, end="\n")
+        _time.sleep(0.05)
+
+    # ── Greeting ──────────────────────────────────────────────────────────────
+    print(f"\n{C['grey']}  {'─' * 50}{W}\n")
+    _time.sleep(0.2)
+    _print_slow(f"  {C['bold']}{C['white']}{greeting}, {first}.{W}  {tone}", delay=0.04)
+
     if constructs:
-        print(f"Echo constructs: {', '.join(constructs[:4])}")
-    print("\nType your message or tell me to do something on screen.")
-    print("Commands: /help /memory /projects /quit\n")
+        _time.sleep(0.1)
+        print(f"\n  {C['grey']}Active constructs:{W} {C['cyan']}{', '.join(constructs[:5])}{W}")
+
+    ts = now.strftime("%A, %B ") + str(now.day) + now.strftime("  %H:%M")
+    print(f"\n{C['grey']}  {ts}{W}")
+    print(f"\n{C['grey']}  {'─' * 50}{W}")
+    print(f"\n  {C['dim']}Type a message · /help for commands · /quit to exit{W}\n")
 
 
 def show_memory(session_id):

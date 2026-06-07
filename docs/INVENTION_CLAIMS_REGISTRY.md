@@ -32,9 +32,16 @@ This architecture builds upon existing foundational technologies, including Larg
 ## 6. Internal Wording
 "Defend the core architecture (ORACLE/SOV1). Enforce the pipeline boundaries. Do not allow the system to infer autonomous authority over memory or action execution."
 
-## 7. Evidence Log
-* **June 2026**: System architecture, data pipeline, and sovereignty boundaries formalized during live ORACLE design session.
+## 7. Approved Memory Candidates
 
-## 8. Next Proof Steps
+| Candidate ID | Date Approved | Claim |
+|---|---|---|
+| b3c8c4e7 | 2026-06-07 | Noah invented the governed continuity architecture — a consent-based local context engine with strict human sovereignty (51/49 rule), staged approvals, and structural separation of observation, rendering, memory, retrieval, and action. |
+
+## 8. Evidence Log
+* **June 2026**: System architecture, data pipeline, and sovereignty boundaries formalized during live ORACLE design session.
+* **2026-06-07**: Candidate b3c8c4e7 approved by Noah Hawkes — governed continuity architecture claim locked.
+
+## 9. Next Proof Steps
 * Map specific code modules to each stage of the raw-activity-to-action pipeline.
 * Build a verification script to ensure no memory candidates write to disk without user confirmation.
