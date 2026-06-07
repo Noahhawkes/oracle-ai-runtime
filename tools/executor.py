@@ -98,6 +98,12 @@ def execute_tool(tool_name: str, tool_input: dict) -> str:
             return _source_map_ingest(tool_input, log)
         elif tool_name == "computer_operator":
             return _computer_operator(tool_input, log)
+        elif tool_name == "terminal_run":
+            return _terminal_run(tool_input, log)
+        elif tool_name == "terminal_cd":
+            return _terminal_cd(tool_input, log)
+        elif tool_name == "terminal_status":
+            return _terminal_status(tool_input, log)
         else:
             return f"Unknown tool: {tool_name}"
     except Exception as e:
@@ -510,6 +516,37 @@ def _computer_operator(inp: dict, log) -> str:
     if result:
         return result
     return f"Computer operator finished: {goal}"
+
+
+def _terminal_run(inp: dict, log) -> str:
+    sys.path.insert(0, str(ROOT / "core"))
+    from terminal import get_terminal
+    command = inp["command"]
+    timeout = float(inp.get("timeout", 60))
+    log("TERMINAL", f"run: {command[:120]}")
+    term = get_terminal()
+    output = term.run(command, timeout=timeout)
+    return f"[Terminal @ {term.get_cwd()}]\n{output}"
+
+
+def _terminal_cd(inp: dict, log) -> str:
+    sys.path.insert(0, str(ROOT / "core"))
+    from terminal import get_terminal
+    path = inp["path"]
+    log("TERMINAL", f"cd: {path}")
+    term = get_terminal()
+    output = term.run(f"Set-Location '{path}'")
+    cwd = term.get_cwd()
+    return f"Changed directory to: {cwd}" + (f"\n{output}" if output and "ERROR" in output else "")
+
+
+def _terminal_status(inp: dict, log) -> str:
+    sys.path.insert(0, str(ROOT / "core"))
+    from terminal import get_terminal
+    term = get_terminal()
+    cwd = term.get_cwd()
+    alive = term.alive
+    return f"Terminal alive: {alive}\nCurrent directory: {cwd}"
 
 
 def _list_directory(inp: dict, log) -> str:

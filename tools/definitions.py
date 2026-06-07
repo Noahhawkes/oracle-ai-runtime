@@ -527,6 +527,55 @@ TOOL_DEFINITIONS = [
         },
     },
 
+    # ── Persistent Terminal ───────────────────────────────────────────────────
+    {
+        "name": "terminal_run",
+        "description": (
+            "Run a command in ORACLE's own persistent PowerShell terminal. "
+            "State carries between calls — cd, env vars, activated venvs, git state, all of it. "
+            "Use this instead of run_shell when you need multiple commands to build on each other, "
+            "or when you need to navigate directories and keep working there. "
+            "Returns the command output and current directory."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "PowerShell command to run in the persistent terminal session",
+                },
+                "timeout": {
+                    "type": "number",
+                    "description": "Max seconds to wait for output (default 60)",
+                },
+            },
+            "required": ["command"],
+        },
+    },
+    {
+        "name": "terminal_cd",
+        "description": "Change the working directory in ORACLE's persistent terminal. Stays set for all future terminal_run calls.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Directory path to change into",
+                },
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "terminal_status",
+        "description": "Check ORACLE's terminal session — whether it's alive and what directory it's currently in.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+
     # ── Phase 2: Scheduler ────────────────────────────────────────────────────
     {
         "name": "scheduler_control",

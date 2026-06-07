@@ -683,7 +683,10 @@ Commands:
 
 Brain tools (reasoning, files, web):
   read_file / write_file / list_directory
-  run_shell       Run any PowerShell command
+  run_shell       Run a one-off PowerShell command (stateless)
+  terminal_run    Run a command in ORACLE's own persistent terminal (state carries between calls)
+  terminal_cd     Change directory in the persistent terminal
+  terminal_status Check terminal session state
   browser_navigate / browser_search
   filesystem_scan / filesystem_search
   remember_fact / recall_facts
