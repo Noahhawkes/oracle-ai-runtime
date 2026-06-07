@@ -50,6 +50,14 @@ from collections import deque
 _recent_actions: deque = deque(maxlen=6)   # (tool_name, key_arg) pairs
 _LOOP_GUARD_THRESHOLD = 3                  # same call 3 times in last 6 → stop
 
+# ── Batch controller — extended action batches with progress verification ─────
+from action_batch import (
+    get_batch_controller, reset_batch_controller, DEFAULT_BATCH_LIMIT,
+    BatchController,
+)
+# Module-level controller so main() can send commands to a running task
+_active_bc: BatchController = reset_batch_controller()
+
 SYSTEM = """You are SOV1.AI, operating Noah Hawkes' Windows 11 PC directly.
 You see the screen through screenshots and control the real mouse and keyboard.
 
@@ -482,7 +490,8 @@ def _run_tool(name, inp):
     return f"Unknown tool: {name}", None, None
 
 
-def operate(client, goal, model=None, system=None):
+def operate(client, goal, model=None, system=None, batch_limit=None):
+    global _active_bc
     if model is None:
         model = get_model(vision=True)
     system = system or SYSTEM
@@ -491,6 +500,17 @@ def operate(client, goal, model=None, system=None):
         system += ("\n\nLESSONS YOU'VE ALREADY LEARNED (apply these to move fast and "
                    "avoid repeating mistakes):\n" + "\n".join(f"- {l}" for l in lessons))
     log("SOV1", f"Goal: {goal}")
+
+    # Set up batch controller — preserves AUTORUN SAFE / DRY RUN flags from main()
+    _active_bc = reset_batch_controller(
+        batch_limit=batch_limit or DEFAULT_BATCH_LIMIT,
+        autorun_safe=_active_bc.autorun_safe,
+        dry_run=_active_bc.dry_run,
+        safe_sleep=SAFE_SLEEP_MODE or _active_bc.safe_sleep,
+    )
+    bc = _active_bc
+    bc.start_task(goal)
+
     history = [{"role": "user", "content": [
         {"type": "text", "text": f"Goal: {goal}\n\nLook at the screen and do it."},
         _screenshot_block(),
@@ -498,6 +518,10 @@ def operate(client, goal, model=None, system=None):
     done_text = None
 
     for step in range(MAX_STEPS):
+        if bc.halted:
+            print("\n[STOP ORACLE — action loop halted.]")
+            break
+
         _prune_images(history)  # keep only the latest screenshots — saves tokens
         resp = client.messages.create(
             model=model, max_tokens=MAX_TOKENS,
@@ -518,13 +542,47 @@ def operate(client, goal, model=None, system=None):
         for b in resp.content:
             if getattr(b, "type", None) == "tool_use":
                 print(f"  [SOV1 action: {b.name}]")
-                try:
-                    text, shot, flag = _run_tool(b.name, b.input)
-                except Exception as e:
-                    log("ERROR", f"action {b.name} failed: {e}")
-                    text = (f"That action errored: {e}. Take a fresh screenshot and "
-                            f"try a different approach.")
-                    shot, flag = _screenshot_block(), None
+
+                # ── Batch safety gates ────────────────────────────────────────
+                blocked = (
+                    bc.is_safe_sleep_blocked(b.name)
+                    or bc.is_mouse_disabled(b.name)
+                )
+                if blocked:
+                    text = blocked
+                    shot = None
+                    flag = None
+                elif bc.dry_run:
+                    text = bc.is_dry_run(b.name, b.input) or f"[DRY RUN] {b.name}"
+                    shot = None
+                    flag = None
+                else:
+                    approval_msg = bc.requires_approval(b.name, b.input)
+                    loop_msg = bc.loop_guard_check(b.name, str(b.input)[:60])
+                    if approval_msg:
+                        text = approval_msg
+                        shot = None
+                        flag = None
+                        done = True
+                    elif loop_msg:
+                        text = loop_msg
+                        shot = None
+                        flag = None
+                        done = True
+                    else:
+                        h_before = bc.screen_hash()
+                        try:
+                            text, shot, flag = _run_tool(b.name, b.input)
+                            bc.record_success(b.name, str(b.input)[:60])
+                        except Exception as e:
+                            log("ERROR", f"action {b.name} failed: {e}")
+                            text = (f"That action errored: {e}. Take a fresh screenshot and "
+                                    f"try a different approach.")
+                            shot, flag = _screenshot_block(), None
+                            bc.record_failure(b.name, str(b.input)[:60])
+                        h_after = bc.screen_hash()
+                        bc.record_action(b.name, str(b.input)[:60], text, h_before, h_after)
+
                 content = [{"type": "text", "text": text}]
                 if shot:
                     content.append(shot)
@@ -533,9 +591,18 @@ def operate(client, goal, model=None, system=None):
                     print(f"\n=== DONE: {text} ===")
                     done = True
                     done_text = text
+
         history.append({"role": "user", "content": results})
         if done:
             return done_text
+
+        # ── Batch checkpoint after each step ─────────────────────────────────
+        if bc.batch_full():
+            cp = bc.checkpoint(goal)
+            print(bc.checkpoint_report(cp))
+            if not cp.should_continue:
+                print("[Batch complete. Say 'CONTINUE ORACLE' to run the next batch.]")
+                return None
 
     print("\n[Reached step limit. Tell me to continue if it's not finished.]")
     return None
@@ -566,9 +633,9 @@ def _observe(client, vision_model: str, goal: str, shot_block: dict) -> str:
     return resp.choices[0].message.content or "(no observation returned)"
 
 
-def operate_local(client, goal, model, system=None, text_model=None):
+def operate_local(client, goal, model, system=None, text_model=None, batch_limit=None):
     """
-    Two-stage local operate loop.
+    Two-stage local operate loop with batch controller.
 
     Stage 1 — vision model (model): receives screenshot, no tools, returns plain-text observation.
     Stage 2 — text model (text_model, default qwen2.5:7b): receives observation + goal + tools,
@@ -577,6 +644,7 @@ def operate_local(client, goal, model, system=None, text_model=None):
     This split exists because qwen2.5-vl does not support the tools= parameter.
     """
     import json
+    global _active_bc
 
     if text_model is None:
         text_model = get_model(vision=False)
@@ -596,6 +664,16 @@ def operate_local(client, goal, model, system=None, text_model=None):
     oai_tools = [t for t in to_openai_tools(TOOLS) if t["function"]["name"] != "take_screenshot"]
     log("SOV1", f"Goal (local): {goal}")
 
+    # Set up batch controller — preserves AUTORUN SAFE / DRY RUN flags from main()
+    _active_bc = reset_batch_controller(
+        batch_limit=batch_limit or DEFAULT_BATCH_LIMIT,
+        autorun_safe=_active_bc.autorun_safe,
+        dry_run=_active_bc.dry_run,
+        safe_sleep=SAFE_SLEEP_MODE or _active_bc.safe_sleep,
+    )
+    bc = _active_bc
+    bc.start_task(goal)
+
     # Stage 1: get initial screen observation from vision model (no tools)
     shot = _screenshot_block()
     observation = _observe(client, model, goal, shot)
@@ -607,6 +685,10 @@ def operate_local(client, goal, model, system=None, text_model=None):
     done_text = None
 
     for step in range(MAX_STEPS):
+        if bc.halted:
+            print("\n[STOP ORACLE — action loop halted.]")
+            break
+
         # Stage 2: text model receives current observation + goal, decides tool or done
         user_content = f"Goal: {goal}\n\nCurrent screen observation:\n{observation}"
         decision_history.append({"role": "user", "content": user_content})
@@ -642,12 +724,42 @@ def operate_local(client, goal, model, system=None, text_model=None):
                 inp = json.loads(tc.function.arguments)
             except (json.JSONDecodeError, TypeError):
                 inp = {}
-            try:
-                text, _shot, flag = _run_tool(tc.function.name, inp)
-            except Exception as e:
-                log("ERROR", f"action {tc.function.name} failed: {e}")
-                text = f"That action errored: {e}. Try a different approach."
-                _shot, flag = None, None
+
+            # ── Batch safety gates ────────────────────────────────────────────
+            tool_key = str(inp)[:60]
+            blocked = (
+                bc.is_safe_sleep_blocked(tc.function.name)
+                or bc.is_mouse_disabled(tc.function.name)
+            )
+            if blocked:
+                text = blocked
+                flag = None
+            elif bc.dry_run:
+                text = bc.is_dry_run(tc.function.name, inp) or f"[DRY RUN] {tc.function.name}"
+                flag = None
+            else:
+                approval_msg = bc.requires_approval(tc.function.name, inp)
+                loop_msg = bc.loop_guard_check(tc.function.name, tool_key)
+                if approval_msg:
+                    text = approval_msg
+                    flag = None
+                    done = True
+                elif loop_msg:
+                    text = loop_msg
+                    flag = None
+                    done = True
+                else:
+                    h_before = bc.screen_hash()
+                    try:
+                        text, _shot, flag = _run_tool(tc.function.name, inp)
+                        bc.record_success(tc.function.name, tool_key)
+                    except Exception as e:
+                        log("ERROR", f"action {tc.function.name} failed: {e}")
+                        text = f"That action errored: {e}. Try a different approach."
+                        _shot, flag = None, None
+                        bc.record_failure(tc.function.name, tool_key)
+                    h_after = bc.screen_hash()
+                    bc.record_action(tc.function.name, tool_key, text, h_before, h_after)
 
             # Tool result is always text — screenshots go to vision model, not text model
             decision_history.append({"role": "tool", "tool_call_id": tc.id, "content": text})
@@ -659,6 +771,14 @@ def operate_local(client, goal, model, system=None, text_model=None):
 
         if done:
             return done_text
+
+        # ── Batch checkpoint after each step ─────────────────────────────────
+        if bc.batch_full():
+            cp = bc.checkpoint(goal)
+            print(bc.checkpoint_report(cp))
+            if not cp.should_continue:
+                print("[Batch complete. Say 'CONTINUE ORACLE' to run the next batch.]")
+                return None
 
         # Stage 1 again: fresh screenshot → fresh observation for next decision step
         shot = _screenshot_block()
@@ -776,6 +896,7 @@ def main():
         if goal.lower() in ("safe_sleep_mode", "/safe", "safe mode", "sleep mode"):
             import sov1 as _self
             _self.SAFE_SLEEP_MODE = True
+            _active_bc.enable_safe_sleep()
             print("\n[SAFE_SLEEP_MODE ACTIVE] Desktop actions disabled. "
                   "ORACLE can observe and propose but cannot move the mouse, keyboard, "
                   "or browser. Type 'wake' to re-enable.\n")
@@ -783,7 +904,37 @@ def main():
         if goal.lower() in ("wake", "/wake", "wake up", "disable safe mode"):
             import sov1 as _self
             _self.SAFE_SLEEP_MODE = False
+            _active_bc.disable_safe_sleep()
             print("\n[SAFE_SLEEP_MODE OFF] Desktop actions re-enabled.\n")
+            continue
+
+        # ── Batch controller commands ─────────────────────────────────────────
+        if goal.lower() in ("stop oracle", "stop_oracle", "/stop"):
+            msg = _active_bc.stop_oracle()
+            print(f"\n{msg}\n")
+            continue
+
+        if goal.lower() in ("continue oracle", "continue_oracle", "/continue"):
+            _active_bc.reset_for_continuation()
+            print(f"\n[CONTINUE ORACLE] Starting next batch (limit {_active_bc.batch_limit} actions). "
+                  f"Total actions so far: {_active_bc.total_actions()}.\n")
+            # Re-run the current goal if we have one
+            if _active_bc.goal:
+                goal = _active_bc.goal
+            else:
+                print("No active goal. Type what you want done.\n")
+                continue
+
+        elif goal.lower() in ("autorun safe", "autorun_safe", "/autorun"):
+            print("\n" + _active_bc.enable_autorun_safe() + "\n")
+            continue
+
+        elif goal.lower() in ("action_dry_run", "dry run", "/dryrun", "/dry"):
+            print("\n" + _active_bc.enable_dry_run() + "\n")
+            continue
+
+        elif goal.lower() in ("batch status", "/batch"):
+            print(f"\n{_active_bc.status()}\n")
             continue
 
         # Reset loop guard between goals — fresh start each task
@@ -803,4 +954,12 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if "--smoke" in sys.argv or "smoke" in sys.argv:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+        ok = _smoke_test()
+        sys.exit(0 if ok else 1)
+    else:
+        main()
