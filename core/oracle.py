@@ -676,6 +676,18 @@ def main():
                 print(f"\n[propose-build error: {e}]\n")
             continue
 
+        if user_input.lower() in ("/self-prompt", "/selfprompt", "/cycle"):
+            print("\n[self-prompt] Running one governed cycle...\n")
+            try:
+                from self_prompt_loop import run_once, MODE_MANUAL
+                result = run_once(mode=MODE_MANUAL)
+                print(result.report())
+                speak(f"Cycle complete. Priority: {result.selected_priority[:60]}")
+            except Exception as e:
+                log("ERROR", f"/self-prompt failed: {e}")
+                print(f"\n[self-prompt error: {e}]\n")
+            continue
+
         if user_input.lower() in ("/self-build", "/selfbuild"):
             print("\n[self-build] Scanning codebase for highest-value improvement...\n")
             try:
@@ -702,6 +714,7 @@ Commands:
   /clear                             Clear conversation history
   /propose-build                     Read build docs and recommend one next task (read-only)
   /self-build                        Scan own codebase and propose the single best improvement
+  /self-prompt                       Run one governed self-prompt cycle (state, memory, gaps, priority, proposal)
   /lootdrop                          Show recent LootDrop momentum recap
   /lootdrop <tier> <project> <reason>  Award a LootDrop (tiers: common uncommon rare epic legendary mythic)
   /context                           Show current live operational context state
