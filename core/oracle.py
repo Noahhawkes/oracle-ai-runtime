@@ -209,6 +209,20 @@ def banner(identity):
             print(f"  {C['dim']}{reason}{W}")
         _time.sleep(0.1)
 
+    # ── Project state resumption ──────────────────────────────────────────────
+    try:
+        from project_state import load_state
+        ps = load_state("ORACLE.AI")
+        if ps and ps.next_recommended_step:
+            print(f"\n{C['grey']}  {'─' * 50}{W}")
+            print(f"  {C['yellow']}◆ RESUMING{W}  {C['grey']}{ps.current_phase}{W}")
+            print(f"  {C['dim']}Next: {ps.next_recommended_step[:70]}{W}")
+            if ps.current_blocker:
+                print(f"  {C['bred']}Blocker:{W} {C['dim']}{ps.current_blocker[:70]}{W}")
+            _time.sleep(0.05)
+    except Exception:
+        pass
+
     # ── Last session echo ─────────────────────────────────────────────────────
     if db["last"]:
         print(f"\n{C['grey']}  {'─' * 50}{W}")
@@ -688,6 +702,20 @@ def main():
                 print(f"\n[self-prompt error: {e}]\n")
             continue
 
+        if user_input.lower() in ("/project-state", "/ps", "/resume", "/where-was-i"):
+            try:
+                from project_state import summarize_state, list_projects
+                projects = list_projects()
+                if not projects:
+                    print("\nNo project state saved yet. Run: python core/project_state.py --seed\n")
+                else:
+                    for p in projects:
+                        print(f"\n{'─'*54}")
+                        print(summarize_state(p))
+            except Exception as e:
+                print(f"\n[project-state error: {e}]\n")
+            continue
+
         if user_input.lower() in ("/runtime", "/oracle-runtime", "/run-cycle"):
             print("\n[runtime] Running one governed runtime cycle...\n")
             try:
@@ -771,6 +799,7 @@ Commands:
   /propose-build                     Read build docs and recommend one next task (read-only)
   /self-build                        Scan own codebase and propose the single best improvement
   /self-prompt                       Run one governed self-prompt cycle (state, memory, gaps, priority, proposal)
+  /project-state                     Show current project state — what was active, what's blocked, what's next
   /runtime                           Run one governed runtime cycle (heartbeat — picks priority, invokes module, persists result)
   /runtime-status                    Show runtime state: SOV1, Ollama, pending queues, next priority
   /bridge-chatgpt-draft <question>   Draft a governed message to ChatGPT (does not send — dry run)
