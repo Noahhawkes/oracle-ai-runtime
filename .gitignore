@@ -25,6 +25,11 @@ Memory/
 # sensitive rendered context awaiting human approval. Must stay local.
 Projects/pending_candidates/
 
+# OAuth credentials and tokens — must never be committed
+storage/token.json
+storage/credentials.json
+storage/*.json
+
 # User identity and personal documents (privacy — reviewed separately)
 Users/
 
