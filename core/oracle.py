@@ -178,6 +178,36 @@ def handle_person_command(args):
         print("  Commands: /person add <name> [role] | /person note <name> <note> | /person recall <name>\n")
 
 
+def _handle_lootdrop(user_input: str):
+    """
+    /lootdrop                          — show recap of recent drops
+    /lootdrop <tier> <project> <reason>  — award a drop
+    Tiers: common uncommon rare epic legendary mythic
+    """
+    from lootdrop import award, recap_summary, TIER_NAMES
+    parts = user_input.strip().split(None, 3)
+    # /lootdrop (no args) → show recap
+    if len(parts) == 1:
+        print()
+        print(recap_summary())
+        print()
+        return
+    # /lootdrop <tier> <project> <reason>
+    if len(parts) < 4:
+        print(f"\n  Usage: /lootdrop <tier> <project> <reason>")
+        print(f"  Tiers: {', '.join(TIER_NAMES)}")
+        print(f"  Example: /lootdrop mythic ORACLE SOV1 vision loop working end-to-end\n")
+        return
+    tier = parts[1].lower()
+    project = parts[2]
+    reason = parts[3]
+    try:
+        award(tier, source_activity="manual /lootdrop command", reason_earned=reason,
+              related_project=project)
+    except ValueError as e:
+        print(f"\n  {e}\n")
+
+
 def _has_tool_use(content):
     """True if an assistant message's content contains a tool_use block."""
     if not isinstance(content, list):
@@ -365,6 +395,10 @@ def main():
             handle_person_command(user_input[8:].strip())
             continue
 
+        if user_input.lower().startswith("/lootdrop"):
+            _handle_lootdrop(user_input)
+            continue
+
         if user_input.lower() == "/propose-build":
             print("\n[propose-build] Starting read-only build recommendation...\n")
             try:
@@ -389,6 +423,8 @@ Commands:
   /person recall <name>              Show person and all notes
   /clear                             Clear conversation history
   /propose-build                     Read build docs and recommend one next task (read-only)
+  /lootdrop                          Show recent LootDrop momentum recap
+  /lootdrop <tier> <project> <reason>  Award a LootDrop (tiers: common uncommon rare epic legendary mythic)
   /quit                              Exit
 
 Brain tools (reasoning, files, web):
