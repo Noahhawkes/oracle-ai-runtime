@@ -440,9 +440,11 @@ def create_task_from_text(text: str) -> BrainTask:
 
     # Desktop action signals
     if any(kw in text_lower for kw in (
-        "click", "type into", "open chrome", "open app", "navigate to",
+        "click", "type into", "type a message", "type text", "type in",
+        "open chrome", "open app", "navigate to",
         "focus window", "paste into", "press enter", "screenshot",
-        "desktop", "mouse", "keyboard", "window", "drag",
+        "desktop", "mouse", "keyboard", "drag",
+        "chatgpt window", "input field", "text field", "the browser",
     )):
         task.task_type = TASK_DESKTOP_ACTION
         task.requires_reality_verification = True
