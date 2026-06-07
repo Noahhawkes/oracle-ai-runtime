@@ -129,6 +129,39 @@ TOOLS = [
      "input_schema": {"type": "object", "properties": {"question": {"type": "string"}}, "required": ["question"]}},
     {"name": "task_done", "description": "Call when the goal is complete.",
      "input_schema": {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}},
+    {"name": "paste_text", "description": "Paste text via clipboard — use this instead of type_text for long text, special characters, URLs, or code. Much faster and more reliable.",
+     "input_schema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
+    {"name": "right_click", "description": "Right-click at (x,y) to open a context menu.",
+     "input_schema": {"type": "object", "properties": {
+         "x": {"type": "integer"}, "y": {"type": "integer"}}, "required": ["x", "y"]}},
+    {"name": "drag", "description": "Click and drag from one point to another. Use for moving files, sliders, or UI elements.",
+     "input_schema": {"type": "object", "properties": {
+         "x1": {"type": "integer"}, "y1": {"type": "integer"},
+         "x2": {"type": "integer"}, "y2": {"type": "integer"},
+         "duration": {"type": "number", "description": "Seconds for the drag (default 0.5)"}},
+         "required": ["x1", "y1", "x2", "y2"]}},
+    {"name": "maximize_window", "description": "Maximize a window by a word in its title, or the active window if no title given.",
+     "input_schema": {"type": "object", "properties": {"title_fragment": {"type": "string"}}}},
+    {"name": "minimize_window", "description": "Minimize a window by a word in its title.",
+     "input_schema": {"type": "object", "properties": {"title_fragment": {"type": "string"}}}},
+    {"name": "resize_window", "description": "Resize a window to exact pixel dimensions.",
+     "input_schema": {"type": "object", "properties": {
+         "title_fragment": {"type": "string"},
+         "width": {"type": "integer"}, "height": {"type": "integer"}},
+         "required": ["title_fragment", "width", "height"]}},
+    {"name": "move_window", "description": "Move a window to a specific screen position.",
+     "input_schema": {"type": "object", "properties": {
+         "title_fragment": {"type": "string"},
+         "x": {"type": "integer"}, "y": {"type": "integer"}},
+         "required": ["title_fragment", "x", "y"]}},
+    {"name": "select_all", "description": "Select all text/items in the current focus (Ctrl+A).",
+     "input_schema": {"type": "object", "properties": {}}},
+    {"name": "copy_selection", "description": "Copy the current selection to clipboard (Ctrl+C). Returns what was copied.",
+     "input_schema": {"type": "object", "properties": {}}},
+    {"name": "wait_for_screen_change", "description": "Wait up to N seconds for the screen to visually change after an action. Use after clicking buttons to confirm something happened.",
+     "input_schema": {"type": "object", "properties": {
+         "timeout": {"type": "number", "description": "Max seconds to wait (default 5)"},
+         "interval": {"type": "number", "description": "Poll interval in seconds (default 0.5)"}}}},
 ]
 
 
@@ -385,6 +418,66 @@ def _run_tool(name, inp):
 
     if name == "task_done":
         return inp["summary"], None, "DONE"
+
+    # ── New hands ─────────────────────────────────────────────────────────────
+
+    if name == "paste_text":
+        if _loop_guard_check("paste_text", inp["text"][:30]):
+            return "Loop guard: paste_text repeated 3 times. Stopping.", _screenshot_block(), None
+        r = cc.paste_text(inp["text"])
+        time.sleep(TYPE_SETTLE_WAIT)
+        shot = _screenshot_block()
+        return r + " | Verify the text appeared before continuing.", shot, None
+
+    if name == "right_click":
+        x, y = int(inp.get("x", 0) * _scale), int(inp.get("y", 0) * _scale)
+        r = cc.right_click(x, y)
+        time.sleep(0.4)
+        return r, _screenshot_block(), None
+
+    if name == "drag":
+        x1 = int(inp["x1"] * _scale); y1 = int(inp["y1"] * _scale)
+        x2 = int(inp["x2"] * _scale); y2 = int(inp["y2"] * _scale)
+        dur = float(inp.get("duration", 0.5))
+        r = cc.drag(x1, y1, x2, y2, dur)
+        time.sleep(0.5)
+        return r, _screenshot_block(), None
+
+    if name == "maximize_window":
+        r = cc.maximize_window(inp.get("title_fragment"))
+        time.sleep(0.4)
+        return r, _screenshot_block(), None
+
+    if name == "minimize_window":
+        r = cc.minimize_window(inp.get("title_fragment"))
+        time.sleep(0.3)
+        return r, None, None
+
+    if name == "resize_window":
+        r = cc.resize_window(inp["title_fragment"], inp["width"], inp["height"])
+        time.sleep(0.4)
+        return r, _screenshot_block(), None
+
+    if name == "move_window":
+        r = cc.move_window(inp["title_fragment"], inp["x"], inp["y"])
+        time.sleep(0.3)
+        return r, _screenshot_block(), None
+
+    if name == "select_all":
+        r = cc.select_all()
+        time.sleep(0.2)
+        return r, _screenshot_block(), None
+
+    if name == "copy_selection":
+        r = cc.copy_selection()
+        return r, None, None
+
+    if name == "wait_for_screen_change":
+        timeout = float(inp.get("timeout", 5.0))
+        interval = float(inp.get("interval", 0.5))
+        r = cc.wait_for_screen_change(timeout, interval)
+        shot = _screenshot_block()
+        return r, shot, None
 
     return f"Unknown tool: {name}", None, None
 
