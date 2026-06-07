@@ -33,6 +33,7 @@ from llm import is_local, make_client, get_model, to_openai_tools, startup_statu
 from voice import speak, set_voice_enabled, is_voice_enabled
 
 MAX_TOKENS = 4096
+MAX_TOOL_CALLS_PER_TURN = 12   # hard cap — stops infinite tool spirals
 
 
 def _ansi(code: str) -> str:
@@ -413,7 +414,15 @@ def chat(client, session_id, system_prompt, history, user_input):
     log("INPUT", user_input)
 
     # Agentic tool-use loop — Oracle keeps going until it produces a final text reply
+    _tool_call_count = 0
     while True:
+        if _tool_call_count >= MAX_TOOL_CALLS_PER_TURN:
+            reply = (
+                f"[Loop guard] I made {_tool_call_count} tool calls on this turn without finishing. "
+                f"Stopping to avoid a runaway loop. Tell me what you'd like to do next."
+            )
+            save_message(session_id, "assistant", reply)
+            return reply, history
         response = client.messages.create(
             model=MODEL,
             max_tokens=MAX_TOKENS,
@@ -430,6 +439,7 @@ def chat(client, session_id, system_prompt, history, user_input):
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
+                    _tool_call_count += 1
                     print(f"\n[Oracle → Tool: {block.name}]")
                     result = execute_tool(block.name, block.input)
                     tool_results.append({
@@ -463,7 +473,15 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
 
     oai_tools = to_openai_tools(TOOL_DEFINITIONS)
 
+    _tool_call_count = 0
     while True:
+        if _tool_call_count >= MAX_TOOL_CALLS_PER_TURN:
+            reply = (
+                f"[Loop guard] I made {_tool_call_count} tool calls without finishing. "
+                f"Stopping. Tell me the next step."
+            )
+            save_message(session_id, "assistant", reply)
+            return reply, history
         messages = [{"role": "system", "content": system_prompt}] + history
         response = client.chat.completions.create(
             model=model,
@@ -496,6 +514,7 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
 
         if finish in ("tool_calls", "tool_use") and msg.tool_calls:
             for tc in msg.tool_calls:
+                _tool_call_count += 1
                 print(f"\n[Oracle → Tool: {tc.function.name}]")
                 try:
                     inp = json.loads(tc.function.arguments)
@@ -657,6 +676,18 @@ def main():
                 print(f"\n[propose-build error: {e}]\n")
             continue
 
+        if user_input.lower() in ("/self-build", "/selfbuild"):
+            print("\n[self-build] Scanning codebase for highest-value improvement...\n")
+            try:
+                from self_build import run_self_build
+                result = run_self_build(client, model, local, implement=False)
+                print(result)
+                speak(f"Self-build proposal ready. {result.split('TITLE')[1][:80] if 'TITLE' in result else 'Review the proposal.'}")
+            except Exception as e:
+                log("ERROR", f"/self-build failed: {e}")
+                print(f"\n[self-build error: {e}]\n")
+            continue
+
         if user_input.lower() == "/help":
             print("""
 Commands:
@@ -670,6 +701,7 @@ Commands:
   /person recall <name>              Show person and all notes
   /clear                             Clear conversation history
   /propose-build                     Read build docs and recommend one next task (read-only)
+  /self-build                        Scan own codebase and propose the single best improvement
   /lootdrop                          Show recent LootDrop momentum recap
   /lootdrop <tier> <project> <reason>  Award a LootDrop (tiers: common uncommon rare epic legendary mythic)
   /context                           Show current live operational context state
