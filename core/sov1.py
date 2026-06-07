@@ -35,6 +35,20 @@ from audit_log import log
 from llm import is_local, make_client, get_model, to_openai_tools, image_block
 MAX_TOKENS = 2048
 MAX_STEPS = 25  # safety cap on actions per goal
+BROWSER_OPEN_WAIT = 3.0    # seconds to wait after opening Chrome/Edge/Firefox
+TYPE_SETTLE_WAIT  = 0.5    # seconds to wait after type_text before screenshot
+
+# ── Overnight / unattended safety ─────────────────────────────────────────────
+# Set SAFE_SLEEP_MODE = True to disable all physical desktop actions.
+# ORACLE can still think and propose — it just cannot move the mouse or keyboard.
+SAFE_SLEEP_MODE = False
+
+_BROWSER_NAMES = {"chrome", "msedge", "firefox", "brave", "opera"}
+
+# ── Loop guard — stop repeated same-action loops ──────────────────────────────
+from collections import deque
+_recent_actions: deque = deque(maxlen=6)   # (tool_name, key_arg) pairs
+_LOOP_GUARD_THRESHOLD = 3                  # same call 3 times in last 6 → stop
 
 SYSTEM = """You are SOV1.AI, operating Noah Hawkes' Windows 11 PC directly.
 You see the screen through screenshots and control the real mouse and keyboard.
@@ -210,10 +224,60 @@ def _prune_images(history, keep_last=2):
         parent["content"].append({"type": "text", "text": "[earlier screenshot omitted]"})
 
 
+def _is_safe_sleep_blocked(name: str) -> str | None:
+    """Return a refusal message if SAFE_SLEEP_MODE blocks this action, else None."""
+    if not SAFE_SLEEP_MODE:
+        return None
+    PASSIVE_OK = {"take_screenshot", "remember_lesson", "ask_noah", "task_done", "ask_confirmation"}
+    if name not in PASSIVE_OK:
+        return (f"SAFE_SLEEP_MODE is active — desktop action '{name}' is blocked. "
+                f"ORACLE is in observe-only mode. No mouse, keyboard, or browser actions "
+                f"are permitted while Noah is away.")
+    return None
+
+
+def _loop_guard_check(name: str, key_arg: str) -> bool:
+    """Return True if this action is looping (same call repeated too many times)."""
+    _recent_actions.append((name, key_arg))
+    count = sum(1 for n, k in _recent_actions if n == name and k == key_arg)
+    return count >= _LOOP_GUARD_THRESHOLD
+
+
+def _browser_already_open() -> str | None:
+    """Return the window title of an open browser window, or None if none found."""
+    try:
+        import pygetwindow as gw
+        for w in gw.getAllWindows():
+            t = w.title.lower()
+            if any(b in t for b in ["chrome", "edge", "firefox", "brave", "google"]):
+                return w.title
+    except Exception:
+        pass
+    return None
+
+
+def _navigate_address_bar(url: str) -> tuple[str, object]:
+    """Focus address bar via Ctrl+L, type URL, press Enter. Returns (result, screenshot)."""
+    cc.hotkey("ctrl", "l")
+    time.sleep(0.4)
+    cc.type_text(url)
+    time.sleep(0.2)
+    cc.press("enter")
+    time.sleep(2.5)   # wait for page to start loading
+    return f"Navigated to {url}", _screenshot_block()
+
+
 def _run_tool(name, inp):
     """Execute a hands tool. Returns (result_text, screenshot_block_or_None, control_flag)."""
+
+    # ── Overnight safety gate ─────────────────────────────────────────────────
+    blocked_msg = _is_safe_sleep_blocked(name)
+    if blocked_msg:
+        return blocked_msg, None, None
+
     if name == "take_screenshot":
         return "Screenshot taken.", _screenshot_block(), None
+
     if name == "move_and_click":
         try:
             x, y = int(inp["x"]), int(inp["y"])
@@ -229,47 +293,99 @@ def _run_tool(name, inp):
             r = cc.click(x, y, button=btn)
         time.sleep(0.4)
         return r, _screenshot_block(), None
+
     if name == "type_text":
         blocked = _hard_block_text(inp["text"])
         if blocked:
             log("BLOCKED", f"refused to type: {blocked}")
             return (f"REFUSED to type that — it looks like {blocked}. "
                     f"I never type passwords, card numbers, or SSNs. Skipping."), _screenshot_block(), None
+
+        # Loop guard: stop if type_text keeps firing without progress
+        if _loop_guard_check("type_text", inp["text"][:30]):
+            return ("Loop guard: type_text repeated 3 times without confirmed progress. "
+                    "Stopping browser input chain. No further typing attempted."), _screenshot_block(), None
+
         r = cc.type_text(inp["text"])
-        return r, _screenshot_block(), None
+        time.sleep(TYPE_SETTLE_WAIT)    # let the UI settle before screenshot
+        shot = _screenshot_block()
+        # Append a note to the result so the model knows to verify
+        r += " | Verify the text appeared in the screenshot before continuing."
+        return r, shot, None
+
     if name == "press_key":
         r = cc.press(inp["key"])
         time.sleep(0.3)
         return r, _screenshot_block(), None
+
     if name == "hotkey":
         r = cc.hotkey(*inp["keys"])
         time.sleep(0.4)
         return r, _screenshot_block(), None
+
     if name == "open_program":
-        r = cc.open_program(inp["name"])
+        prog = inp["name"].lower()
+
+        # ── Browser state check: focus existing instead of opening another ────
+        if any(b in prog for b in _BROWSER_NAMES) or prog == "chrome":
+            existing = _browser_already_open()
+            if existing:
+                focus_r = cc.focus_window(existing.split(" - ")[0])
+                time.sleep(0.8)
+                shot = _screenshot_block()
+                return (f"Browser already open ({existing[:60]}). Focused existing window — "
+                        f"no new Chrome opened. Use Ctrl+L to navigate if needed. | {focus_r}"), shot, None
+
+            # No browser found — actually open it
+            if _loop_guard_check("open_program", prog):
+                return (f"Loop guard: open_program('{prog}') called 3 times in a row "
+                        f"without progress. Stopping. Check if Chrome is opening off-screen "
+                        f"or taking longer than expected."), _screenshot_block(), None
+
+            r = cc.open_program(prog)
+            time.sleep(BROWSER_OPEN_WAIT)    # longer wait for browser cold start
+            shot = _screenshot_block()
+            return (f"{r} | Browser opened. Waiting complete. "
+                    f"Use Ctrl+L to focus the address bar and navigate."), shot, None
+
+        # Non-browser program — standard open
+        if _loop_guard_check("open_program", prog):
+            return (f"Loop guard: open_program('{prog}') repeated 3 times. Stopping."), _screenshot_block(), None
+        r = cc.open_program(prog)
         time.sleep(1.5)
         return r, _screenshot_block(), None
+
     if name == "focus_window":
-        r = cc.focus_window(inp["title"])
+        title = inp["title"]
+        if _loop_guard_check("focus_window", title.lower()[:20]):
+            return (f"Loop guard: focus_window('{title}') repeated 3 times without confirmed "
+                    f"focus. Try open_program instead, or check if window title changed."), _screenshot_block(), None
+        r = cc.focus_window(title)
         time.sleep(0.6)
         return r, _screenshot_block(), None
+
     if name == "remember_lesson":
         _save_lesson(inp["lesson"])
         return f"Lesson saved — I'll remember this next time: {inp['lesson']}", None, None
+
     if name == "scroll":
         r = cc.scroll(inp["amount"])
         return r, _screenshot_block(), None
+
     if name == "ask_confirmation":
         print(f"\n*** SOV1 needs your OK: {inp['question']}")
         ans = input("    Type 'yes' to proceed, anything else to skip: ").strip().lower()
         ok = ans in ("y", "yes")
         return ("Noah approved." if ok else "Noah declined — do not do it."), None, None
+
     if name == "ask_noah":
         print(f"\n*** SOV1 asks: {inp['question']}")
         ans = input("    You: ").strip()
         return f"Noah says: {ans}", None, None
+
     if name == "task_done":
         return inp["summary"], None, "DONE"
+
     return f"Unknown tool: {name}", None, None
 
 
@@ -460,6 +576,77 @@ def operate_local(client, goal, model, system=None, text_model=None):
     return None
 
 
+# ── Smoke test ────────────────────────────────────────────────────────────────
+
+def _smoke_test():
+    """
+    Dry-run verification of browser state check, loop guard, and safe sleep mode.
+    Does NOT move the mouse or open any programs.
+    """
+    global SAFE_SLEEP_MODE
+    print("=" * 56)
+    print("sov1.py — Browser Fix Smoke Test (dry run)")
+    print("=" * 56)
+
+    passed = 0
+    failed = 0
+
+    def check(label, result, expected_fragment):
+        nonlocal passed, failed
+        ok = expected_fragment.lower() in result.lower()
+        print(f"  [{'PASS' if ok else 'FAIL'}] {label}")
+        if not ok:
+            print(f"         Expected fragment: '{expected_fragment}'")
+            print(f"         Got: '{result[:120]}'")
+            failed += 1
+        else:
+            passed += 1
+
+    # 1. SAFE_SLEEP_MODE blocks desktop actions
+    SAFE_SLEEP_MODE = True
+    r, _, _ = _run_tool("type_text", {"text": "hello"})
+    check("SAFE_SLEEP_MODE blocks type_text", r, "safe_sleep_mode")
+    r, _, _ = _run_tool("open_program", {"name": "chrome"})
+    check("SAFE_SLEEP_MODE blocks open_program", r, "safe_sleep_mode")
+    r, _, _ = _run_tool("move_and_click", {"x": 100, "y": 100})
+    check("SAFE_SLEEP_MODE blocks move_and_click", r, "safe_sleep_mode")
+
+    # Passive tools allowed
+    r, _, _ = _run_tool("remember_lesson", {"lesson": "test lesson"})
+    check("SAFE_SLEEP_MODE allows remember_lesson", r, "lesson saved")
+    SAFE_SLEEP_MODE = False
+
+    # 2. Loop guard triggers after 3 identical open_program calls
+    _recent_actions.clear()
+    for _ in range(3):
+        r, _, _ = _run_tool("open_program", {"name": "notepad_fake_for_test"})
+    check("Loop guard triggers on 3rd identical open_program", r, "loop guard")
+
+    # 3. Loop guard triggers on repeated focus_window
+    _recent_actions.clear()
+    for _ in range(3):
+        r, _, _ = _run_tool("focus_window", {"title": "FakeWindowTitleTest"})
+    check("Loop guard triggers on 3rd identical focus_window", r, "loop guard")
+
+    # 4. Hard block still works (SSN)
+    _recent_actions.clear()
+    r, _, _ = _run_tool("type_text", {"text": "my SSN is 123-45-6789"})
+    check("Hard block refuses SSN", r, "refused")
+
+    # 5. Loop guard resets between goals (simulate _recent_actions.clear())
+    _recent_actions.clear()
+    # After clear, one call should NOT trigger guard
+    r, _, _ = _run_tool("focus_window", {"title": "FakeWindowAfterReset"})
+    check("Loop guard does not trigger after reset", r, "no window matching")  # pygetwindow error, not loop guard
+
+    print(f"\n{passed}/{passed+failed} smoke tests passed.")
+    if failed:
+        print("SOME TESTS FAILED — check output above.")
+    else:
+        print("All smoke tests passed.")
+    return failed == 0
+
+
 def main():
     if not cc.HANDS_AVAILABLE:
         print(cc._require_hands())
@@ -491,6 +678,24 @@ def main():
             continue
         if goal.lower() in ("/quit", "/exit", "quit", "exit"):
             break
+
+        # ── Safety mode commands ──────────────────────────────────────────────
+        if goal.lower() in ("safe_sleep_mode", "/safe", "safe mode", "sleep mode"):
+            import sov1 as _self
+            _self.SAFE_SLEEP_MODE = True
+            print("\n[SAFE_SLEEP_MODE ACTIVE] Desktop actions disabled. "
+                  "ORACLE can observe and propose but cannot move the mouse, keyboard, "
+                  "or browser. Type 'wake' to re-enable.\n")
+            continue
+        if goal.lower() in ("wake", "/wake", "wake up", "disable safe mode"):
+            import sov1 as _self
+            _self.SAFE_SLEEP_MODE = False
+            print("\n[SAFE_SLEEP_MODE OFF] Desktop actions re-enabled.\n")
+            continue
+
+        # Reset loop guard between goals — fresh start each task
+        _recent_actions.clear()
+
         try:
             if local:
                 operate_local(client, goal, model)

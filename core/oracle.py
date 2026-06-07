@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT / "core"))
 
 from memory import init_db, new_session, save_message, get_recent_messages
 from context_loader import build_system_prompt, load_identity, index_summary
+from identity_compliance import handle_in_repl
 from audit_log import log
 from tools.definitions import TOOL_DEFINITIONS
 from tools.executor import execute_tool
@@ -504,6 +505,16 @@ Hands tools (SOV1 — operates the screen):
                       Just speak naturally: "open Chrome", "click X", etc.
                       Abort anytime: slam mouse into a screen corner.
 """)
+            continue
+
+        # ── Governance pre-classification ─────────────────────────────────────────
+        # Intercept governance, identity, memory, and sovereignty statements before
+        # they reach the LLM. The LLM receives governance statements and responds
+        # with generic assistant language because it cannot distinguish them from
+        # ordinary conversation. identity_compliance.py handles them with precision.
+        governance_response = handle_in_repl(user_input)
+        if governance_response is not None:
+            print(governance_response)
             continue
 
         try:
