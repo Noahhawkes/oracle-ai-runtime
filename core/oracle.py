@@ -688,6 +688,62 @@ def main():
                 print(f"\n[self-prompt error: {e}]\n")
             continue
 
+        if user_input.lower() in ("/runtime", "/oracle-runtime", "/run-cycle"):
+            print("\n[runtime] Running one governed runtime cycle...\n")
+            try:
+                from oracle_runtime import run_cycle, MODE_MANUAL
+                result = run_cycle(mode=MODE_MANUAL)
+                print(result.report())
+                speak(f"Runtime cycle complete. Priority: {result.selected_priority[:60]}")
+            except Exception as e:
+                log("ERROR", f"/runtime failed: {e}")
+                print(f"\n[runtime error: {e}]\n")
+            continue
+
+        if user_input.lower() in ("/runtime-status", "/cycle-status"):
+            try:
+                from oracle_runtime import status_report
+                print(status_report())
+            except Exception as e:
+                print(f"\n[runtime-status error: {e}]\n")
+            continue
+
+        if user_input.lower() in ("/bridge-chatgpt-status", "/bridge-status"):
+            try:
+                from chatgpt_bridge import get_bridge
+                print(get_bridge().status())
+            except Exception as e:
+                print(f"\n[bridge-status error: {e}]\n")
+            continue
+
+        if user_input.lower().startswith("/bridge-chatgpt-draft"):
+            request_text = user_input[len("/bridge-chatgpt-draft"):].strip()
+            if not request_text:
+                print("\nUsage: /bridge-chatgpt-draft <your question for ChatGPT>\n")
+            else:
+                try:
+                    from chatgpt_bridge import get_bridge
+                    msg, status = get_bridge().bridge(request=request_text, dry_run=True)
+                    print(msg.summary())
+                    print(f"Status: {status}\n")
+                except Exception as e:
+                    print(f"\n[bridge-draft error: {e}]\n")
+            continue
+
+        if user_input.lower() in ("/window-snapshot", "/win-snap"):
+            try:
+                from window_janitor import get_janitor
+                snap = get_janitor().snapshot_windows()
+                print(f"\n  Current windows ({len(snap)}):")
+                for w in snap[:15]:
+                    print(f"    {w.get('title', '?')[:70]}")
+                if len(snap) > 15:
+                    print(f"    ... and {len(snap) - 15} more")
+                print()
+            except Exception as e:
+                print(f"\n[window-snapshot error: {e}]\n")
+            continue
+
         if user_input.lower() in ("/self-build", "/selfbuild"):
             print("\n[self-build] Scanning codebase for highest-value improvement...\n")
             try:
@@ -715,6 +771,11 @@ Commands:
   /propose-build                     Read build docs and recommend one next task (read-only)
   /self-build                        Scan own codebase and propose the single best improvement
   /self-prompt                       Run one governed self-prompt cycle (state, memory, gaps, priority, proposal)
+  /runtime                           Run one governed runtime cycle (heartbeat — picks priority, invokes module, persists result)
+  /runtime-status                    Show runtime state: SOV1, Ollama, pending queues, next priority
+  /bridge-chatgpt-draft <question>   Draft a governed message to ChatGPT (does not send — dry run)
+  /bridge-chatgpt-status             Show ChatGPT bridge status and pending drafts
+  /window-snapshot                   List currently visible windows on the desktop
   /lootdrop                          Show recent LootDrop momentum recap
   /lootdrop <tier> <project> <reason>  Award a LootDrop (tiers: common uncommon rare epic legendary mythic)
   /context                           Show current live operational context state
