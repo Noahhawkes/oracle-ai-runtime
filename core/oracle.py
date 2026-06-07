@@ -355,6 +355,11 @@ def main():
         print("[LOCAL MODE] Make sure Ollama is running and the model is pulled.")
         print(f"[LOCAL MODE] Pull command: ollama pull {model}\n")
 
+    # Initialise LiveContext — loads persisted state, stamps last_updated
+    from live_context import get_live_context
+    _ctx = get_live_context()
+    _ctx.set_task("Interactive session")
+
     banner(identity)
     log("SESSION_START", f"Session {session_id} started")
 
@@ -395,6 +400,59 @@ def main():
             handle_person_command(user_input[8:].strip())
             continue
 
+        # ── LiveContext / privacy commands ────────────────────────────────────
+        if user_input.lower() in ("/context", "/ctx"):
+            from live_context import get_live_context
+            print(get_live_context().show())
+            continue
+
+        if user_input.lower() in ("/privacy on", "/privacy-on"):
+            from live_context import get_live_context
+            print(f"\n  {get_live_context().set_privacy_mode(True)}\n")
+            continue
+
+        if user_input.lower() in ("/privacy off", "/privacy-off"):
+            from live_context import get_live_context
+            print(f"\n  {get_live_context().set_privacy_mode(False)}\n")
+            continue
+
+        if user_input.lower() in ("/pause-context", "/pause"):
+            from live_context import get_live_context
+            print(f"\n  {get_live_context().pause()}\n")
+            continue
+
+        if user_input.lower() in ("/resume-context", "/resume"):
+            from live_context import get_live_context
+            print(f"\n  {get_live_context().resume()}\n")
+            continue
+
+        if user_input.lower() in ("/purge-buffer", "/purge"):
+            from live_context import get_live_context
+            answer = input("\n  Purge live context buffer? Pending candidates will be discarded. (y/n): ").strip().lower()
+            if answer in ("y", "yes"):
+                print(f"  {get_live_context().purge_buffer()}\n")
+            else:
+                print("  Cancelled.\n")
+            continue
+
+        if user_input.lower() in ("/pending", "/pending-candidates"):
+            from integration_gate import ApprovalGate
+            gate = ApprovalGate()
+            candidates = gate.list_pending()
+            if not candidates:
+                print("\n  No pending candidates.\n")
+            else:
+                print(f"\n--- Pending Approval ({len(candidates)}) ---")
+                for c in candidates:
+                    flag = " [SENSITIVE - blocked]" if c.get("sensitive_flag") else ""
+                    print(f"  [{c['confidence'].upper()}] {c['source']} | "
+                          f"{c['rendered_category']}/{c['rendered_key']}{flag}")
+                    print(f"    Value  : {c['rendered_value'][:80]}")
+                    print(f"    Excerpt: {c['raw_excerpt'][:60]}...")
+                    print(f"    ID     : {c['id']}")
+                print()
+            continue
+
         if user_input.lower().startswith("/lootdrop"):
             _handle_lootdrop(user_input)
             continue
@@ -425,6 +483,12 @@ Commands:
   /propose-build                     Read build docs and recommend one next task (read-only)
   /lootdrop                          Show recent LootDrop momentum recap
   /lootdrop <tier> <project> <reason>  Award a LootDrop (tiers: common uncommon rare epic legendary mythic)
+  /context                           Show current live operational context state
+  /privacy on | /privacy off         Toggle privacy mode (clears buffer, suspends context)
+  /pause-context                     Pause context updates without full privacy mode
+  /resume-context                    Resume context updates
+  /purge-buffer                      Discard live context buffer without approving candidates
+  /pending                           List external integration candidates pending approval
   /quit                              Exit
 
 Brain tools (reasoning, files, web):
