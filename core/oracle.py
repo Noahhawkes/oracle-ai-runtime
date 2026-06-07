@@ -431,9 +431,23 @@ def chat(client, session_id, system_prompt, history, user_input):
     _tool_call_count = 0
     while True:
         if _tool_call_count >= MAX_TOOL_CALLS_PER_TURN:
+            # Enter ERROR_RECOVERY — gives structured diagnostic, not just prose
+            _lg_diag = f"Loop guard: {_tool_call_count} tool calls without finishing."
+            _lg_hint = (
+                "Type ACTION_DIAGNOSTIC to see which tool repeated. "
+                "Type STOP ORACLE to halt all action. "
+                "Type CLEAR_PROMPT to clear any stale terminal prompt."
+            )
+            try:
+                from session_state import enter_recovery, action_diagnostic
+                enter_recovery(reason=_lg_diag, hint=_lg_hint)
+                _diag_output = action_diagnostic()
+            except Exception:
+                _diag_output = ""
             reply = (
-                f"[Loop guard] I made {_tool_call_count} tool calls on this turn without finishing. "
-                f"Stopping to avoid a runaway loop. Tell me what you'd like to do next."
+                f"[Loop guard] {_lg_diag}\n"
+                f"{_diag_output}\n"
+                f"Hint: {_lg_hint}"
             )
             save_message(session_id, "assistant", reply)
             return reply, history
@@ -583,6 +597,41 @@ def main():
 
         if not user_input:
             continue
+
+        # ── Session State Controller — intercept BEFORE any LLM or tool call ──
+        try:
+            from session_state import (
+                handle_command as ss_handle_command,
+                classify_user_input, should_consume_as_prompt_answer,
+                record_tool_call as ss_record_tool_call,
+                detect_stale_prompt, set_mode as ss_set_mode,
+                MODE_BUILD_PASS, MODE_IDLE, action_diagnostic,
+            )
+            # Stale prompt sweep on every input
+            was_stale, stale_reason = detect_stale_prompt()
+            if was_stale:
+                print(f"\n  [SESSION] Stale prompt cleared: {stale_reason[:100]}\n")
+
+            # Hard-intercept: is this a session state command?
+            ss_handled, ss_response = ss_handle_command(user_input)
+            if ss_handled:
+                print(ss_response)
+                continue
+
+            # Classify input and warn if it would have been hijacked
+            clf = classify_user_input(user_input)
+            if clf.override_active_prompt:
+                # Don't stop — but log that a stale prompt was overridden
+                log("SESSION", f"Input override: classified as {clf.classified_as} — {clf.reason[:80]}")
+
+            # Track BUILD_PASS mode for MYTHIC BUILD PASS inputs
+            if clf.is_build_instruction:
+                ss_set_mode(MODE_BUILD_PASS, reason=f"Build instruction detected: {user_input[:60]}")
+        except ImportError:
+            pass
+        except Exception as _ss_err:
+            log("SESSION_WARN", f"session_state error: {_ss_err}")
+        # ── End session state intercept ────────────────────────────────────────
 
         if user_input.lower() in ("/quit", "/exit"):
             print("\nOracle offline. Session saved.")
@@ -772,6 +821,14 @@ def main():
                 print(f"\n[window-snapshot error: {e}]\n")
             continue
 
+        if user_input.lower() in ("/session", "/session-state", "/session-status"):
+            try:
+                from session_state import action_diagnostic
+                print(action_diagnostic())
+            except Exception as e:
+                print(f"\n[session error: {e}]\n")
+            continue
+
         if user_input.lower().startswith("/route-task") or user_input.lower().startswith("/route "):
             raw = user_input.split(" ", 1)[1].strip() if " " in user_input else ""
             if not raw:
@@ -827,6 +884,13 @@ Commands:
   /bridge-chatgpt-status             Show ChatGPT bridge status and pending drafts
   /window-snapshot                   List currently visible windows on the desktop
   /route-task <description>          Route a task to the correct cognitive engine (brain router)
+  /session                           Show full session state diagnostic (mode, prompt, tool history)
+  ACTION_DIAGNOSTIC                  Real structured diagnostic (not prose) — mode, prompt, tool calls, recovery hint
+  CLEAR_PROMPT                       Clear any active terminal prompt (stop prompt hijacking)
+  RESET_SESSION_STATE                Full session reset to IDLE (preserves tool history)
+  STOP ORACLE                        Halt all action, clear prompts, enter SAFE_SLEEP
+  SET_MODE BUILD_PASS                Force BUILD_PASS mode
+  SET_MODE IDLE                      Force IDLE mode
   /lootdrop                          Show recent LootDrop momentum recap
   /lootdrop <tier> <project> <reason>  Award a LootDrop (tiers: common uncommon rare epic legendary mythic)
   /context                           Show current live operational context state
