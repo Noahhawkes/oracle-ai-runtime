@@ -772,6 +772,27 @@ def main():
                 print(f"\n[window-snapshot error: {e}]\n")
             continue
 
+        if user_input.lower().startswith("/route-task") or user_input.lower().startswith("/route "):
+            raw = user_input.split(" ", 1)[1].strip() if " " in user_input else ""
+            if not raw:
+                print("\n  Usage: /route-task <describe what you want to do>\n")
+                continue
+            try:
+                from brain_router import create_task_from_text, route_task, explain_route
+                task = create_task_from_text(raw)
+                decision = route_task(task)
+                print(f"\n  Task text  : {raw[:80]}")
+                print(f"  Classified : {task.task_type}  complexity={task.complexity}  sensitivity={task.sensitivity}")
+                print(explain_route(decision))
+                if decision.blocked:
+                    speak(f"Task blocked. {decision.block_reason[:80]}")
+                else:
+                    speak(f"Routed to {decision.selected_engine}. {decision.reason[:60]}")
+            except Exception as e:
+                log("ERROR", f"/route-task failed: {e}")
+                print(f"\n[route-task error: {e}]\n")
+            continue
+
         if user_input.lower() in ("/self-build", "/selfbuild"):
             print("\n[self-build] Scanning codebase for highest-value improvement...\n")
             try:
@@ -805,6 +826,7 @@ Commands:
   /bridge-chatgpt-draft <question>   Draft a governed message to ChatGPT (does not send — dry run)
   /bridge-chatgpt-status             Show ChatGPT bridge status and pending drafts
   /window-snapshot                   List currently visible windows on the desktop
+  /route-task <description>          Route a task to the correct cognitive engine (brain router)
   /lootdrop                          Show recent LootDrop momentum recap
   /lootdrop <tier> <project> <reason>  Award a LootDrop (tiers: common uncommon rare epic legendary mythic)
   /context                           Show current live operational context state
