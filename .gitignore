@@ -21,6 +21,10 @@ __pycache__/
 Memory/
 *.db
 
+# Approval gate runtime output — live pending candidate data, may contain
+# sensitive rendered context awaiting human approval. Must stay local.
+Projects/pending_candidates/
+
 # User identity and personal documents (privacy — reviewed separately)
 Users/
 
