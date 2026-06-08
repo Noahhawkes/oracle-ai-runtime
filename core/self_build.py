@@ -107,12 +107,36 @@ TEST: [how to verify it worked]
 
 
 def _read_file_excerpt(rel_path: str, max_chars: int = 1500) -> str:
+    """Read module docstring + public function/class signatures. Much more signal per token."""
     path = ROOT / rel_path
     if not path.exists():
         return f"(not found: {rel_path})"
     try:
+        import ast
         text = path.read_text(encoding="utf-8", errors="replace")
-        return text[:max_chars] + ("...[truncated]" if len(text) > max_chars else "")
+        try:
+            tree = ast.parse(text)
+            lines = []
+            # Module docstring
+            module_doc = ast.get_docstring(tree)
+            if module_doc:
+                lines.append(module_doc[:300])
+            # Top-level functions and classes with their docstrings
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    if node.col_offset > 0:
+                        continue  # skip nested
+                    args = ""
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        arg_names = [a.arg for a in node.args.args]
+                        args = f"({', '.join(arg_names)})"
+                    doc = ast.get_docstring(node)
+                    doc_snippet = f" — {doc[:80]}" if doc else ""
+                    lines.append(f"  def {node.name}{args}{doc_snippet}")
+            result = "\n".join(lines)
+            return result[:max_chars] + ("...[truncated]" if len(result) > max_chars else "")
+        except SyntaxError:
+            return text[:max_chars] + ("...[truncated]" if len(text) > max_chars else "")
     except Exception as e:
         return f"(read error: {e})"
 

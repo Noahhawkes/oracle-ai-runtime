@@ -638,6 +638,19 @@ def main():
         if user_input.lower() in ("/quit", "/exit"):
             print("\nOracle offline. Session saved.")
             log("SESSION_END", f"Session {session_id} ended")
+            # Persist session close into project state so next boot is oriented
+            try:
+                from project_state import load_state, save_state
+                from datetime import datetime, timezone
+                ps = load_state("ORACLE.AI")
+                if ps:
+                    ps.lessons_learned.append(
+                        f"[session] oracle.py session ended {datetime.now(timezone.utc).isoformat()[:16]} UTC"
+                    )
+                    ps.lessons_learned = ps.lessons_learned[-40:]
+                    save_state(ps)
+            except Exception:
+                pass
             from voice import shutdown as voice_shutdown
             voice_shutdown()
             break
