@@ -101,7 +101,7 @@ def _inject_local_context(user_input: str) -> str:
             lines.append(f"Pending     : {n} items awaiting Noah's approval")
     except Exception:
         pass
-    lines.append(f"Mode        : LOCAL — read-only tools only")
+    lines.append(f"Mode        : LOCAL — implementation tasks route to Claude Code")
     lines.append("")
     lines.append(f"Noah says: {user_input}")
     return "\n".join(lines)
@@ -1377,11 +1377,62 @@ Hands tools (SOV1 — operates the screen):
             speak(governance_response)
             continue
 
+        # ── Claude Code routing — code/build tasks never reach the local model ──
+        # is_claude_directed catches "with claude", "tell claude", "paste into", etc.
+        # is_code_task catches implement, build, refactor, .py, "explain the code", etc.
+        # Both fire BEFORE chat_local() so the local model never sees the message.
+        try:
+            from claude_code_bridge import (
+                is_claude_directed, is_code_task,
+                ask_claude, contains_secret, scrub_secrets,
+            )
+            if is_claude_directed(user_input) or is_code_task(user_input):
+                print(f"\n  {C['byellow']}[GOVERNANCE]{C['reset']} ↗ Routing to Claude Code…\n")
+                log("ROUTING", f"code task → Claude Code: {user_input[:80]}")
+                ok, cc_reply = ask_claude(user_input)
+                if contains_secret(cc_reply):
+                    print(f"  {C['bred']}[BLOCKED SECRET]{C['reset']} Response contained secret pattern (sk-, api_key, token, password) — redacted.\n")
+                    cc_reply = scrub_secrets(cc_reply)
+                label = f"{C['bgreen']}[CLAUDE CODE]{C['reset']}" if ok else f"{C['bred']}[CLAUDE CODE ERROR]{C['reset']}"
+                print(f"  {label}")
+                _print_oracle_reply(cc_reply)
+                speak(cc_reply[:300])
+                continue
+        except Exception as _bridge_err:
+            print(f"  {C['yellow']}[GOVERNANCE]{C['reset']} Claude Code routing error: {_bridge_err} — falling back to local model\n")
+            log("ROUTING_WARN", f"claude_code_bridge error: {_bridge_err}")
+        # ── End Claude Code routing ────────────────────────────────────────────
+
         try:
             if local:
                 reply, history = chat_local(client, session_id, system_prompt, history, user_input, model)
             else:
                 reply, history = chat(client, session_id, system_prompt, history, user_input, model)
+
+            # Post-LLM guard: if local model produced implementation stubs, re-route
+            _IMPL_PATTERNS = [
+                "def ", "class ", "```python", "i'll create", "i'll implement",
+                "here's the implementation", "i'll write", "i'll build",
+                "voice_hooks.py", "core/voice", "touch core/", "terminal_run",
+            ]
+            if any(p.lower() in reply.lower() for p in _IMPL_PATTERNS):
+                print(f"\n  {C['byellow']}[GOVERNANCE]{C['reset']} Local model attempted implementation — re-routing to Claude Code.\n")
+                log("ROUTING", "post-LLM guard triggered — re-routing to Claude Code")
+                try:
+                    from claude_code_bridge import ask_claude, contains_secret, scrub_secrets
+                    ok2, cc_reply2 = ask_claude(user_input)
+                    if contains_secret(cc_reply2):
+                        print(f"  {C['bred']}[BLOCKED SECRET]{C['reset']} Response redacted.\n")
+                        cc_reply2 = scrub_secrets(cc_reply2)
+                    label2 = f"{C['bgreen']}[CLAUDE CODE]{C['reset']}" if ok2 else f"{C['bred']}[CLAUDE CODE ERROR]{C['reset']}"
+                    print(f"  {label2}")
+                    _print_oracle_reply(cc_reply2)
+                    speak(cc_reply2[:300])
+                    continue
+                except Exception as _guard_err:
+                    print(f"  {C['yellow']}[GOVERNANCE]{C['reset']} Re-route failed: {_guard_err} — showing local reply anyway\n")
+
+            print(f"  {C['grey']}[LOCAL]{C['reset']}")
             _print_oracle_reply(reply)
             speak(reply)
         except Exception as e:
