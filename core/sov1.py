@@ -32,7 +32,7 @@ load_dotenv(ROOT / ".env")
 
 import computer_control as cc
 from audit_log import log
-from llm import is_local, make_client, get_model, to_openai_tools, image_block
+from llm import is_local, is_api_independent, require_local, make_client, get_model, to_openai_tools, image_block
 MAX_TOKENS = 2048
 MAX_STEPS = 25  # safety cap on actions per goal
 BROWSER_OPEN_WAIT = 3.0    # seconds to wait after opening Chrome/Edge/Firefox
@@ -189,6 +189,17 @@ TOOLS = [
      "input_schema": {"type": "object", "properties": {
          "timeout": {"type": "number", "description": "Max seconds to wait (default 5)"},
          "interval": {"type": "number", "description": "Poll interval in seconds (default 0.5)"}}}},
+    {"name": "write_file", "description": "Write text content to a file on disk. Use this instead of opening Notepad to write files. Creates parent directories automatically. Returns confirmation with the absolute path.",
+     "input_schema": {"type": "object", "properties": {
+         "path": {"type": "string", "description": "Absolute or relative path to write (e.g. C:/Users/noahh/Desktop/note.txt)"},
+         "content": {"type": "string", "description": "Text content to write"},
+         "append": {"type": "boolean", "description": "If true, append to existing file instead of overwriting"}},
+         "required": ["path", "content"]}},
+    {"name": "read_file", "description": "Read the text content of a file on disk. Returns the content (up to 8000 chars). Use this to check file contents without opening an app.",
+     "input_schema": {"type": "object", "properties": {
+         "path": {"type": "string", "description": "Absolute or relative path to read"},
+         "lines": {"type": "integer", "description": "Max number of lines to read (default: all)"}},
+         "required": ["path"]}},
 ]
 
 
@@ -550,6 +561,44 @@ def _run_tool(name, inp):
         shot = _screenshot_block()
         return r, shot, None
 
+    if name == "write_file":
+        raw_path = inp.get("path", "")
+        content  = inp.get("content", "")
+        append   = bool(inp.get("append", False))
+        if not raw_path:
+            return "write_file: path is required.", None, None
+        try:
+            p = Path(raw_path).expanduser()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            mode = "a" if append else "w"
+            p.write_text(content, encoding="utf-8") if not append else \
+                p.open("a", encoding="utf-8").write(content)
+            log("WRITE_FILE", f"{'appended' if append else 'wrote'} {len(content)} chars -> {p}")
+            return (f"{'Appended' if append else 'Wrote'} {len(content)} chars to {p}. "
+                    f"File now exists: {p.exists()}."), None, None
+        except Exception as e:
+            return f"write_file failed: {e}", None, None
+
+    if name == "read_file":
+        raw_path = inp.get("path", "")
+        max_lines = int(inp.get("lines", 0)) or None
+        if not raw_path:
+            return "read_file: path is required.", None, None
+        try:
+            p = Path(raw_path).expanduser()
+            if not p.exists():
+                return f"read_file: file not found: {p}", None, None
+            lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+            if max_lines:
+                lines = lines[:max_lines]
+            content = "\n".join(lines)
+            if len(content) > 8000:
+                content = content[:8000] + f"\n...[truncated at 8000 chars, file has {p.stat().st_size} bytes]"
+            log("READ_FILE", f"read {len(lines)} lines from {p}")
+            return f"Contents of {p}:\n{content}", None, None
+        except Exception as e:
+            return f"read_file failed: {e}", None, None
+
     return f"Unknown tool: {name}", None, None
 
 
@@ -873,11 +922,13 @@ def _smoke_test():
 
     def check(label, result, expected_fragment):
         nonlocal passed, failed
-        ok = expected_fragment.lower() in result.lower()
+        if isinstance(expected_fragment, bool):
+            ok = bool(result) == expected_fragment
+        else:
+            ok = expected_fragment.lower() in str(result).lower()
         print(f"  [{'PASS' if ok else 'FAIL'}] {label}")
         if not ok:
-            print(f"         Expected fragment: '{expected_fragment}'")
-            print(f"         Got: '{result[:120]}'")
+            print(f"         Expected: '{expected_fragment}'  Got: '{str(result)[:120]}'")
             failed += 1
         else:
             passed += 1
@@ -924,6 +975,67 @@ def _smoke_test():
     r, _, _ = _run_tool("focus_window", {"title": "FakeWindowAfterReset"})
     check("Loop guard does not trigger after reset", r, "no window matching")  # pygetwindow error, not loop guard
 
+    # 6. write_file and read_file tools
+    import tempfile, os as _os
+    tmp = Path(tempfile.gettempdir()) / "sov1_smoke_test_rw.txt"
+    try:
+        r, _, _ = _run_tool("write_file", {"path": str(tmp), "content": "hello SOV1"})
+        check("write_file: success message", r, "wrote")
+        check("write_file: file exists", tmp.exists(), True)
+        r, _, _ = _run_tool("read_file", {"path": str(tmp)})
+        check("read_file: returns content", r, "hello SOV1")
+        # Append mode
+        r, _, _ = _run_tool("write_file", {"path": str(tmp), "content": " world", "append": True})
+        check("write_file append: success", r, "appended")
+        r, _, _ = _run_tool("read_file", {"path": str(tmp)})
+        check("read_file: append worked", r, "world")
+    finally:
+        if tmp.exists():
+            _os.unlink(tmp)
+    r, _, _ = _run_tool("read_file", {"path": str(tmp)})
+    check("read_file: missing file returns not found", r, "not found")
+    r, _, _ = _run_tool("write_file", {"path": "", "content": "x"})
+    check("write_file: empty path returns error", r, "required")
+
+    # 7. API independence — is_local defaults to True
+    import importlib, sys as _sys
+    orig_local = _os.environ.get("LOCAL_MODE")
+    try:
+        _os.environ.pop("LOCAL_MODE", None)
+        import llm as _llm
+        importlib.reload(_llm)
+        check("is_local defaults to True when LOCAL_MODE unset", _llm.is_local(), True)
+        check("is_api_independent returns True when local", _llm.is_api_independent(), True)
+        _os.environ["LOCAL_MODE"] = "false"
+        importlib.reload(_llm)
+        check("is_local returns False when LOCAL_MODE=false", _llm.is_local(), False)
+        check("is_api_independent returns False when cloud", _llm.is_api_independent(), False)
+        # require_local raises when cloud
+        try:
+            _llm.require_local("smoke_test")
+            check("require_local raises when cloud", False, True)
+        except RuntimeError:
+            check("require_local raises when cloud", True, True)
+        _os.environ["LOCAL_MODE"] = "true"
+        importlib.reload(_llm)
+        # require_local passes when local
+        try:
+            _llm.require_local("smoke_test")
+            check("require_local passes when local", True, True)
+        except RuntimeError:
+            check("require_local passes when local", False, True)
+    finally:
+        if orig_local is None:
+            _os.environ.pop("LOCAL_MODE", None)
+        else:
+            _os.environ["LOCAL_MODE"] = orig_local
+        importlib.reload(_llm)
+
+    # 8. _api_status_report returns string
+    report = _api_status_report()
+    check("_api_status_report: returns string", isinstance(report, str), True)
+    check("_api_status_report: contains independence label", "API Independent" in report, True)
+
     print(f"\n{passed}/{passed+failed} smoke tests passed.")
     if failed:
         print("SOME TESTS FAILED — check output above.")
@@ -932,12 +1044,45 @@ def _smoke_test():
     return failed == 0
 
 
+def _api_status_report() -> str:
+    """Return a one-screen API independence status string."""
+    from llm import is_api_independent, is_local, check_ollama, get_model, DEFAULT_OLLAMA_BASE
+    import os
+    lines = []
+    lines.append("=" * 56)
+    lines.append("  SOV1.AI — API Independence Status")
+    lines.append("=" * 56)
+    indep = is_api_independent()
+    lines.append(f"  API Independent : {'YES — no cloud API required' if indep else 'NO — cloud API in use'}")
+    lines.append(f"  LOCAL_MODE      : {os.getenv('LOCAL_MODE', '(unset → defaults to true)')}")
+    lines.append(f"  Text model      : {get_model(vision=False)}")
+    lines.append(f"  Vision model    : {get_model(vision=True)}")
+    lines.append(f"  Ollama base     : {os.getenv('OLLAMA_BASE', DEFAULT_OLLAMA_BASE)}")
+    if indep:
+        ok, msg = check_ollama()
+        lines.append(f"  Ollama health   : {'OK' if ok else 'OFFLINE'} — {msg}")
+    else:
+        lines.append(f"  Cloud model     : {os.getenv('CLOUD_MODEL', 'claude-sonnet-4-6')}")
+        has_key = bool(os.getenv("ANTHROPIC_API_KEY"))
+        lines.append(f"  API key set     : {'yes' if has_key else 'NO — will fail'}")
+    lines.append("=" * 56)
+    if not indep:
+        lines.append("  To restore independence: set LOCAL_MODE=true in .env")
+    return "\n".join(lines)
+
+
 def main():
     if not cc.HANDS_AVAILABLE:
         print(cc._require_hands())
         sys.exit(1)
 
     local = is_local()
+
+    # API independence check — warn if cloud mode is active
+    if not local:
+        print("\n[WARNING] LOCAL_MODE is not true — SOV1 will call the Anthropic cloud API.")
+        print("          Set LOCAL_MODE=true in .env to run fully locally (no API key needed).\n")
+
     try:
         client = make_client()
     except RuntimeError as e:
@@ -949,10 +1094,15 @@ def main():
     print("  SOV1.AI — OPERATOR ONLINE")
     print("=" * 56)
     if local:
-        print(f"  LOCAL MODE — model: {model}")
+        from llm import check_ollama
+        ok, msg = check_ollama()
+        print(f"  LOCAL MODE — {msg}")
+        print(f"  Vision: {model}  |  Text: {get_model(vision=False)}")
+    else:
+        print(f"  CLOUD MODE — model: {model}")
     print("  Type what you want done. I'll operate the screen.")
     print("  Abort anytime: slam the mouse into a screen corner.")
-    print("  Type /quit to exit.\n")
+    print("  /api-status to check independence. /quit to exit.\n")
 
     while True:
         try:
@@ -963,6 +1113,11 @@ def main():
             continue
         if goal.lower() in ("/quit", "/exit", "quit", "exit"):
             break
+
+        # ── API independence status ───────────────────────────────────────────
+        if goal.lower() in ("/api-status", "/api", "api status", "api-status"):
+            print(_api_status_report())
+            continue
 
         # ── Safety mode commands ──────────────────────────────────────────────
         if goal.lower() in ("safe_sleep_mode", "/safe", "safe mode", "sleep mode"):

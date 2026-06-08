@@ -1,10 +1,14 @@
 """
 LLM adapter — runs Oracle/SOV1 against either:
-  - Local Ollama     (default, free — set LOCAL_MODE=true in .env)
-  - Anthropic cloud  (turbo mode — requires ANTHROPIC_API_KEY)
+  - Local Ollama  (DEFAULT — API-independent, no key required)
+  - Anthropic cloud  (opt-in — requires ANTHROPIC_API_KEY and LOCAL_MODE=false)
 
-Set in .env:
-  LOCAL_MODE=true
+API Independence policy:
+  LOCAL_MODE defaults to TRUE. To use cloud you must explicitly set LOCAL_MODE=false.
+  Use require_local() at any entry point that must never call the cloud.
+
+Set in .env (optional — defaults are local-first):
+  LOCAL_MODE=true                     # default; set false to opt into cloud
   LOCAL_MODEL=qwen2.5:7b             # text/reasoning model
   LOCAL_MODEL_VISION=qwen2.5-vl:7b   # vision model for SOV1
   OLLAMA_BASE=http://localhost:11434/v1
@@ -21,7 +25,29 @@ DEFAULT_CLOUD_MODEL        = "claude-sonnet-4-6"
 
 
 def is_local() -> bool:
-    return os.getenv("LOCAL_MODE", "").lower() in ("1", "true", "yes")
+    """Return True if running in local Ollama mode. Defaults to True (API-independent)."""
+    # Default is "true" — cloud requires explicit LOCAL_MODE=false opt-in
+    return os.getenv("LOCAL_MODE", "true").lower() not in ("0", "false", "no")
+
+
+def is_api_independent() -> bool:
+    """Return True when SOV1/ORACLE are running without any cloud API dependency."""
+    return is_local()
+
+
+def require_local(caller: str = "") -> None:
+    """
+    Raise RuntimeError immediately if not in local mode.
+    Call at any entry point that must never touch the cloud API.
+    """
+    if not is_local():
+        prefix = f"[{caller}] " if caller else ""
+        raise RuntimeError(
+            f"{prefix}API independence violated: LOCAL_MODE is set to false. "
+            "SOV1.AI is configured to run on local Ollama only. "
+            "To restore independence: set LOCAL_MODE=true in .env (or remove LOCAL_MODE entirely). "
+            "To intentionally use cloud: do not call require_local()."
+        )
 
 
 def get_model(vision: bool = False) -> str:
