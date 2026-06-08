@@ -1071,19 +1071,21 @@ def _smoke_test():
     SAFE_SLEEP_MODE = False
 
     # 2. Loop guard triggers after 3 identical open_program calls
-    # Use a non-Notepad dummy name so Notepad gate doesn't fire first
+    # Directly test the loop guard logic — do NOT call _run_tool (would fire Win+R for real)
     _recent_actions.clear()
     reset_typing_guard()
     for _ in range(3):
-        r, _, _ = _run_tool("open_program", {"name": "fakeprog_smoke_test"})
-    check("Loop guard triggers on 3rd identical open_program", r, "loop guard")
+        _recent_actions.append(("open_program", "fakeprog_smoke_test"))
+    triggered = _loop_guard_check("open_program", "fakeprog_smoke_test")
+    check("Loop guard triggers on 3rd identical open_program", triggered, True)
 
-    # 3. Loop guard triggers on repeated focus_window
+    # 3. Loop guard triggers on repeated focus_window — same approach, no pyautogui
     _recent_actions.clear()
     reset_typing_guard()
     for _ in range(3):
-        r, _, _ = _run_tool("focus_window", {"title": "FakeWindowTitleTest"})
-    check("Loop guard triggers on 3rd identical focus_window", r, "loop guard")
+        _recent_actions.append(("focus_window", "fakewindowtitletest"))
+    triggered = _loop_guard_check("focus_window", "fakewindowtitletest")
+    check("Loop guard triggers on 3rd identical focus_window", triggered, True)
 
     # 4. Hard block still works (SSN)
     _recent_actions.clear()
@@ -1091,12 +1093,14 @@ def _smoke_test():
     r, _, _ = _run_tool("type_text", {"text": "my SSN is 123-45-6789"})
     check("Hard block refuses SSN", r, "refused")
 
-    # 5. Loop guard resets between goals (simulate _recent_actions.clear())
+    # 5. Loop guard resets between goals — test logic only, no pyautogui
     _recent_actions.clear()
     reset_typing_guard()
-    # After clear, one call should NOT trigger guard
-    r, _, _ = _run_tool("focus_window", {"title": "FakeWindowAfterReset"})
-    check("Loop guard does not trigger after reset", r, "no window matching")  # pygetwindow error, not loop guard
+    # After clear, one append should NOT trigger guard (needs 3 same)
+    _recent_actions.append(("focus_window", "somewindow"))
+    triggered = _loop_guard_check("focus_window", "somewindow")
+    # count is now 2 (one appended + one from _loop_guard_check) — still below threshold of 3
+    check("Loop guard does not trigger after reset (1 call)", not triggered, True)
 
     # 6. write_file and read_file tools
     import tempfile, os as _os
