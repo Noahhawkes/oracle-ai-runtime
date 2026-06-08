@@ -368,9 +368,27 @@ def _ask_oracle(question: str = "") -> str:
         except Exception:
             return None
 
+    # --- Resident Runtime live state (primary) ---
+    rt_live = False
+    rt_mode = None
+    rt_next_step = None
+    try:
+        import sys as _sys
+        _core = str(ROOT / "core")
+        if _core not in _sys.path:
+            _sys.path.insert(0, _core)
+        from resident_runtime import _load_runtime_state
+        rs = _load_runtime_state()
+        if rs.get("status") == "running":
+            rt_live = True
+            rt_mode = rs.get("last_priority") or None
+            rt_next_step = rs.get("last_action") or None
+    except Exception:
+        pass
+
     # Session
     sess = _rj(mem / "session_state.json") or {}
-    mode = sess.get("mode", "UNKNOWN")
+    mode = rt_mode or sess.get("mode", "UNKNOWN")
 
     # Project
     proj_raw = _rj(mem / "project_states.json") or {}
@@ -412,6 +430,10 @@ def _ask_oracle(question: str = "") -> str:
 
     total_pending = mem_pending + vid_pending
 
+    # Prefer runtime next_step when resident_runtime is live
+    if rt_live and rt_next_step:
+        next_step = rt_next_step
+
     # One next action (mirror of dashboard logic)
     if not ollama_ok:
         action = "ORACLE cannot reason: Ollama is offline. Start Ollama first."
@@ -433,8 +455,9 @@ def _ask_oracle(question: str = "") -> str:
         approval = False
 
     q = question.lower().strip()
+    live_tag = "  [RUNTIME LIVE]" if rt_live else ""
     lines = [
-        f"ORACLE STATE — {mode}",
+        f"ORACLE STATE — {mode}{live_tag}",
         f"  Project      : {project_name} (confidence {confidence}%)",
         f"  Last step    : {last_step[:80]}",
         f"  Blocker      : {blocker or 'none'}",
@@ -1260,13 +1283,14 @@ def main():
             print(_api_status_report())
             continue
 
-        # ── Auto: ask ORACLE what to do, then act ────────────────────────────
+        # ── Auto: resident_runtime tick → candidate → act or stop ────────────
         if goal.lower() in ("/auto", "auto", "what should i do", "what next", "/oracle"):
             oracle_state = _ask_oracle()
             print(f"\n{oracle_state}\n")
-            # Extract the one next action and hand it to the operator
-            lines = oracle_state.splitlines()
-            action_line = next((l for l in lines if l.strip().startswith("  ") and
+
+            # Extract the one next action
+            state_lines = oracle_state.splitlines()
+            action_line = next((l for l in state_lines if l.strip().startswith("  ") and
                                 not l.strip().startswith("Project") and
                                 not l.strip().startswith("Last") and
                                 not l.strip().startswith("Blocker") and
@@ -1280,10 +1304,41 @@ def main():
             if not action:
                 print("[AUTO] No actionable step found in ORACLE state.")
                 continue
-            if "APPROVAL REQUIRED" in oracle_state:
-                print(f"[AUTO] Next action requires Noah's approval — not executing automatically.")
-                print(f"       Action: {action}")
+
+            needs_approval = "APPROVAL REQUIRED" in oracle_state
+
+            # Wrap in ActionCandidate — never execute raw string directly
+            try:
+                import action_candidates as _ac
+                risk = "high" if needs_approval else "low"
+                cand = _ac.new_candidate(
+                    title="AUTO next action",
+                    description=action,
+                    risk_level=risk,
+                    target_module="sov1_operate",
+                    proposed_steps=[action],
+                    reversibility="unknown",
+                    required_approval=needs_approval,
+                )
+                cand = _ac.submit(cand)
+                cand_id = cand["id"]
+            except Exception as _ce:
+                cand = None
+                cand_id = None
+                log("WARN", f"action_candidates unavailable: {_ce}")
+
+            if needs_approval:
+                print(f"[AUTO] Approval required — candidate created, not executing.")
+                print(f"       Action : {action}")
+                if cand_id:
+                    print(f"       ID     : {cand_id[:8]}")
+                print(f"       Approve via: python core/action_candidates.py --list")
                 continue
+
+            # Auto-approve low-risk candidate and execute
+            if cand and _ac.is_executable(_ac.approve(cand_id, approved_by="oracle_auto")):
+                pass  # approved inline
+
             print(f"[AUTO] ORACLE recommends: {action}")
             print(f"[AUTO] Executing as goal...\n")
             goal = action
