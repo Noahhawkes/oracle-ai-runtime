@@ -175,10 +175,8 @@ def _classify_interaction_mode(text: str) -> str:
     # BUILD: code / implementation keywords
     if any(t in lower for t in _BUILD_TRIGGERS):
         return "BUILD"
-    # Default: short casual messages → CHAT, longer → WORK
-    word_count = len(text.split())
-    if word_count <= 5:
-        return "CHAT"
+    # Default: anything unmatched → WORK.
+    # CHAT only fires on explicit conversational triggers above — not by word count.
     return "WORK"
 
 
@@ -1790,6 +1788,45 @@ def main():
             except Exception as e:
                 log("ERROR", f"/self-build failed: {e}")
                 print(f"\n[self-build error: {e}]\n")
+            continue
+
+        # ── approve self-build — implement the last proposal via Claude Code ──────
+        _uil2 = user_input.lower().strip().rstrip(".")
+        if _uil2 in (
+            "approve self-build", "approve self build", "implement self-build",
+            "implement self build", "yes self-build", "yes self build",
+            "self-build approve", "self build approve",
+        ):
+            try:
+                from pathlib import Path as _P
+                import glob as _glob
+                _proposal_dir = ROOT / "Projects" / "self_build_proposals"
+                _proposals = sorted(_glob.glob(str(_proposal_dir / "*.md")), reverse=True)
+                if not _proposals:
+                    print("\n  No self-build proposal found. Run 'build yourself' first.\n")
+                else:
+                    _latest = _proposals[0]
+                    _proposal_text = _P(_latest).read_text(encoding="utf-8")
+                    _task = (
+                        f"Implement this self-build proposal for ORACLE.AI. "
+                        f"Read the file, make the code changes, run tests if any, commit.\n\n"
+                        f"{_proposal_text[:2000]}"
+                    )
+                    print(f"\n  {C['byellow']}[SELF-BUILD]{C['reset']} Sending proposal to Claude Code…")
+                    print(f"  {C['dim']}Proposal: {_P(_latest).name}{C['reset']}\n")
+                    try:
+                        from claude_code_bridge import type_into_claude
+                        ok, detail = type_into_claude(_task, open_if_missing=True)
+                        if ok:
+                            print(f"  {C['bgreen']}[CLAUDE CODE]{C['reset']} Proposal sent. Claude Code is implementing…\n")
+                            speak("Self-build approved. Claude Code is implementing.")
+                        else:
+                            print(f"  {C['bred']}[UNAVAILABLE]{C['reset']} {detail}\n")
+                            print(f"  {C['dim']}Paste manually into Claude Code:{C['reset']}\n  {_task[:200]}…\n")
+                    except Exception as _sb_send_err:
+                        print(f"\n[self-build send error: {_sb_send_err}]\n")
+            except Exception as _sb_err:
+                print(f"\n[approve self-build error: {_sb_err}]\n")
             continue
 
         if user_input.lower() == "/help":
