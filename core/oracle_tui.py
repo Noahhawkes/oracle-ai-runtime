@@ -104,6 +104,21 @@ def _is_implementation_response(text: str) -> bool:
     return any(p.lower() in lower for p in _IMPL_RESPONSE_PATTERNS)
 
 
+# ── Source label chips ─────────────────────────────────────────────────────────
+# Every conversation-panel line gets a visible source tag so Noah always knows
+# which brain answered.
+
+_LABEL_LOCAL       = "[bold white on #1a1a3a] LOCAL [/bold white on #1a1a3a]"
+_LABEL_CLAUDE      = "[bold black on #00c844] CLAUDE CODE [/bold black on #00c844]"
+_LABEL_GOVERNANCE  = "[bold black on #ffa500] GOVERNANCE [/bold black on #ffa500]"
+_LABEL_MEMORY      = "[bold white on #334] MEMORY [/bold white on #334]"
+_LABEL_BLOCKED     = "[bold white on #cc0000] BLOCKED SECRET [/bold white on #cc0000]"
+
+
+def _lbl(label: str, ts: str, body: str) -> str:
+    return f"{label} [dim]{ts}[/dim]  {body}"
+
+
 # ── TUI App ───────────────────────────────────────────────────────────────────
 
 CSS = """
@@ -292,7 +307,7 @@ class OracleTUI(App):
             from claude_code_bridge import is_claude_directed, is_code_task
             if is_claude_directed(text):
                 self.post_convo(
-                    f"[dim]{ts}[/dim]  [bold green]↗ Routing to Claude Code…[/bold green]"
+                    _lbl(_LABEL_GOVERNANCE, ts, "[bold green]↗ Routing to Claude Code…[/bold green]")
                 )
                 self.post_think("▶ Claude-directed message — routing to Claude Code…")
                 threading.Thread(
@@ -301,7 +316,7 @@ class OracleTUI(App):
                 return
             if is_code_task(text):
                 self.post_convo(
-                    f"[dim]{ts}[/dim]  [bold green]↗ Routing to Claude Code…[/bold green]"
+                    _lbl(_LABEL_GOVERNANCE, ts, "[bold green]↗ Routing to Claude Code…[/bold green]")
                 )
                 self.post_think("▶ code task — handing off to Claude Code…")
                 threading.Thread(
@@ -336,8 +351,8 @@ class OracleTUI(App):
             # and re-route to Claude Code rather than displaying hallucinated stubs.
             if _is_implementation_response(reply):
                 self.post_convo(
-                    f"[dim]{ts}[/dim]  [yellow]⚠ Local model attempted implementation — "
-                    f"re-routing to Claude Code.[/yellow]"
+                    _lbl(_LABEL_GOVERNANCE, ts,
+                         "[yellow]⚠ Local model attempted implementation — re-routing to Claude Code.[/yellow]")
                 )
                 self.post_think(
                     "▶ post-LLM guard: implementation response detected — routing to Claude Code"
@@ -347,7 +362,7 @@ class OracleTUI(App):
                 ).start()
                 return
 
-            self.post_convo(f"[dim]{ts}[/dim]  [bold cyan]Oracle:[/bold cyan] {reply}")
+            self.post_convo(_lbl(_LABEL_LOCAL, ts, f"[bold cyan]Oracle:[/bold cyan] {reply}"))
             # Voice
             try:
                 from voice import speak
@@ -366,12 +381,13 @@ class OracleTUI(App):
             ts = datetime.now().strftime("%H:%M")
             if contains_secret(reply):
                 self.post_convo(
-                    f"[dim]{ts}[/dim]  [bold red]⚠ Response contained secret pattern "
-                    f"(sk-, api_key, token, password) — redacted before display.[/bold red]"
+                    _lbl(_LABEL_BLOCKED, ts,
+                         "[bold red]Response contained secret pattern "
+                         "(sk-, api_key, token, password) — redacted.[/bold red]")
                 )
                 reply = scrub_secrets(reply)
-            label = "[bold green]Claude Code:[/bold green]" if ok else "[bold red]Claude Code error:[/bold red]"
-            self.post_convo(f"[dim]{ts}[/dim]  {label} {reply}")
+            body = f"[bold green]{reply}[/bold green]" if ok else f"[red]{reply}[/red]"
+            self.post_convo(_lbl(_LABEL_CLAUDE, ts, body))
             try:
                 from voice import speak
                 speak(reply[:300])
@@ -388,7 +404,7 @@ class OracleTUI(App):
             ts = datetime.now().strftime("%H:%M")
             if ok:
                 self.post_convo(
-                    f"[dim]{ts}[/dim]  [bold green]↗ Handed off to Claude Code.[/bold green]  {detail}"
+                    _lbl(_LABEL_CLAUDE, ts, f"[bold green]↗ Handed off to Claude Code.[/bold green]  {detail}")
                 )
                 try:
                     from voice import speak
@@ -396,7 +412,9 @@ class OracleTUI(App):
                 except Exception:
                     pass
             else:
-                self.post_convo(f"[dim]{ts}[/dim]  [yellow]Claude Code hand-off failed: {detail}[/yellow]")
+                self.post_convo(
+                    _lbl(_LABEL_GOVERNANCE, ts, f"[yellow]Claude Code hand-off failed: {detail}[/yellow]")
+                )
         except Exception as e:
             self.post_convo(f"[red]type_into_claude error: {e}[/red]")
 
@@ -406,10 +424,14 @@ class OracleTUI(App):
             ok, detail = open_claude_session(
                 prompt="ORACLE is handing off to you. What's the status of the MYTHIC BUILD PASS and what should we work on next?",
             )
-            self.post_convo(
-                f"[bold green]Claude Code session opened.[/bold green] {detail}"
-                if ok else f"[red]{detail}[/red]"
-            )
+            ts = datetime.now().strftime("%H:%M")
+            if ok:
+                self.post_convo(
+                    _lbl(_LABEL_CLAUDE, ts,
+                         f"[bold green]Claude Code session opened.[/bold green] {detail}")
+                )
+            else:
+                self.post_convo(_lbl(_LABEL_GOVERNANCE, ts, f"[red]{detail}[/red]"))
         except Exception as e:
             self.post_convo(f"[red]Could not open Claude Code session: {e}[/red]")
 
@@ -434,7 +456,11 @@ class OracleTUI(App):
                 self.post_think(f"  {marker} {next_s}")
 
             if r.approval_required:
-                self.post_convo(f"[bold yellow]◆ ACTION NEEDED:[/bold yellow] [dim]{next_s}[/dim]")
+                ts = datetime.now().strftime("%H:%M")
+                self.post_convo(
+                    _lbl(_LABEL_GOVERNANCE, ts,
+                         f"[bold yellow]◆ ACTION NEEDED:[/bold yellow] [dim]{next_s}[/dim]")
+                )
                 try:
                     from voice import speak_prompt
                     speak_prompt(f"I'm up. {action[:60]}")
@@ -464,7 +490,11 @@ class OracleTUI(App):
                 marker = "▶ ACTION NEEDED:" if r.approval_required else "Next:"
                 self.post_think(f"  {marker} {next_s}")
             if r.approval_required:
-                self.post_convo(f"[bold yellow]◆ ACTION NEEDED:[/bold yellow] [dim]{next_s}[/dim]")
+                ts = datetime.now().strftime("%H:%M")
+                self.post_convo(
+                    _lbl(_LABEL_GOVERNANCE, ts,
+                         f"[bold yellow]◆ ACTION NEEDED:[/bold yellow] [dim]{next_s}[/dim]")
+                )
         except Exception as e:
             self.post_think(f"cycle error: {e}")
 
@@ -477,7 +507,11 @@ class OracleTUI(App):
             if "TITLE" in result:
                 title_line = [l for l in result.splitlines() if "TITLE" in l]
                 summary = title_line[0].replace("TITLE", "").replace(":", "").strip() if title_line else ""
-                self.post_convo(f"[bold cyan]◆ SELF-BUILD PROPOSAL:[/bold cyan] [dim]{summary}[/dim]")
+                ts = datetime.now().strftime("%H:%M")
+                self.post_convo(
+                    _lbl(_LABEL_LOCAL, ts,
+                         f"[bold cyan]◆ SELF-BUILD PROPOSAL:[/bold cyan] [dim]{summary}[/dim]")
+                )
             self.post_think(result)
         except Exception as e:
             self.post_think(f"self-build error: {e}")
