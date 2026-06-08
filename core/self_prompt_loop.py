@@ -627,20 +627,8 @@ def _smoke_test():
         else:
             failed += 1
 
-    # Seed a curiosity signal so memory check has something
-    try:
-        from curiosity_engine import CuriositySignal, persist
-        fake = CuriositySignal(
-            signal_type="financial_risk",
-            title="Smoke test — fake billing failure",
-            observed_context="Test signal created by smoke test.",
-            risk_level="high",
-            confidence=0.9,
-            tags=["smoke_test"],
-        )
-        persist(fake)
-    except Exception as e:
-        print(f"  [WARN] Could not seed curiosity signal: {e}")
+    # NOTE: smoke test signal seeding removed — it wrote stale high-risk signals
+    # to the live curiosity DB that the runtime P1 scanner kept re-triggering.
 
     # 1. MANUAL mode — one cycle runs, one priority selected, no action executes
     result = run_once(mode=MODE_MANUAL)
