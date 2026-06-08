@@ -77,6 +77,36 @@ _HALLUCINATION_PHRASES = [
 ]
 
 
+def _inject_local_context(user_input: str) -> str:
+    """
+    Prepend a compact ORACLE state block to user messages for local model calls.
+    Gives the 7B model grounding it won't derive from the system prompt alone.
+    """
+    lines = ["[ORACLE LIVE STATE]"]
+    try:
+        from project_state import load_state
+        ps = load_state("ORACLE.AI")
+        if ps:
+            lines.append(f"Build phase : {ps.current_phase}")
+            lines.append(f"Last done   : {ps.last_completed_step[:80]}")
+            lines.append(f"Next step   : {ps.next_recommended_step[:80]}")
+            if ps.current_blocker:
+                lines.append(f"Blocker     : {ps.current_blocker[:60]}")
+    except Exception:
+        pass
+    try:
+        from approval_center import list_pending
+        n = len(list_pending())
+        if n:
+            lines.append(f"Pending     : {n} items awaiting Noah's approval")
+    except Exception:
+        pass
+    lines.append(f"Mode        : LOCAL — read-only tools only")
+    lines.append("")
+    lines.append(f"Noah says: {user_input}")
+    return "\n".join(lines)
+
+
 def _detect_hallucination(reply: str, tool_names_called: list[str]) -> str | None:
     """
     Return a warning string if the reply claims success for an action that
@@ -564,8 +594,10 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
     """
     import json
 
-    history.append({"role": "user", "content": user_input})
-    save_message(session_id, "user", user_input)
+    # Inject live ORACLE state into user message so 7B model has grounding
+    grounded_input = _inject_local_context(user_input)
+    history.append({"role": "user", "content": grounded_input})
+    save_message(session_id, "user", user_input)  # save original, not injected
     log("INPUT", user_input)
 
     # Restricted tool set for local model — read-only operations only
@@ -1133,7 +1165,54 @@ def main():
                 print(f"\n[route-task error: {e}]\n")
             continue
 
-        _uil = user_input.lower().strip()
+        # ── Governance-drive intercept — "you choose", "go", "proceed" ──────────
+        # When Noah gives open-ended direction, ORACLE consults her governance
+        # cycle instead of letting the LLM improvise from nothing.
+        _uil = user_input.lower().strip().rstrip(".")
+        _ORACLE_DRIVES = {
+            "you choose", "you decide", "go", "proceed", "your call",
+            "what's next", "whats next", "what should we do", "what do you think",
+            "do something", "act", "take over", "run", "execute", "keep going",
+            "just go", "just do it", "do it", "start", "begin", "continue",
+            "what would you do", "decide", "what now", "next", "what's the plan",
+            "whats the plan", "what should i do", "what should you do",
+        }
+        if _uil in _ORACLE_DRIVES:
+            try:
+                from oracle_runtime import run_cycle, MODE_MANUAL as ORT_MANUAL
+                from project_state import load_state
+                r = run_cycle(mode=ORT_MANUAL)
+                ps = load_state("ORACLE.AI")
+
+                print(f"\n{C['grey']}  {'─'*50}{C['reset']}")
+                print(f"  {C['cyan']}◆ ORACLE READS HER OWN STATE{C['reset']}")
+
+                # Build plan
+                if ps and ps.next_recommended_step:
+                    print(f"\n  {C['bold']}Build plan:{C['reset']} {C['dim']}{ps.current_phase}{C['reset']}")
+                    print(f"  {C['bold']}Next step :{C['reset']} {ps.next_recommended_step[:100]}")
+
+                # Cycle priority
+                action = r.action_taken or ""
+                next_s = r.next_recommended_step or ""
+                conf   = int(r.confidence * 100)
+                print(f"\n  {C['bold']}Right now  :{C['reset']} {C['dim']}{r.selected_priority}  {conf}%{C['reset']}")
+                if action:
+                    print(f"  {action[:120]}")
+                if r.approval_required and next_s:
+                    print(f"\n  {C['byellow']}▶ Needs your approval:{C['reset']} {next_s[:100]}")
+                    print(f"\n  Type {C['bold']}approve{C['reset']} to proceed or {C['bold']}reject{C['reset']} to skip.")
+                    _last_pending_ids.clear()
+                elif next_s:
+                    print(f"\n  {C['grey']}Proposed:{C['reset']} {next_s[:100]}")
+                    print(f"\n  Type {C['bold']}go{C['reset']} to execute or give me a different direction.")
+
+                print(f"{C['grey']}  {'─'*50}{C['reset']}\n")
+                speak(next_s[:80] if next_s else "I've checked my state. Here's what I see.")
+            except Exception as e:
+                print(f"\n[governance error: {e}]\n")
+            continue
+
         if _uil in (
             "/self-build", "/selfbuild",
             "build yourself", "build yourself.", "improve yourself",

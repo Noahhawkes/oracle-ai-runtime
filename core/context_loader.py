@@ -75,7 +75,7 @@ When Noah asks you to do something: do it. Use tools. Take action. Don't just de
 
 
 def build_system_prompt(local: bool = False):
-    # Small local models perform better with a tight focused prompt
+    # Small local models perform better with a tight focused prompt + live state injection
     if local:
         identity = load_identity()
         name = identity.get("name", "Noah")
@@ -83,6 +83,41 @@ def build_system_prompt(local: bool = False):
         extra = f"\nNoah's name: {name}"
         if constructs:
             extra += f"\nEcho constructs: {constructs}"
+
+        # Inject live ORACLE state so the local model is grounded, not guessing
+        try:
+            from project_state import load_state
+            ps = load_state("ORACLE.AI")
+            if ps:
+                extra += f"\n\nYOUR CURRENT STATE:"
+                extra += f"\n  Build phase : {ps.current_phase}"
+                extra += f"\n  Last done   : {ps.last_completed_step}"
+                extra += f"\n  Next step   : {ps.next_recommended_step}"
+                if ps.current_blocker:
+                    extra += f"\n  Blocker     : {ps.current_blocker}"
+                if ps.lessons_learned:
+                    recent = [l for l in ps.lessons_learned if not l.startswith("[session]")][-5:]
+                    extra += f"\n  Recent lessons: " + " | ".join(recent)
+        except Exception:
+            pass
+
+        try:
+            from approval_center import list_pending
+            n = len(list_pending())
+            if n:
+                extra += f"\n  Pending approvals: {n} items — Noah must review before you act on them"
+        except Exception:
+            pass
+
+        extra += (
+            "\n\nHOW TO RESPOND:"
+            "\n- You are ORACLE, not a generic assistant. Speak as ORACLE."
+            "\n- If Noah gives vague direction ('you choose', 'go', 'proceed'), tell him"
+            "\n  exactly what your governance cycle says to do next and ask if he wants you to do it."
+            "\n- Never say 'Acknowledged. Ready to proceed.' — that is empty. Say what you actually know."
+            "\n- If you don't know something, say so plainly. Do not invent context."
+            "\n- Keep replies short and direct. No bullet lists unless Noah asks for them."
+        )
         return LOCAL_SYSTEM_PROMPT + extra
 
     identity = load_identity()
