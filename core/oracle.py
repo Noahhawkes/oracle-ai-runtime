@@ -782,15 +782,29 @@ def main():
             continue
 
         if user_input.lower() in ("/self-prompt", "/selfprompt", "/cycle"):
-            print("\n[self-prompt] Running one governed cycle...\n")
             try:
-                from self_prompt_loop import run_once, MODE_MANUAL
-                result = run_once(mode=MODE_MANUAL)
-                print(result.report())
-                speak(f"Cycle complete. Priority: {result.selected_priority[:60]}")
+                from oracle_runtime import run_cycle, MODE_MANUAL as ORT_MANUAL
+                result = run_cycle(mode=ORT_MANUAL)
+                priority = result.selected_priority or "maintenance"
+                action   = result.action_taken or ""
+                next_s   = result.next_recommended_step or ""
+                approval = result.approval_required
+                conf     = int(result.confidence * 100)
+
+                print(f"\n{C['grey']}  {'─'*50}{C['reset']}")
+                print(f"  {C['cyan']}◆ CYCLE{C['reset']}  {C['dim']}{priority}  {conf}%{C['reset']}")
+                if action:
+                    print(f"  {action[:120]}")
+                if next_s:
+                    label = f"  {C['byellow']}▶ ACTION NEEDED:{C['reset']}" if approval else f"  {C['grey']}Next:{C['reset']}"
+                    print(f"{label} {next_s[:100]}")
+                if result.unknowns:
+                    print(f"  {C['dim']}Unknowns: {len(result.unknowns)} preserved{C['reset']}")
+                print(f"{C['grey']}  {'─'*50}{C['reset']}\n")
+                speak(f"Cycle complete. {action[:60]}" if not approval else f"Action needed. {next_s[:60]}")
             except Exception as e:
-                log("ERROR", f"/self-prompt failed: {e}")
-                print(f"\n[self-prompt error: {e}]\n")
+                log("ERROR", f"/cycle failed: {e}")
+                print(f"\n[cycle error: {e}]\n")
             continue
 
         if user_input.lower() in ("/project-state", "/ps", "/resume", "/where-was-i"):

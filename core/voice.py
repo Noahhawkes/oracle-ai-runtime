@@ -61,9 +61,8 @@ _enabled: bool = _load_state().get("enabled", True)
 def _is_safe_sleep() -> bool:
     """Return True if SAFE_SLEEP is active — all voice is silenced."""
     try:
-        from governance import load_runtime_config
-        cfg = load_runtime_config()
-        return bool(cfg.get("safe_sleep_active", False))
+        from governance import get
+        return bool(get("ORACLE_SAFE_SLEEP_DEFAULT", False))
     except Exception:
         return False
 
