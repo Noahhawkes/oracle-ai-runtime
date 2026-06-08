@@ -27,6 +27,9 @@ Projects/pending_candidates/
 
 # Daemon runtime proposals — generated output, not source. Stays local.
 Projects/daemon_proposals/
+Oracle_Daemon_Proposal.md
+goals.txt
+core/Desktop/
 
 # OAuth credentials and tokens — must never be committed
 storage/token.json
