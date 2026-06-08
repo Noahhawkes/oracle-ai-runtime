@@ -6,6 +6,7 @@ Run: python core/oracle.py
 
 import os
 import sys
+import shutil
 import time
 from datetime import datetime
 from pathlib import Path
@@ -122,6 +123,95 @@ def _summarize_pasted_log(text: str) -> str:
         out.append(f"  {len(lines)} lines captured. No errors detected.")
     out.append("  Type a command or question to continue.")
     return "\n".join(out)
+
+# ── Interaction mode classifier ───────────────────────────────────────────────
+# Mode is determined BEFORE governance/routing so ORACLE doesn't over-govern
+# simple conversation or under-route real build tasks.
+
+_CHAT_TRIGGERS = [
+    "just talk", "talk normally", "talk to me", "just chat", "don't route",
+    "be normal", "have a conversation", "i'm frustrated", "i'm excited",
+    "i'm tired", "i feel ", "tell me about yourself", "what do you think about",
+    "how are you", "i need to vent", "i want to talk", "can we talk",
+    "let's just talk", "stop routing", "just respond",
+]
+_BUILD_TRIGGERS = [
+    "fix the", "patch ", "refactor", "implement", "build ", "debug ",
+    ".py", "git ", "repo ", "commit", "push ", "pull request",
+    "write a function", "write a script", "write a class",
+    "tell claude", "ask claude", "send to claude", "pass to claude",
+    "mythic", "build pass", "run command", "run script",
+    "install ", "deploy ", "error in ", "broken ",
+]
+_WORK_TRIGGERS = [
+    "plan ", "schedule", "organize", "summarize", "review ",
+    "help me figure out", "what should we do", "what do you recommend",
+    "analyze", "evaluate", "help me think through", "walk me through",
+    "what's the status", "where are we", "what's the priority",
+    "lootdrop", "dealer", "business", "revenue", "customer",
+    "what should we build", "what should i build", "what to build",
+    "what's next", "what are we building", "what do we build",
+]
+
+
+def _classify_interaction_mode(text: str) -> str:
+    """Return 'CHAT' | 'WORK' | 'BUILD' | 'DIAGNOSTIC' for a user message."""
+    lower = text.lower().strip()
+    # Diagnostic: pasted ORACLE output slipped through the early detector
+    if any(
+        t in lower for t in ("[oracle]", "[local mode]", "[governance]", "[claude code error]", "sovereign operator layer")
+    ):
+        return "DIAGNOSTIC"
+    # Explicit Claude delegation always routes to BUILD regardless of other words
+    _claude_delegation = ("ask claude", "tell claude", "send to claude", "pass to claude", "use claude")
+    if any(t in lower for t in _claude_delegation):
+        return "BUILD"
+    # CHAT: explicit conversational override
+    if any(t in lower for t in _CHAT_TRIGGERS):
+        return "CHAT"
+    # WORK checked before BUILD — planning questions beat keyword matches
+    if any(t in lower for t in _WORK_TRIGGERS):
+        return "WORK"
+    # BUILD: code / implementation keywords
+    if any(t in lower for t in _BUILD_TRIGGERS):
+        return "BUILD"
+    # Default: short casual messages → CHAT, longer → WORK
+    word_count = len(text.split())
+    if word_count <= 5:
+        return "CHAT"
+    return "WORK"
+
+
+def _claude_available_now() -> bool:
+    """Return True if the Claude Code / Claude Desktop window is currently open."""
+    try:
+        from claude_code_bridge import find_claude_window
+        return find_claude_window() is not None
+    except Exception:
+        return False
+
+
+def get_oracle_status() -> dict:
+    """
+    Return live ORACLE status — callable by the desktop UI or any external module.
+    All fields are safe to display; never contains secrets.
+    """
+    import shutil as _sh
+    from approval_center import list_pending as _lp
+    try:
+        _pending = len(_lp())
+    except Exception:
+        _pending = 0
+    return {
+        "mode": "LOCAL" if is_local() else "CLOUD",
+        "claude_cli": _sh.which("claude") is not None,
+        "claude_window": _claude_available_now(),
+        "hands_ready": True,
+        "memory_connected": True,
+        "pending": _pending,
+        "model": get_model(vision=False),
+    }
+
 
 LOCAL_TOOL_DEFINITIONS = [
     t for t in TOOL_DEFINITIONS
@@ -1004,6 +1094,25 @@ def main():
     banner(identity)
     log("SESSION_START", f"Session {session_id} started")
 
+    # ── Connectivity status at boot ───────────────────────────────────────────
+    _claude_cli_found = shutil.which("claude") is not None
+    _claude_win_found = _claude_available_now()
+    _claude_status_str = (
+        f"{C['bgreen']}CONNECTED{C['reset']}"
+        if (_claude_cli_found or _claude_win_found)
+        else f"{C['bred']}NOT CONNECTED{C['reset']}"
+    )
+    _claude_detail = []
+    if _claude_cli_found:
+        _claude_detail.append("CLI")
+    if _claude_win_found:
+        _claude_detail.append("window")
+    if not _claude_detail:
+        _claude_detail.append("open Claude Code to connect")
+    print(f"  Claude : {_claude_status_str}  {C['dim']}({', '.join(_claude_detail)}){C['reset']}")
+    print(f"  Mode   : {C['cyan']}{'LOCAL' if local else 'CLOUD'}{C['reset']}  {C['dim']}model: {model}{C['reset']}")
+    print()
+
     # ── Auto boot cycle — ORACLE starts working immediately, no first prompt needed ──
     try:
         from oracle_runtime import run_cycle, MODE_DAEMON_SAFE
@@ -1629,30 +1738,62 @@ Hands tools (SOV1 — operates the screen):
 """)
             continue
 
-        # ── Governance pre-classification ─────────────────────────────────────────
-        # Intercept governance, identity, memory, and sovereignty statements before
-        # they reach the LLM. The LLM receives governance statements and responds
-        # with generic assistant language because it cannot distinguish them from
-        # ordinary conversation. identity_compliance.py handles them with precision.
+        # ── Interaction mode — CHAT / WORK / BUILD / DIAGNOSTIC ──────────────────
+        # Determines routing behaviour for this turn:
+        #   CHAT    → skip all routing, respond conversationally via local model
+        #   WORK    → local model first; skip auto-routing unless tools are needed
+        #   BUILD   → check Claude availability → route or return [CLAUDE UNAVAILABLE]
+        #   DIAGNOSTIC → already handled above; shouldn't reach here
+        _imode = _classify_interaction_mode(user_input)
+
+        # ── Governance pre-classification ────────────────────────────────────────
         governance_response = handle_in_repl(user_input)
         if governance_response is not None:
             print(governance_response)
             speak(governance_response)
             continue
 
-        # ── Claude Code routing — code/build tasks never reach the local model ──
-        # is_claude_directed catches "with claude", "tell claude", "paste into", etc.
-        # is_code_task catches implement, build, refactor, .py, "explain the code", etc.
-        # Both fire BEFORE chat_local() so the local model never sees the message.
+        # ── CHAT mode fast-path — skip routing, respond directly ─────────────────
+        if _imode == "CHAT":
+            try:
+                reply, history = chat_local(client, session_id, system_prompt, history, user_input, model)
+                blocked = _detect_hallucination(reply, [])
+                if blocked:
+                    reply = blocked
+                    log("HALLUCINATION_DETECTED", f"reply: {reply[:120]}")
+                print(f"  {C['cyan']}[CHAT]{C['reset']}")
+                _print_oracle_reply(reply)
+                speak(reply)
+            except Exception as _chat_err:
+                print(f"\n{C['bred']}  [Error: {_chat_err}]{C['reset']}\n")
+            continue
+
+        # ── Claude Code routing — BUILD mode or explicit claude/code task ─────────
+        # CHAT and WORK mode skip this block. BUILD always routes here.
+        # is_claude_directed: "with claude", "tell claude", "paste into", etc.
+        # is_code_task: implement, build, refactor, .py, "explain the code", etc.
+        _route_to_claude = (_imode == "BUILD")
         try:
             from claude_code_bridge import is_claude_directed, is_code_task, type_into_claude
-            if is_claude_directed(user_input) or is_code_task(user_input):
-                print(f"\n  {C['byellow']}[GOVERNANCE]{C['reset']} ↗ Routing to Claude Code…\n")
-                log("ROUTING", f"code task → Claude Code: {user_input[:80]}")
+            if not _route_to_claude:
+                _route_to_claude = is_claude_directed(user_input) or is_code_task(user_input)
+
+            if _route_to_claude:
+                # Claude availability gate — check before claiming routing happened
+                _claude_up = _claude_available_now()
+                _cli_up = shutil.which("claude") is not None
+                if not _claude_up and not _cli_up:
+                    # [CLAUDE UNAVAILABLE] — show handoff prompt so Noah can paste manually
+                    print(f"\n  {C['bred']}[CLAUDE UNAVAILABLE]{C['reset']} Claude Code window not found and CLI not on PATH.\n")
+                    print(f"  {C['dim']}Manual handoff — paste this into Claude Code:{C['reset']}\n")
+                    print(f"  {C['bold']}{user_input}{C['reset']}\n")
+                    log("ROUTING", f"Claude unavailable — handoff prompt displayed for: {user_input[:80]}")
+                    continue
+
+                print(f"\n  {C['byellow']}[BUILD]{C['reset']} ↗ Routing to Claude Code…\n")
+                log("ROUTING", f"build task → Claude Code: {user_input[:80]}")
                 ok, detail = type_into_claude(user_input, open_if_missing=True)
                 if ok:
-                    # Tier 1: window injection — [CLAUDE DESKTOP]
-                    # Tier 2: launched app — also [CLAUDE DESKTOP]
                     if "[CLAUDE DESKTOP]" in detail:
                         print(f"  {C['bgreen']}[CLAUDE DESKTOP]{C['reset']} {detail.replace('[CLAUDE DESKTOP] ', '')}\n")
                         speak("Sent to Claude.")
@@ -1660,14 +1801,13 @@ Hands tools (SOV1 — operates the screen):
                         print(f"  {C['bgreen']}[CLAUDE CODE]{C['reset']} {detail}\n")
                         speak("Sent to Claude Code.")
                 else:
-                    # Tier 3: unavailable — show [CLAUDE UNAVAILABLE] with manual paste text
                     if "[CLAUDE UNAVAILABLE]" in detail:
                         lines = detail.splitlines()
                         print(f"  {C['bred']}[CLAUDE UNAVAILABLE]{C['reset']} Claude Code not reachable.\n")
                         for line in lines[1:]:
                             if line.strip():
                                 print(f"  {C['dim']}{line}{C['reset']}")
-                        print()
+                        print(f"\n  {C['dim']}Paste manually: {user_input[:120]}{C['reset']}\n")
                     else:
                         print(f"  {C['bred']}[CLAUDE CODE ERROR]{C['reset']} {detail}\n")
                 continue
@@ -1716,7 +1856,8 @@ Hands tools (SOV1 — operates the screen):
                 except Exception as _guard_err:
                     print(f"  {C['yellow']}[GOVERNANCE]{C['reset']} Re-route failed: {_guard_err} — showing local reply anyway\n")
 
-            print(f"  {C['grey']}[LOCAL]{C['reset']}")
+            _mode_lbl = "WORK" if (_imode == "WORK") else "LOCAL"
+            print(f"  {C['grey']}[{_mode_lbl}]{C['reset']}")
             _print_oracle_reply(reply)
             speak(reply)
         except Exception as e:
