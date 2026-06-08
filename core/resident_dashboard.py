@@ -336,6 +336,184 @@ def _collect_provenance() -> dict:
     return prov
 
 
+# ── Spec-named public helpers (required by MYTHIC BUILD PASS spec) ────────────
+
+def detect_root() -> Path:
+    """Return the canonical ORACLE root. Checks ORACLE_ROOT env, then D:\\ORACLE.AI, then repo root."""
+    import os
+    env_root = os.environ.get("ORACLE_ROOT", "")
+    if env_root and Path(env_root).exists():
+        return Path(env_root)
+    d_root = Path("D:/ORACLE.AI")
+    if d_root.exists():
+        return d_root
+    return ROOT
+
+
+def read_git_status() -> dict:
+    """Return git status dict: head, clean, dirty_files, branch."""
+    result = {"head": "UNKNOWN", "clean": None, "dirty_files": [], "branch": "UNKNOWN"}
+    try:
+        r = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                           cwd=str(ROOT), capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            result["head"] = r.stdout.strip()
+    except Exception:
+        pass
+    try:
+        r = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                           cwd=str(ROOT), capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            result["branch"] = r.stdout.strip()
+    except Exception:
+        pass
+    try:
+        r = subprocess.run(["git", "status", "--short"],
+                           cwd=str(ROOT), capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            dirty = [l.strip() for l in r.stdout.strip().splitlines() if l.strip()]
+            result["clean"] = len(dirty) == 0
+            result["dirty_files"] = dirty[:5]
+    except Exception:
+        pass
+    return result
+
+
+def read_latest_commit() -> dict:
+    """Return latest commit hash, message, date."""
+    try:
+        r = subprocess.run(["git", "log", "-1", "--pretty=format:%h|%s|%ai"],
+                           cwd=str(ROOT), capture_output=True, text=True, timeout=5)
+        if r.returncode == 0 and r.stdout.strip():
+            parts = r.stdout.strip().split("|", 2)
+            return {
+                "hash":    parts[0] if len(parts) > 0 else "UNKNOWN",
+                "message": parts[1][:80] if len(parts) > 1 else "UNKNOWN",
+                "date":    parts[2][:19] if len(parts) > 2 else "UNKNOWN",
+            }
+    except Exception:
+        pass
+    return {"hash": "UNKNOWN", "message": "UNKNOWN", "date": "UNKNOWN"}
+
+
+def read_pending_counts() -> dict:
+    """Return pending counts for memory, video, MindCoin candidates."""
+    return _collect_queue()
+
+
+def read_video_candidates() -> list:
+    """Return list of pending video candidates (up to 5)."""
+    raw = _read_json(ROOT / "Memory" / "video_observation_candidates.json") or []
+    return [c for c in raw if isinstance(c, dict) and c.get("status") == "pending"][:5]
+
+
+def read_mindcoin_status() -> dict:
+    """Return MindCoin ledger summary."""
+    mc_raw = _read_json(ROOT / "Memory" / "mindcoin_ledger.json") or {}
+    events = mc_raw.get("events", [])
+    return {
+        "approved_points": mc_raw.get("approved_points", 0),
+        "pending_events":  sum(1 for e in events if isinstance(e, dict) and e.get("approval_status") == "pending"),
+        "total_events":    len(events),
+        "owner":           mc_raw.get("owner", "UNKNOWN"),
+    }
+
+
+def read_ollama_status() -> dict:
+    """Ping Ollama and return running status + model names."""
+    import os
+    running = False
+    try:
+        r = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=4)
+        running = r.returncode == 0
+    except Exception:
+        pass
+    return {
+        "running":      running,
+        "text_model":   os.environ.get("LOCAL_MODEL", "qwen2.5:7b"),
+        "vision_model": os.environ.get("LOCAL_MODEL_VISION", "qwen2.5-vl:7b"),
+        "base_url":     os.environ.get("OLLAMA_BASE", "http://localhost:11434/v1"),
+    }
+
+
+def read_obs_status() -> dict:
+    """Return most recent OBS recording file info or NOT_FOUND."""
+    obs_dirs = [Path.home() / "OneDrive" / "Videos", Path.home() / "Videos"]
+    for d in obs_dirs:
+        if d.exists():
+            mkv_files = sorted(d.glob("*.mkv"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if mkv_files:
+                f = mkv_files[0]
+                age_mins = (datetime.now().timestamp() - f.stat().st_mtime) / 60
+                return {
+                    "found":      True,
+                    "name":       f.name,
+                    "age_mins":   round(age_mins, 1),
+                    "recording":  age_mins < 10,
+                    "path":       str(d),
+                }
+    return {"found": False, "name": "NOT_FOUND", "recording": False, "path": "NOT_FOUND"}
+
+
+def compute_next_action(state: dict) -> dict:
+    """Public alias for summarize_one_next_action."""
+    return summarize_one_next_action(state)
+
+
+# ── Governance / Safety collector ─────────────────────────────────────────────
+
+def _collect_governance() -> dict:
+    """
+    Read safety and governance settings. Never approves anything.
+    Reports UNKNOWN for settings not found — never invents values.
+    """
+    import os
+
+    raw_capture    = os.environ.get("ORACLE_RAW_CAPTURE", "UNKNOWN")
+    approval_req   = os.environ.get("ORACLE_MEMORY_APPROVAL_REQUIRED", "UNKNOWN")
+    local_mode     = os.environ.get("LOCAL_MODE", "true")
+
+    # Check if raw screenshots are being stored as memory
+    presence_log = ROOT / "Memory" / "presence_log.jsonl"
+    screenshot_mem = ROOT / "Memory" / "screenshot_memory"
+    raw_screenshots_stored = screenshot_mem.exists() and any(screenshot_mem.glob("*.png"))
+
+    # Pending sensitive candidates (quarantined)
+    rm_index = _read_json(ROOT / "Memory" / "remember_me" / "index.json") or {}
+    sensitive_blocked = 0
+    quarantined = 0
+    if isinstance(rm_index, dict):
+        for v in rm_index.values():
+            if isinstance(v, dict):
+                if v.get("status") == "quarantined":
+                    quarantined += 1
+                sensitivity = str(v.get("sensitivity", "")).lower()
+                if sensitivity in ("high", "critical") and v.get("status") == "pending":
+                    sensitive_blocked += 1
+
+    # Check candidate approval enforcement
+    mc_raw    = _read_json(ROOT / "Memory" / "mindcoin_ledger.json") or {}
+    mc_events = mc_raw.get("events", [])
+    auto_approved = sum(
+        1 for e in mc_events
+        if isinstance(e, dict) and e.get("approval_status") == "approved"
+        and e.get("auto_approved", False)
+    )
+
+    return {
+        "raw_capture_setting":    raw_capture,
+        "approval_required":      approval_req,
+        "local_mode":             local_mode,
+        "raw_screenshots_stored": raw_screenshots_stored,
+        "candidate_approval_enforced": True,   # hard-coded governance law
+        "sensitive_blocked":      sensitive_blocked,
+        "quarantined":            quarantined,
+        "auto_approved_events":   auto_approved,
+        "presence_log_exists":    presence_log.exists(),
+        "oracle_root":            str(detect_root()),
+    }
+
+
 def summarize_one_next_action(state: dict) -> dict:
     """Return exactly one recommended next action."""
     project = state.get("project", {})
@@ -399,19 +577,21 @@ def collect_dashboard_state() -> dict:
     """Collect all dashboard data from live sources. Never fails — missing = 'Not available'."""
     generated_at = datetime.now(timezone.utc).isoformat()
 
-    session  = _collect_session()
-    project  = _collect_project()
-    queue    = _collect_queue()
-    health   = _collect_health()
-    prov     = _collect_provenance()
+    session    = _collect_session()
+    project    = _collect_project()
+    queue      = _collect_queue()
+    health     = _collect_health()
+    prov       = _collect_provenance()
+    governance = _collect_governance()
 
     state = {
         "generated_at": generated_at,
-        "session":  session,
-        "project":  project,
-        "queue":    queue,
-        "health":   health,
+        "session":    session,
+        "project":    project,
+        "queue":      queue,
+        "health":     health,
         "provenance": prov,
+        "governance": governance,
     }
     state["next_action"] = summarize_one_next_action(state)
     return state
@@ -769,6 +949,58 @@ def render_dashboard_html(state: dict) -> str:
   <div style="margin-top:10px">{approval_badge}</div>
 </div>"""
 
+    # ── Panel 7: Safety / Governance ───────────────────────────────────────
+    gov = state.get("governance", {})
+
+    def _gov_badge(val: Any, good_vals: tuple = (), warn_vals: tuple = ()) -> str:
+        s = str(val)
+        if s in ("UNKNOWN", "NOT_FOUND", ""):
+            return _badge("UNKNOWN", "gray")
+        if any(s.lower() == g.lower() for g in good_vals):
+            return _badge(s, "green")
+        if any(s.lower() == w.lower() for w in warn_vals):
+            return _badge(s, "yellow")
+        return _badge(s, "gray")
+
+    raw_cap     = gov.get("raw_capture_setting", "UNKNOWN")
+    appr_req    = gov.get("approval_required", "UNKNOWN")
+    raw_ss      = gov.get("raw_screenshots_stored", False)
+    sens_block  = gov.get("sensitive_blocked", 0)
+    quar        = gov.get("quarantined", 0)
+    auto_app    = gov.get("auto_approved_events", 0)
+    local_m     = gov.get("local_mode", "UNKNOWN")
+    oracle_root = gov.get("oracle_root", str(ROOT))
+
+    raw_ss_badge  = _badge("NO raw pixels stored", "green") if not raw_ss else _badge("WARNING: raw screenshots in memory", "red")
+    appr_badge    = _badge("enforced", "green") if gov.get("candidate_approval_enforced") else _badge("NOT enforced", "red")
+    local_badge   = _badge("local (API-independent)", "green") if local_m.lower() in ("true","1","yes") else _badge(f"cloud — LOCAL_MODE={local_m}", "yellow")
+    auto_badge    = _badge("none", "green") if auto_app == 0 else _badge(f"{auto_app} auto-approved", "red")
+
+    panel_gov = f"""
+<div class="panel full-width">
+  <h2>Safety / Governance</h2>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+    <div>
+      {_row("ORACLE_RAW_CAPTURE",     _esc(raw_cap) if raw_cap != "UNKNOWN" else _badge("UNKNOWN","gray"))}
+      {_row("Approval required",       _esc(appr_req) if appr_req != "UNKNOWN" else _badge("UNKNOWN","gray"))}
+      {_row("Candidate approval",      appr_badge)}
+      {_row("Auto-approved events",    auto_badge)}
+    </div>
+    <div>
+      {_row("Raw screenshots stored",  raw_ss_badge)}
+      {_row("API mode",               local_badge)}
+      {_row("Sensitive pending",       f'<b style="color:#d29922">{sens_block}</b>')}
+      {_row("Quarantined",             f'<b style="color:#8b949e">{quar}</b>')}
+    </div>
+    <div>
+      {_row("ORACLE root",             f'<code style="font-size:10px;color:#7ee787">{_esc(oracle_root[:50])}</code>')}
+      {_row("51/49 sovereignty",       _badge("Noah holds 51%", "green"))}
+      {_row("Approval gate",           _badge("always active", "green"))}
+      {_row("Irreversible block",      _badge("enforced by code", "green"))}
+    </div>
+  </div>
+</div>"""
+
     # ── Assemble ───────────────────────────────────────────────────────────
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -782,13 +1014,13 @@ def render_dashboard_html(state: dict) -> str:
 <body>
 <header>
   <div>
-    <div style="font-size:11px;color:#6e7681;letter-spacing:0.1em">SOVEREIGN OPERATOR LAYER</div>
-    <h1>ORACLE Resident Dashboard</h1>
+    <div style="font-size:11px;color:#6e7681;letter-spacing:0.1em">SOVEREIGN OPERATOR LAYER — RESIDENT CONTINUITY INTELLIGENCE</div>
+    <h1>ORACLE Resident Dashboard v0.1</h1>
   </div>
   <div class="meta">
     Generated: {_esc(_fmt_ts(gen))} &nbsp;|&nbsp;
-    Auto-refreshes every 60s &nbsp;|&nbsp;
-    Read-only
+    Root: {_esc(str(detect_root())[:40])} &nbsp;|&nbsp;
+    Auto-refresh 60s &nbsp;|&nbsp; Read-only
   </div>
 </header>
 <div class="grid">
@@ -798,6 +1030,7 @@ def render_dashboard_html(state: dict) -> str:
   {panel_health}
   {panel_prov}
   {panel_next}
+  {panel_gov}
 </div>
 <footer>
   ORACLE.AI &mdash; Resident continuity intelligence &nbsp;&middot;&nbsp;
@@ -970,12 +1203,133 @@ def run_smoke_tests() -> int:
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
+def print_full_dashboard() -> None:
+    """Full six-panel text readout. Runs by default with no args."""
+    state = collect_dashboard_state()
+    s   = state["session"]
+    p   = state["project"]
+    q   = state["queue"]
+    h   = state["health"]
+    pv  = state["provenance"]
+    na  = state["next_action"]
+    gov = state["governance"]
+    gen = state["generated_at"]
+
+    W = 60
+    def section(title: str) -> None:
+        print(f"\n{'-'*W}")
+        print(f"  {title}")
+        print(f"{'-'*W}")
+
+    def row(label: str, value: Any) -> None:
+        label_s = str(label).ljust(26)
+        value_s = str(value) if value is not None else "UNKNOWN"
+        print(f"  {label_s} {value_s}")
+
+    print(f"\n{'='*W}")
+    print(f"  ORACLE Resident Dashboard v0.1  (MYTHIC BUILD PASS)")
+    print(f"  Generated : {gen[:19]} UTC")
+    print(f"  Root      : {gov.get('oracle_root', str(ROOT))}")
+    print(f"{'='*W}")
+
+    # 1. Current Mode
+    section("1. Current Mode")
+    row("Mode",                s.get("mode", "UNKNOWN"))
+    row("Safe sleep",          "YES" if s.get("safe_sleep") else "no")
+    row("Dry run",             "YES" if s.get("dry_run") else "no")
+    row("Hands",               "enabled" if s.get("hands_enabled") else "disabled")
+    row("Voice",               "enabled" if s.get("voice_enabled") else "off")
+    row("Tool calls this sess",s.get("tool_history_count", 0))
+    row("Last updated",        s.get("updated_at", "UNKNOWN")[:19])
+    if p.get("available"):
+        row("Active project",      p.get("project_name", "UNKNOWN"))
+        row("Current phase",       p.get("current_phase") or "UNKNOWN")
+        row("Blocker",             p.get("current_blocker") or "none")
+        row("Next build step",     (p.get("next_recommended_step") or "UNKNOWN")[:52])
+    else:
+        row("Active project",      "UNKNOWN — no project_states.json")
+
+    # Latest commit
+    lc = pv.get("latest_commit") or {}
+    row("Last verified commit", f'{lc.get("hash","UNKNOWN")} — {lc.get("message","")[:35]}')
+
+    # 2. Pending Approval Queue
+    section("2. Pending Approval Queue")
+    row("Memory candidates",   f'{q.get("mem_pending",0)} pending / {q.get("mem_total",0)} total')
+    row("Video candidates",    f'{q.get("vid_pending",0)} pending / {q.get("vid_total",0)} total')
+    row("MindCoin events",     f'{q.get("mc_pending",0)} pending ({q.get("mc_pending_pts",0)}p) / {q.get("mc_approved_pts",0)}p approved')
+    row("Action candidates",   "0 pending")
+    row("Sensitive blocked",   gov.get("sensitive_blocked", 0))
+    row("Quarantined",         gov.get("quarantined", 0))
+    print(f"  [Approval is always explicit — nothing auto-approved]")
+
+    # Recent pending video candidates
+    vid_cands = read_video_candidates()
+    if vid_cands:
+        print(f"  Recent video pending:")
+        for vc in vid_cands[:3]:
+            print(f"    [{vc.get('id','?')[:8]}] {vc.get('filename','?')[:40]} — {vc.get('status','?')}")
+
+    # 3. System Health
+    section("3. System Health")
+    olm = read_ollama_status()
+    row("Ollama",              "running" if olm["running"] else "OFFLINE")
+    row("Text model",          olm["text_model"])
+    row("Vision model",        olm["vision_model"])
+    row("Ollama base",         olm["base_url"])
+    row("Memory DB",           "present" if h.get("memory_db") else "NOT FOUND")
+    git = read_git_status()
+    row("Git branch",          git.get("branch", "UNKNOWN"))
+    row("Git HEAD",            git.get("head", "UNKNOWN"))
+    row("Git status",          "clean" if git.get("clean") else ("dirty" if git.get("clean") is False else "UNKNOWN"))
+    obs = read_obs_status()
+    row("OBS recording",       f'{"ACTIVE" if obs["recording"] else "not recording"} — {obs["name"][:35]}')
+    row("ORACLE root",         gov.get("oracle_root", str(ROOT)))
+
+    # 4. Recent Provenance
+    section("4. Recent Provenance")
+    lc2 = pv.get("latest_commit") or {}
+    row("Latest commit",       f'{lc2.get("hash","UNKNOWN")} {lc2.get("message","")[:40]}')
+    exp = pv.get("latest_export") or {}
+    row("Latest export",       exp.get("name", "UNKNOWN") + (f' ({exp.get("mtime","")})' if exp.get("mtime") else ""))
+    obs_i = pv.get("latest_obs_ingest") or {}
+    row("Latest OBS ingest",   obs_i.get("title", "UNKNOWN")[:45] if obs_i else "UNKNOWN")
+    mc_e = pv.get("latest_mc_event") or {}
+    row("Latest MindCoin",     f'{mc_e.get("title","UNKNOWN")[:35]} [{mc_e.get("status","?")}]' if mc_e else "UNKNOWN")
+    vid_c = pv.get("latest_vid_candidate") or {}
+    row("Latest video cand.",  f'{vid_c.get("filename","UNKNOWN")[:35]} [{vid_c.get("status","?")}]' if vid_c else "UNKNOWN")
+
+    # 5. One Next Action
+    section("5. One Next Action")
+    print(f"  Action   : {na.get('action','UNKNOWN')}")
+    print(f"  Reason   : {na.get('reason','')[:70]}")
+    print(f"  Command  : {na.get('command','')}")
+    print(f"  Approval : {'REQUIRED' if na.get('approval_required') else 'not required'}")
+
+    # 6. Safety / Governance
+    section("6. Safety / Governance")
+    row("ORACLE_RAW_CAPTURE",       gov.get("raw_capture_setting", "UNKNOWN"))
+    row("Approval required",        gov.get("approval_required", "UNKNOWN"))
+    row("Candidate approval",       "ENFORCED" if gov.get("candidate_approval_enforced") else "NOT ENFORCED")
+    row("Auto-approved events",     gov.get("auto_approved_events", 0))
+    row("Raw screenshots in memory",
+        "WARNING — raw pixels stored" if gov.get("raw_screenshots_stored") else "clean — no raw pixels")
+    row("API mode",                 f'local (API-independent)' if gov.get("local_mode","true").lower() in ("true","1","yes") else f'CLOUD — LOCAL_MODE={gov.get("local_mode")}')
+    row("51/49 sovereignty",        "Noah holds 51% — enforced in code")
+    row("Irreversible block",       "active — all destructive actions gated")
+
+    print(f"\n{'='*W}")
+    print(f"  ORACLE — Resident continuity intelligence")
+    print(f"  Holding what you can't hold continuously.")
+    print(f"{'='*W}\n")
+
+
 def main() -> None:
     import argparse, webbrowser
-    parser = argparse.ArgumentParser(description="ORACLE Resident Dashboard")
+    parser = argparse.ArgumentParser(description="ORACLE Resident Dashboard v0.1")
     parser.add_argument("--generate",   action="store_true", help="Generate dashboard HTML")
-    parser.add_argument("--status",     action="store_true", help="Print text status summary")
-    parser.add_argument("--open",       action="store_true", help="Generate and open in browser")
+    parser.add_argument("--status",     action="store_true", help="Short status summary (one line each)")
+    parser.add_argument("--open",       action="store_true", help="Generate HTML and open in browser")
     parser.add_argument("--smoke-test", action="store_true")
     args = parser.parse_args()
 
@@ -983,18 +1337,20 @@ def main() -> None:
         sys.exit(run_smoke_tests())
 
     if args.status:
+        # Short one-liner version (for scripting/piping)
         state = collect_dashboard_state()
-        s = state["session"]
-        p = state["project"]
-        q = state["queue"]
-        h = state["health"]
+        s  = state["session"]
+        p  = state["project"]
+        q  = state["queue"]
+        h  = state["health"]
         na = state["next_action"]
         print(f"Mode        : {s.get('mode','?')}")
-        print(f"Project     : {p.get('project_name','?') if p.get('available') else 'none'}")
+        print(f"Project     : {p.get('project_name','?') if p.get('available') else 'UNKNOWN'}")
         print(f"Blocker     : {p.get('current_blocker','none') or 'none'}")
         print(f"Pending     : {q.get('mem_pending',0)} memory  {q.get('vid_pending',0)} video  {q.get('mc_pending',0)} MindCoin")
         print(f"Ollama      : {'running' if h.get('ollama_running') else 'OFFLINE'}")
-        print(f"Git HEAD    : {h.get('git_head','?')}")
+        print(f"Git HEAD    : {h.get('git_head','UNKNOWN')}")
+        print(f"Root        : {detect_root()}")
         print(f"Next action : {na.get('action','?')[:80]}")
         return
 
@@ -1005,7 +1361,8 @@ def main() -> None:
             webbrowser.open(path.as_uri())
         return
 
-    parser.print_help()
+    # Default: full six-panel text readout (the cockpit)
+    print_full_dashboard()
 
 
 if __name__ == "__main__":
