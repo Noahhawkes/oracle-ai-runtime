@@ -198,9 +198,28 @@ def _check_pending_memory() -> dict:
         "pending_integration_candidates": 0,
         "pending_remember_me": 0,
         "pending_relationship_records": 0,
+        "pending_approval_center": 0,
         "total_facts": 0,
+        "backup_due": False,
         "errors": [],
     }
+    # Unified approval center (replaces per-source checks)
+    try:
+        from approval_center import list_pending as ac_pending
+        items = ac_pending()
+        result["pending_approval_center"] = len(items)
+        # Back-compat: distribute into legacy keys so _select_priority still fires
+        result["pending_integration_candidates"] = len(items)
+    except Exception as e:
+        result["errors"].append(f"approval_center: {e}")
+        # Fallback to individual sources
+        try:
+            from integration_gate import list_pending
+            cands = list_pending()
+            result["pending_integration_candidates"] = len(cands) if cands else 0
+        except Exception:
+            pass
+
     # Curiosity signals
     try:
         from curiosity_engine import recall_signals
@@ -209,14 +228,6 @@ def _check_pending_memory() -> dict:
     except Exception as e:
         result["errors"].append(f"curiosity_engine: {e}")
 
-    # Integration candidates
-    try:
-        from integration_gate import list_pending
-        cands = list_pending()
-        result["pending_integration_candidates"] = len(cands) if cands else 0
-    except Exception as e:
-        result["errors"].append(f"integration_gate: {e}")
-
     # Memory DB facts
     try:
         from memory import get_all_facts
@@ -224,6 +235,17 @@ def _check_pending_memory() -> dict:
         result["total_facts"] = len(facts) if facts else 0
     except Exception as e:
         result["errors"].append(f"memory: {e}")
+
+    # Continuity backup due?
+    try:
+        from continuity_scheduler import load_schedule
+        from datetime import datetime, timezone
+        sched = load_schedule()
+        if sched.get("enabled") and sched.get("next_run_at"):
+            next_run = datetime.fromisoformat(sched["next_run_at"])
+            result["backup_due"] = datetime.now(timezone.utc) >= next_run
+    except Exception:
+        pass
 
     return result
 
@@ -262,18 +284,33 @@ def _select_priority(state: dict, memory: dict, gaps: dict) -> tuple[str, float,
         return (P1_SAFETY, 0.95,
                 f"High-risk curiosity signal pending: {gaps['financial_risk_count']} item(s).")
 
+    # P2 — only fire if SOV1 hands are down AND we're not mid-build-pass
     if state.get("sov1_hands") == "unavailable":
-        return (P2_BROKEN_LAYER, 0.90,
-                "SOV1 computer hands are unavailable. Semantic UI Bridge is the blocker.")
+        try:
+            from project_state import load_state
+            ps = load_state("ORACLE.AI")
+            build_in_progress = ps and "MYTHIC BUILD PASS" in (ps.current_phase or "")
+        except Exception:
+            build_in_progress = False
+        if not build_in_progress:
+            return (P2_BROKEN_LAYER, 0.90,
+                    "SOV1 computer hands are unavailable. Check computer_control imports.")
 
-    if memory.get("pending_integration_candidates", 0) > 0 or memory.get("pending_curiosity_signals", 0) > 0:
-        n = memory["pending_integration_candidates"] + memory["pending_curiosity_signals"]
+    # P3 — unified approval center pending items
+    pending_ac = memory.get("pending_approval_center", 0)
+    pending_legacy = memory.get("pending_integration_candidates", 0) + memory.get("pending_curiosity_signals", 0)
+    total_pending = max(pending_ac, pending_legacy)
+    if total_pending > 0:
         return (P3_PENDING_QUEUES, 0.85,
-                f"{n} item(s) pending Noah's review in approval queues.")
+                f"{total_pending} item(s) pending Noah's review in approval queues.")
 
     if gaps.get("blocker_count", 0) > 0:
         return (P4_BLOCKER, 0.80,
                 f"{gaps['blocker_count']} unresolved commitment(s) flagged as blockers.")
+
+    if memory.get("backup_due"):
+        return (P9_MAINTENANCE, 0.70,
+                "Continuity backup is due. Scheduler is enabled and next_run_at has passed.")
 
     if memory.get("total_facts", 0) < 5:
         return (P7_FILE_CLEANUP, 0.60,
@@ -284,7 +321,7 @@ def _select_priority(state: dict, memory: dict, gaps: dict) -> tuple[str, float,
                 f"{memory['pending_curiosity_signals']} pending curiosity signal(s) to process.")
 
     return (P9_MAINTENANCE, 0.40,
-            "No urgent priorities detected. Running general maintenance cycle.")
+            "No urgent priorities detected. Running workspace steward and maintenance cycle.")
 
 
 # ── Module invocation ──────────────────────────────────────────────────────────
@@ -334,17 +371,16 @@ def _invoke_module(
     elif priority == P2_BROKEN_LAYER:
         result.selected_module = "sov1 / computer_control"
         result.action_taken = (
-            "SOV1 hands are unavailable. The Semantic UI Bridge (pywinauto-based "
-            "semantic window targeting) is the missing layer. Until it is built, "
-            "SOV1 falls back to blind pixel coordinates and is unreliable."
+            "SOV1 computer_control import failed — hands unavailable. "
+            "ORACLE can still read, propose, and speak. "
+            "Actuation is blocked until computer_control loads successfully."
         )
         result.approval_required = False
         result.next_recommended_step = (
-            "Build Semantic UI Bridge: core/semantic_ui_bridge.py — "
-            "pywinauto + uiautomation window tree walker for reliable element targeting."
+            "Check core/computer_control.py imports. "
+            "Ensure pyautogui/pygetwindow are installed: pip install pyautogui pygetwindow"
         )
         result.confidence = 0.90
-        result.unknowns.append("Semantic UI Bridge not yet built")
 
     # P3 — Pending queues
     elif priority == P3_PENDING_QUEUES:
@@ -463,15 +499,50 @@ def _invoke_module(
             result.action_taken = f"curiosity_engine unavailable: {e}"
         result.confidence = 0.55
 
-    # P9 — General maintenance
+    # P9 — General maintenance: run workspace steward + backup check
     else:
-        result.selected_module = "self_prompt_loop"
-        result.action_taken = (
-            "No urgent priorities detected. System is stable. "
-            "Recommend running /self-build to identify the next highest-value improvement."
-        )
-        result.next_recommended_step = "/self-build to propose the next improvement."
-        result.confidence = 0.40
+        result.selected_module = "workspace_steward + continuity_scheduler"
+        try:
+            from workspace_steward import dry_run as steward_run
+            report = steward_run()
+            next_action = report.get("one_next_action", {})
+            action_desc = next_action.get("description", "No steward action needed.")
+            result.action_taken = f"Workspace steward ran. Next action: {action_desc}"
+            result.next_recommended_step = next_action.get("description", "/self-build to propose the next improvement.")
+            result.confidence = 0.55
+        except Exception as e:
+            result.action_taken = (
+                "No urgent priorities detected. System is stable. "
+                "Workspace steward unavailable — recommend /self-build."
+            )
+            result.next_recommended_step = "/self-build to propose the next improvement."
+            result.confidence = 0.40
+
+        # Also check if backup is due and run it
+        try:
+            from continuity_scheduler import load_schedule, run_once
+            from datetime import datetime, timezone
+            sched = load_schedule()
+            if sched.get("enabled") and sched.get("next_run_at"):
+                next_run = datetime.fromisoformat(sched["next_run_at"])
+                if datetime.now(timezone.utc) >= next_run:
+                    backup = run_once()
+                    if backup.get("status") == "completed":
+                        result.action_taken += " | Continuity backup completed."
+                    elif backup.get("status") == "blocked":
+                        result.action_taken += f" | Backup blocked: {backup.get('blocked_reason', '')}"
+        except Exception:
+            pass
+
+    # Write cycle result back to project state
+    try:
+        from project_state import load_state, save_state
+        ps = load_state("ORACLE.AI")
+        if ps and result.next_recommended_step:
+            ps.next_recommended_step = result.next_recommended_step
+            save_state(ps)
+    except Exception:
+        pass
 
     return result
 
