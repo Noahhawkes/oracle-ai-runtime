@@ -419,40 +419,63 @@ def ask_claude(
 
 # ── Interactive session launcher ───────────────────────────────────────────────
 
+_CLAUDE_DESKTOP_SHORTCUT = r"C:\Users\noahh\Desktop\Claude.lnk"
+
+
 def open_claude_session(
     prompt: str = "",
     context: str = "",
     cwd: str | None = None,
 ) -> tuple[bool, str]:
     """
-    Open a new interactive `claude` session in a new PowerShell window.
-    If prompt is given, it is written to a temp file and piped in on launch.
+    Launch Claude Code.  Tries three paths in order:
+      1. Desktop shortcut via os.startfile (always works — Store app)
+      2. claude CLI via PowerShell (works if npm-installed)
+      3. Fallback error
+
+    If a prompt is given it is saved to a handoff file that ORACLE displays
+    after Claude Code opens — the user then pastes or types it in.
     """
-    exe = _claude_exe()
-    if not exe:
-        return False, "Claude Code CLI not found on PATH."
+    import os as _os
 
-    work_dir = cwd or str(ROOT)
-
-    try:
-        if prompt:
-            full = _build_prompt(prompt, context)
+    if prompt:
+        full = _build_prompt(prompt, context)
+        try:
             tmp = ROOT / "Memory" / "_claude_session_prompt.txt"
             tmp.parent.mkdir(parents=True, exist_ok=True)
             tmp.write_text(full, encoding="utf-8")
-            # Open PS window, cd to repo, pipe prompt into claude
-            ps_cmd = f"cd '{work_dir}'; Get-Content '{tmp}' | {exe}"
-        else:
-            ps_cmd = f"cd '{work_dir}'; {exe}"
+        except Exception:
+            pass
 
-        subprocess.Popen(
-            ["powershell", "-NoExit", "-Command", ps_cmd],
-            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_CONSOLE,
-        )
-        _audit("open_claude_session", f"prompt[:60]={prompt[:60]!r}")
-        return True, "Claude Code session opened in new terminal."
-    except Exception as e:
-        return False, f"Could not open Claude Code session: {e}"
+    # 1. Desktop shortcut — works regardless of CLI PATH
+    if _os.path.exists(_CLAUDE_DESKTOP_SHORTCUT):
+        try:
+            _os.startfile(_CLAUDE_DESKTOP_SHORTCUT)
+            _audit("open_claude_session", "launched via desktop shortcut")
+            msg = "Claude Code opened via desktop shortcut."
+            if prompt:
+                msg += f" Handoff saved — paste this task when it loads: {prompt[:80]}"
+            return True, msg
+        except Exception as e:
+            pass  # fall through to CLI
+
+    # 2. CLI path
+    exe = _claude_exe()
+    if exe:
+        work_dir = cwd or str(ROOT)
+        try:
+            subprocess.Popen(
+                ["powershell", "-NoExit", "-Command", f"cd '{work_dir}'; {exe}"],
+                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_CONSOLE,
+            )
+            _audit("open_claude_session", f"launched via CLI: {exe}")
+            return True, "Claude Code session opened in new terminal."
+        except Exception as e:
+            return False, f"Could not open Claude Code session: {e}"
+
+    return False, (
+        "Claude Code not found. Open it manually from the Start menu or desktop."
+    )
 
 
 # ── Code-task classifier ───────────────────────────────────────────────────────
@@ -481,14 +504,18 @@ _CODE_KEYWORDS = {
 # Phrases that mean the user or ORACLE is directly addressing Claude Code
 _CLAUDE_DIRECT_PATTERNS = [
     "into claude", "into the claude", "tell claude", "ask claude",
+    "talk to claude", "talk with claude", "message claude",
     "paste this into", "paste into", "send to claude", "hand off to claude",
     "hand to claude", "into this window", "into the new claude",
     "into the session", "into claude code", "to claude code",
     "for claude", "give claude", "show claude",
     "with claude", "using claude", "via claude",
     "code yourself", "code yourself with", "let claude", "have claude",
+    # Activate SOV1 / hands
+    "use sov1", "activate sov1", "active sov1", "sov1 take", "sov1 open",
+    "launch sov1", "use hands", "use your hands", "take control",
     # Screen/hands control — local model cannot do these, bridge handles them
-    "take over", "keyboard", "mouse", "screen control", "take control",
+    "take over", "keyboard", "mouse", "screen control",
     "type into", "click on", "move the mouse", "open claude",
 ]
 

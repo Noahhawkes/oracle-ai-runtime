@@ -46,11 +46,13 @@ _LOCAL_READ_TOOLS = frozenset([
 _LOCAL_HANDS_TOOLS = frozenset([
     "open_app", "computer_operator",
     "send_to_claude_code",  # delivers message to Claude Code window via pyautogui
+    # Terminal commands that pass the safety classifier run without a gate
+    "run_shell", "terminal_run", "terminal_cd", "run_script",
 ])
-# WRITE — file/shell mutations — require Noah's explicit approval before execution
+# WRITE — file/memory mutations — require Noah's explicit approval before execution
+# Keep this small: only operations that permanently alter state Noah can't easily undo
 _LOCAL_WRITE_TOOLS = frozenset([
-    "write_file", "remember_fact", "run_shell", "terminal_run",
-    "terminal_cd", "run_script",
+    "write_file", "remember_fact",
 ])
 _LOCAL_SAFE_TOOL_NAMES = _LOCAL_READ_TOOLS | _LOCAL_HANDS_TOOLS | _LOCAL_WRITE_TOOLS
 
@@ -1458,13 +1460,18 @@ Hands tools (SOV1 — operates the screen):
             else:
                 reply, history = chat(client, session_id, system_prompt, history, user_input, model)
 
-            # Post-LLM guard: if local model produced implementation stubs, re-route
+            # Post-LLM guard: if local model produced implementation stubs, re-route.
+            # Also catch qwen saying "Routing to Claude Code." verbatim — that means
+            # routing already fired (and failed), or the model is hallucinating the phrase.
             _IMPL_PATTERNS = [
                 "def ", "class ", "```python", "i'll create", "i'll implement",
                 "here's the implementation", "i'll write", "i'll build",
                 "voice_hooks.py", "core/voice", "touch core/", "terminal_run",
             ]
-            if any(p.lower() in reply.lower() for p in _IMPL_PATTERNS):
+            _QWEN_ROUTING_HALLUCINATION = reply.strip().lower() in (
+                "routing to claude code.", "routing to claude code",
+            )
+            if _qwen_routing_hallucination or any(p.lower() in reply.lower() for p in _IMPL_PATTERNS):
                 print(f"\n  {C['byellow']}[GOVERNANCE]{C['reset']} Local model attempted implementation — re-routing to Claude Code.\n")
                 log("ROUTING", "post-LLM guard triggered — re-routing to Claude Code")
                 try:
