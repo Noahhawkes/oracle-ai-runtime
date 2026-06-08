@@ -34,6 +34,10 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+_INACTIVE_STATUSES: frozenset[str] = frozenset({"rejected", "revoked", "quarantined"})
+_ACTIVE_STATUSES:   frozenset[str] = frozenset({"pending", "approved"})
+
+
 def new_candidate(
     title: str,
     description: str,
@@ -60,6 +64,8 @@ def new_candidate(
         "approved_at":      None,
         "rejected_by":      None,
         "rejected_at":      None,
+        "revoked_at":       None,
+        "quarantined_at":   None,
         "rejection_reason": None,
         "created_at":       _now(),
         "updated_at":       _now(),
@@ -153,6 +159,7 @@ def revoke(candidate_id: str, reason: str = "") -> dict:
             if c.get("status") != "approved":
                 raise ValueError(f"Cannot revoke candidate in status={c['status']!r}")
             c["status"] = "revoked"
+            c["revoked_at"] = _now()
             c["rejection_reason"] = reason
             c["updated_at"] = _now()
             _save(candidates)
@@ -161,16 +168,22 @@ def revoke(candidate_id: str, reason: str = "") -> dict:
 
 
 def quarantine(candidate_id: str, reason: str = "") -> dict:
-    """Quarantine a candidate — it can never execute."""
+    """Quarantine a candidate — it can never execute, regardless of prior status."""
     candidates = _load()
     for c in candidates:
         if c.get("id") == candidate_id:
             c["status"] = "quarantined"
+            c["quarantined_at"] = _now()
             c["rejection_reason"] = reason
             c["updated_at"] = _now()
             _save(candidates)
             return c
     raise KeyError(f"Candidate {candidate_id!r} not found")
+
+
+def is_inactive(candidate: dict) -> bool:
+    """True if candidate is rejected, revoked, or quarantined — will never execute."""
+    return candidate.get("status") in _INACTIVE_STATUSES
 
 
 def is_executable(candidate: dict) -> bool:
@@ -179,6 +192,42 @@ def is_executable(candidate: dict) -> bool:
         candidate.get("status") == "approved"
         and candidate.get("approved_by") is not None
     )
+
+
+def list_active() -> list[dict]:
+    """
+    Return only pending and approved candidates — the ones still in play.
+    Use this instead of list_candidates() when feeding the approval cycle
+    or actuation engine to prevent dead candidates from resurfacing.
+    """
+    return [c for c in _load() if c.get("status") in _ACTIVE_STATUSES]
+
+
+def purge_inactive(older_than_days: int = 30) -> int:
+    """
+    Remove rejected/revoked/quarantined candidates older than `older_than_days`.
+    Returns the count of removed records. Safe to call periodically.
+    """
+    from datetime import timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+    candidates = _load()
+    before = len(candidates)
+    kept = []
+    for c in candidates:
+        if c.get("status") not in _INACTIVE_STATUSES:
+            kept.append(c)
+            continue
+        # Keep recent inactive ones so audit trail isn't immediately lost
+        try:
+            updated = datetime.fromisoformat(c.get("updated_at", ""))
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=timezone.utc)
+            if updated >= cutoff:
+                kept.append(c)
+        except Exception:
+            kept.append(c)  # keep if timestamp unreadable
+    _save(kept)
+    return before - len(kept)
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -296,6 +345,37 @@ def run_smoke_tests() -> int:
         qlist = ac.list_candidates(status="quarantined")
         check("list_candidates(quarantined): finds quarantined", any(x["id"] == c3["id"] for x in qlist))
 
+        # 13. is_inactive
+        check("is_inactive: rejected=True",    ac.is_inactive(rejected))
+        check("is_inactive: revoked=True",     ac.is_inactive(revoked))
+        check("is_inactive: quarantined=True", ac.is_inactive(qed))
+        fresh = ac.new_candidate("fresh", "d", "low", "mod", [])
+        check("is_inactive: pending=False", not ac.is_inactive(fresh))
+
+        # 14. list_active excludes dead states
+        c_active = ac.submit(ac.new_candidate("active-test", "d", "low", "mod", ["step1"]))
+        active = ac.list_active()
+        active_ids = {x["id"] for x in active}
+        check("list_active: includes pending",     c_active["id"] in active_ids)
+        check("list_active: excludes rejected",    c2["id"] not in active_ids)
+        check("list_active: excludes revoked",     c["id"]  not in active_ids)
+        check("list_active: excludes quarantined", c3["id"] not in active_ids)
+
+        # 15. revoked_at and quarantined_at timestamps set
+        revoked_full = ac.get(c["id"])
+        check("revoke: revoked_at set",        bool(revoked_full and revoked_full.get("revoked_at")))
+        qed_full = ac.get(c3["id"])
+        check("quarantine: quarantined_at set", bool(qed_full and qed_full.get("quarantined_at")))
+
+        # 16. purge_inactive removes old dead records
+        removed = ac.purge_inactive(older_than_days=0)
+        check("purge_inactive: removed dead records", removed >= 3)
+        after_purge = ac.list_candidates()
+        dead_ids = {c["id"], c2["id"], c3["id"]}
+        check("purge_inactive: dead records gone", not any(x["id"] in dead_ids for x in after_purge))
+        still_active = ac.list_active()
+        check("purge_inactive: active records preserved", c_active["id"] in {x["id"] for x in still_active})
+
     finally:
         ac.CANDIDATES_FILE = orig
         try:
@@ -303,7 +383,7 @@ def run_smoke_tests() -> int:
         except Exception:
             pass
 
-    total = 22
+    total = 33
     passed = total - failures
     print(f"{'=' * 55}")
     print(f"Result: {passed}/{total} passed")
