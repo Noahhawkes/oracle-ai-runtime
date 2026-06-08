@@ -238,15 +238,47 @@ class OracleTUI(App):
                 "/pending  — show pending approvals",
                 "/memory   — show memory snapshot",
                 "/voice on | off — toggle voice",
+                "/claude <question> — ask Claude Code (code/build questions)",
+                "/cc       — open interactive Claude Code session",
                 "/clear    — clear conversation",
                 "/quit     — exit",
             ]:
                 self.post_convo(f"  [dim]{cmd}[/dim]", "white")
             return
 
+        # /claude <question> — non-interactive ask to Claude Code
+        if lower.startswith("/claude "):
+            question = text[8:].strip()
+            if question:
+                self.post_think("▶ routing to Claude Code…")
+                threading.Thread(
+                    target=self._ask_claude_code, args=(question,), daemon=True
+                ).start()
+            else:
+                self.post_convo("[yellow]Usage: /claude <your question>[/yellow]")
+            return
+
+        # /cc — open interactive Claude Code session
+        if lower in ("/cc", "/claude-code", "/open-claude"):
+            self.post_think("▶ opening Claude Code session…")
+            threading.Thread(target=self._open_claude_session, daemon=True).start()
+            return
+
         # Show Noah's message
         ts = datetime.now().strftime("%H:%M")
         self.post_convo(f"[dim]{ts}[/dim]  [bold white]You:[/bold white] {text}")
+
+        # Auto-route code tasks to Claude Code, everything else to local model
+        try:
+            from claude_code_bridge import is_code_task
+            if is_code_task(text):
+                self.post_think("▶ code task detected — routing to Claude Code…")
+                threading.Thread(
+                    target=self._ask_claude_code, args=(text,), daemon=True
+                ).start()
+                return
+        except Exception:
+            pass
 
         # Send to ORACLE in background thread
         threading.Thread(target=self._chat, args=(text,), daemon=True).start()
@@ -278,6 +310,34 @@ class OracleTUI(App):
         except Exception as e:
             self.post_convo(f"[red]Error: {e}[/red]")
             self.post_think(f"chat error: {e}")
+
+    def _ask_claude_code(self, prompt: str) -> None:
+        try:
+            from claude_code_bridge import ask_claude
+            ok, reply = ask_claude(prompt)
+            ts = datetime.now().strftime("%H:%M")
+            label = "[bold green]Claude Code:[/bold green]" if ok else "[bold red]Claude Code error:[/bold red]"
+            self.post_convo(f"[dim]{ts}[/dim]  {label} {reply}")
+            try:
+                from voice import speak
+                speak(reply[:300])  # cap TTS length for long code answers
+            except Exception:
+                pass
+        except Exception as e:
+            self.post_convo(f"[red]Claude Code bridge error: {e}[/red]")
+
+    def _open_claude_session(self) -> None:
+        try:
+            from claude_code_bridge import open_claude_session
+            ok, detail = open_claude_session(
+                prompt="ORACLE is handing off to you. What's the status of the MYTHIC BUILD PASS and what should we work on next?",
+            )
+            self.post_convo(
+                f"[bold green]Claude Code session opened.[/bold green] {detail}"
+                if ok else f"[red]{detail}[/red]"
+            )
+        except Exception as e:
+            self.post_convo(f"[red]Could not open Claude Code session: {e}[/red]")
 
     def _run_boot_cycle(self) -> None:
         threading.Thread(target=self._boot_cycle_thread, daemon=True).start()
