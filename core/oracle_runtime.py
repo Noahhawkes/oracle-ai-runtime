@@ -1,7 +1,12 @@
 """
 core/oracle_runtime.py — ORACLE Runtime Orchestrator
 
-The heartbeat ORACLE was missing.
+ORACLE is a resident continuity intelligence: a local governed system designed
+to preserve human context, detect what matters, reduce cognitive burden, and
+help Noah continue without losing himself in the noise.
+
+Not a chatbot. Not personality. A careful steward.
+Governing doctrine: docs/ORACLE_DOCTRINE.md
 
 Before this: ORACLE sat in PowerShell waiting for Noah to type the next thing.
 After this: ORACLE wakes, checks state, picks one priority, runs one module,
@@ -12,6 +17,8 @@ Core law:
   ORACLE may not grant herself authority.
   ORACLE may propose, classify, compress, and queue.
   ORACLE may not execute external or destructive actions without Noah approval.
+  ORACLE may not approve her own memory candidates.
+  ORACLE may not claim an action succeeded without verification evidence.
 
 One cycle = one selected priority = one module invoked = one result persisted.
 

@@ -3,16 +3,27 @@ core/resident_runtime.py — ORACLE Resident Runtime v0.1
 
 The heartbeat. The wings.
 
+ORACLE is a resident continuity intelligence: a local governed system designed
+to preserve human context, detect what matters, reduce cognitive burden, and
+help Noah continue without losing himself in the noise.
+
+Not a chatbot. Not a personality. Not a toy.
+A careful steward that holds what humans cannot hold continuously.
+
 This is the loop that makes ORACLE actually live on Noah's machine.
-Every cycle:
-  1. Run oracle_runtime priority cycle (decide what matters most)
-  2. Refresh resident dashboard (HTML)
-  3. Appear on screen (presence window — optional)
-  4. Award MindCoin for the cycle
-  5. Sleep until next tick
+Every cycle, in order:
+  1. Check project state and session state
+  2. Select one priority (safety first, then blockers, then pending, then next build)
+  3. Run the priority module — propose, log, compress, classify (never execute without permission)
+  4. Refresh resident dashboard (HTML)
+  5. Show presence window — what was done, what is needed
+  6. Award MindCoin for the cycle
+  7. Sleep until next tick — do not spin
 
 ORACLE proposes. ORACLE does not approve her own proposals.
 Noah holds the sovereign 51%.
+
+Governing doctrine: docs/ORACLE_DOCTRINE.md
 
 Usage:
   python core/resident_runtime.py              # start resident loop (30 min default)
@@ -232,10 +243,15 @@ def _show_resident_presence_window(analysis: dict, ctx: dict,
              font=cycle_font, fg=text_sub, bg=bg).pack(side="right")
 
     # Main message
-    main_font = tkfont.Font(family="Segoe UI", size=14, weight="bold")
+    main_font = tkfont.Font(family="Segoe UI", size=13, weight="bold")
     msg = "I see you. I got this." if not error else "I ran into an issue."
     tk.Label(inner, text=msg, font=main_font, fg=text_main, bg=bg, anchor="w"
              ).pack(fill="x", pady=(6, 0))
+
+    # Doctrine tagline
+    tag_font = tkfont.Font(family="Segoe UI", size=8, slant="italic")
+    tk.Label(inner, text="Resident continuity intelligence. Holding what you can't hold continuously.",
+             font=tag_font, fg=text_sub, bg=bg, anchor="w").pack(fill="x", pady=(1, 0))
 
     # Priority / action line
     sub_font = tkfont.Font(family="Segoe UI", size=9)

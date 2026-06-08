@@ -224,6 +224,11 @@ def show_presence_window(analysis: dict, ctx: dict, auto_close_seconds: int = 8)
     tk.Label(inner, text="  ·  ".join(status_parts), font=sub_font,
              fg=text_sub, bg=bg, anchor="w", wraplength=380).pack(fill="x", pady=(6, 0))
 
+    # Doctrine tagline
+    tag_font = tkfont.Font(family="Segoe UI", size=8, slant="italic")
+    tk.Label(inner, text="Resident continuity intelligence — holding what you can't hold continuously.",
+             font=tag_font, fg=text_sub, bg=bg, anchor="w").pack(fill="x", pady=(2, 0))
+
     # Next step
     if next_step:
         next_font = tkfont.Font(family="Segoe UI", size=8, slant="italic")

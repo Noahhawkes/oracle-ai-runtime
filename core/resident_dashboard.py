@@ -800,9 +800,9 @@ def render_dashboard_html(state: dict) -> str:
   {panel_next}
 </div>
 <footer>
-  ORACLE.AI &mdash; Continuity architecture, not a chatbot &nbsp;&middot;&nbsp;
-  MindCoin is not cryptocurrency &nbsp;&middot;&nbsp;
-  Noah holds the sovereign 51%
+  ORACLE.AI &mdash; Resident continuity intelligence &nbsp;&middot;&nbsp;
+  Preserving human context &nbsp;&middot;&nbsp; Detecting what matters &nbsp;&middot;&nbsp;
+  Reducing cognitive burden &nbsp;&middot;&nbsp; Noah holds the sovereign 51%
 </footer>
 </body>
 </html>"""
