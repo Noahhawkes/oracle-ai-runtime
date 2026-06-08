@@ -589,6 +589,33 @@ def main():
     banner(identity)
     log("SESSION_START", f"Session {session_id} started")
 
+    # ── Auto boot cycle — ORACLE starts working immediately, no first prompt needed ──
+    try:
+        from oracle_runtime import run_cycle, MODE_DAEMON_SAFE
+        from voice import speak_prompt
+        _boot = run_cycle(mode=MODE_DAEMON_SAFE)
+        priority = _boot.selected_priority or "maintenance"
+        action   = _boot.action_taken or ""
+        next_s   = _boot.next_recommended_step or ""
+        approval = _boot.approval_required
+
+        print(f"\n{C['grey']}  {'─' * 50}{C['reset']}")
+        print(f"  {C['cyan']}◆ ORACLE BOOT CYCLE{C['reset']}  {C['dim']}{priority}{C['reset']}")
+        if action:
+            print(f"  {C['dim']}{action[:120]}{C['reset']}")
+        if next_s:
+            label = f"{C['byellow']}  ▶ ACTION NEEDED:{C['reset']}" if approval else f"  {C['grey']}Next:{C['reset']}"
+            print(f"{label} {C['dim']}{next_s[:100]}{C['reset']}")
+        print(f"{C['grey']}  {'─' * 50}{C['reset']}\n")
+
+        if approval:
+            speak_prompt(f"I'm up. {action[:80]}")
+        else:
+            speak_prompt("I'm up.")
+    except Exception:
+        pass
+    # ── End auto boot cycle ────────────────────────────────────────────────────
+
     while True:
         try:
             user_input = input("You: ").strip()
