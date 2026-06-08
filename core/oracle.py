@@ -1149,7 +1149,36 @@ def main():
             break
 
         if not user_input:
+            # Even on empty Enter, surface any pending Claude response
+            try:
+                from oracle_claude_channel import CLAUDE_TO_ORACLE
+                if CLAUDE_TO_ORACLE.exists():
+                    _resp = CLAUDE_TO_ORACLE.read_text(encoding="utf-8").strip()
+                    if _resp:
+                        print(f"\n  {C['bgreen']}[CLAUDE RESPONSE]{C['reset']}")
+                        for _line in _resp.splitlines():
+                            print(f"  {_line}")
+                        print()
+                        CLAUDE_TO_ORACLE.unlink()
+                        speak("Claude responded.")
+            except Exception:
+                pass
             continue
+
+        # ── Pending Claude channel response — surface before processing input ──
+        try:
+            from oracle_claude_channel import CLAUDE_TO_ORACLE
+            if CLAUDE_TO_ORACLE.exists():
+                _resp = CLAUDE_TO_ORACLE.read_text(encoding="utf-8").strip()
+                if _resp:
+                    print(f"\n  {C['bgreen']}[CLAUDE RESPONSE]{C['reset']}")
+                    for _line in _resp.splitlines():
+                        print(f"  {_line}")
+                    print()
+                    CLAUDE_TO_ORACLE.unlink()
+                    speak("Claude responded.")
+        except Exception:
+            pass
 
         # ── Paste / log-dump detection — must be first intercept ─────────────
         # If Noah pastes ORACLE terminal output, don't route each line as a command.
