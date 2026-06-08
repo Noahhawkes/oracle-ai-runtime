@@ -375,33 +375,42 @@ def ask_claude(
     cwd: str | None = None,
 ) -> tuple[bool, str]:
     """
-    Run `claude -p "<prompt>"` as a subprocess and return (success, text).
-    Silent — no window opened, answer returned inline.
-    """
-    exe = _claude_exe()
-    if not exe:
-        return False, (
-            "Claude Code CLI not found on PATH. "
-            "Install: npm install -g @anthropic-ai/claude-code"
-        )
+    Run `claude -p "<prompt>"` and return (success, text).
 
+    On Windows the Claude Code CLI is a Windows Store app and cannot be
+    launched directly via subprocess.  We shell out through PowerShell,
+    which resolves the app execution alias correctly.
+    """
     full_prompt = _build_prompt(prompt, context)
     work_dir = cwd or str(ROOT)
 
+    # Escape single-quotes in the prompt so PowerShell doesn't choke
+    ps_prompt = full_prompt.replace("'", "''")
+
+    ps_script = f"cd '{work_dir}'; claude -p '{ps_prompt}'"
+
     try:
         result = subprocess.run(
-            [exe, "-p", full_prompt],
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
             capture_output=True,
             text=True,
             timeout=timeout,
-            cwd=work_dir,
             encoding="utf-8",
             errors="replace",
         )
-        if result.returncode == 0:
-            return True, result.stdout.strip() or "(no output)"
+        output = result.stdout.strip()
+        if result.returncode == 0 and output:
+            return True, output
+        # Some versions print to stderr on success
+        if result.returncode == 0 and result.stderr.strip():
+            return True, result.stderr.strip()
         err = (result.stderr or result.stdout or "unknown error").strip()
-        return False, f"Exit {result.returncode}: {err}"
+        if "not recognized" in err.lower() or "cannot find" in err.lower():
+            return False, (
+                "Claude Code CLI not found on PATH. "
+                "Install: npm install -g @anthropic-ai/claude-code"
+            )
+        return False, f"Exit {result.returncode}: {err[:300]}"
     except subprocess.TimeoutExpired:
         return False, f"Claude Code did not respond within {timeout}s."
     except Exception as e:
