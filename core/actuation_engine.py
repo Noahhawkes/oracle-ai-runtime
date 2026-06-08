@@ -136,6 +136,9 @@ class ActuationResult:
     screen_hash_after: str = ""
     screen_changed: bool = False
 
+    fallback_used: bool = False       # True when keyboard clipboard fallback fired
+    fallback_reason: str = ""         # why strict control search was bypassed
+
     stopped_reason: str = ""
     failure_stage: str = ""
     approval_required: bool = False
@@ -170,14 +173,12 @@ class ActuationResult:
             lines.append(f"  [BLOCKED]   Forbidden verb '{self.blocked_verb}' — route to HUMAN_SOVEREIGN")
         if self.approval_required:
             lines.append(f"  [APPROVAL]  {self.approval_reason}")
-        if self.window_found:
-            lines.append(f"  Window    : {self.window_title}")
-        else:
-            lines.append("  Window    : NOT FOUND — stopped cleanly")
+        lines.append(f"  Window    : {'FOUND — ' + self.window_title if self.window_found else 'NOT FOUND'}")
         if self.control_found:
-            lines.append(f"  Control   : {self.control_description}")
+            lines.append(f"  Control   : FOUND — {self.control_description}")
         else:
-            lines.append("  Control   : NOT FOUND — stopped cleanly")
+            lines.append(f"  Control   : NOT FOUND")
+        lines.append(f"  Fallback  : {'YES — ' + self.fallback_reason if self.fallback_used else 'no'}")
         if self.text_injected:
             lines.append(f"  Injected  : {self.text_injected[:60]!r}")
         if self.text_verified:
@@ -319,19 +320,36 @@ def execute(request: ActuationRequest) -> ActuationResult:
         result.session_mode_at_end = _get_session_mode()
         return result
 
-    # ── Stage 1: Dry run ──────────────────────────────────────────────────────
+    # ── Stage 1: Dry run — probe window existence, skip execution ────────────
     if request.dry_run or request.action_type == ACTION_DRY_RUN:
         result.dry_run = True
-        result.success = True
+        # Try to find the window so window_found is accurate in the report
+        if request.target_window_hint or request.target_process:
+            try:
+                from semantic_ui_bridge import find_window as _fw
+                _dw = _fw(
+                    title_contains=request.target_window_hint or None,
+                    process_name=request.target_process or None,
+                )
+                result.window_found = _dw is not None
+                result.window_title = _dw.title if _dw else ""
+            except Exception as _dwe:
+                result.unknowns.append(f"Dry-run window probe failed: {_dwe}")
+        result.success = result.window_found if (request.target_window_hint or request.target_process) else True
         result.stopped_reason = "Dry run — no action executed."
         result.unknowns.append(
             f"Would target window='{request.target_window_hint}' "
             f"control_type='{request.target_control_type}' "
             f"text='{request.text_to_inject[:40]}'"
         )
+        if not result.window_found and (request.target_window_hint or request.target_process):
+            result.unknowns.append(
+                f"Window '{request.target_window_hint}' not found — live actuation would fail at find_window."
+            )
         result.session_mode_at_end = _get_session_mode()
         _record_tool_call("actuation_engine.dry_run",
-                          f"window={request.target_window_hint}", "not executed")
+                          f"window={request.target_window_hint}",
+                          "found" if result.window_found else "NOT FOUND")
         return result
 
     # ── Stage 2: Brain Router ─────────────────────────────────────────────────
@@ -421,8 +439,10 @@ def execute(request: ActuationRequest) -> ActuationResult:
             return result
         result.unknowns.extend(fw.unknowns)
 
-    # ── Stage 6: Find and focus control ──────────────────────────────────────
+    # ── Stage 6: Find and focus control (with keyboard fallback) ─────────────
     control = None
+    _use_keyboard_fallback = False
+
     if request.target_control_type or request.target_control_name or request.target_automation_id:
         if window is None:
             result.stopped_reason = (
@@ -445,29 +465,33 @@ def execute(request: ActuationRequest) -> ActuationResult:
             automation_id=request.target_automation_id or None,
         )
         if control is None:
+            # Control not found via UIA — activate keyboard clipboard fallback
+            # This handles Electron/webview apps (Claude Desktop, Chrome, etc.)
             result.control_found = False
-            result.stopped_reason = (
-                f"Control not found in '{result.window_title}': "
-                f"type={request.target_control_type!r} "
-                f"name={request.target_control_name!r}. "
-                "Stopping cleanly."
+            result.fallback_used = True
+            result.fallback_reason = (
+                f"UIA control not found (type={request.target_control_type!r}) — "
+                "using keyboard clipboard fallback"
             )
-            result.failure_stage = "find_control"
-            _record_tool_call("find_control", request.target_control_name, "NOT FOUND")
-            result.session_mode_at_end = _get_session_mode()
-            return result
+            _record_tool_call("find_control", request.target_control_name or request.target_control_type, "NOT FOUND — fallback activated")
+            _use_keyboard_fallback = True
+        else:
+            result.control_found = True
+            result.control_description = str(control)
+            _record_tool_call("find_control", request.target_control_name, f"found: {control.name}")
 
-        result.control_found = True
-        result.control_description = str(control)
-        _record_tool_call("find_control", request.target_control_name, f"found: {control.name}")
-
-        fc = focus_control(control)
-        if not fc.success:
-            result.stopped_reason = f"focus_control failed: {fc.failure_reason}"
-            result.failure_stage = "focus_control"
-            result.session_mode_at_end = _get_session_mode()
-            return result
-        result.unknowns.extend(fc.unknowns)
+            fc = focus_control(control)
+            if not fc.success:
+                result.stopped_reason = f"focus_control failed: {fc.failure_reason}"
+                result.failure_stage = "focus_control"
+                result.session_mode_at_end = _get_session_mode()
+                return result
+            result.unknowns.extend(fc.unknowns)
+    elif window is not None and request.action_type == ACTION_INJECT_TEXT:
+        # No control hint given at all — use keyboard fallback directly
+        _use_keyboard_fallback = True
+        result.fallback_used = True
+        result.fallback_reason = "No control hint provided — using keyboard clipboard fallback"
 
     # ── Stage 7: Screen hash before ───────────────────────────────────────────
     result.screen_hash_before = _screen_hash()
@@ -476,37 +500,64 @@ def execute(request: ActuationRequest) -> ActuationResult:
 
     # ── Stage 8: Execute ──────────────────────────────────────────────────────
     if request.action_type == ACTION_INJECT_TEXT:
-        if control is None:
-            result.stopped_reason = (
-                "inject_text requires a control. "
-                "Set target_control_type or target_automation_id."
-            )
-            result.failure_stage = "inject_no_control"
-            result.session_mode_at_end = _get_session_mode()
-            return result
-
-        _record_tool_call("inject_text", f"text={request.text_to_inject[:40]!r}", "injecting...")
-        ir = ui_inject(control, request.text_to_inject, clear_first=True, press_enter=False)
-        result.text_injected = request.text_to_inject
-        _record_tool_call("inject_text", f"text={request.text_to_inject[:40]!r}",
-                          "verified" if ir.verified else "UNVERIFIED")
-
-        if not ir.success:
-            result.stopped_reason = f"Injection failed: {ir.failure_reason}"
-            result.failure_stage = "inject_text"
-            result.unknowns.extend(ir.unknowns)
-            result.session_mode_at_end = _get_session_mode()
-            return result
-
-        result.text_verified = ir.text_found
-        result.unknowns.extend(ir.unknowns)
-
-        if request.press_enter_after and request.approved_by_noah:
+        if _use_keyboard_fallback:
+            # Keyboard clipboard fallback — for Electron/webview windows
             try:
-                control._raw.type_keys("{ENTER}", pause=0.1)
-                _record_tool_call("press_enter", "", "sent")
-            except Exception as e:
-                result.unknowns.append(f"press_enter failed: {e}")
+                from semantic_ui_bridge import inject_via_keyboard
+            except ImportError as _ike:
+                result.stopped_reason = f"inject_via_keyboard unavailable: {_ike}"
+                result.failure_stage = "inject_keyboard_import"
+                result.session_mode_at_end = _get_session_mode()
+                return result
+
+            _record_tool_call("inject_via_keyboard", f"text={request.text_to_inject[:40]!r}", "injecting via clipboard...")
+            kbr = inject_via_keyboard(
+                window,
+                request.text_to_inject,
+                press_enter=(request.press_enter_after and request.approved_by_noah),
+            )
+            result.text_injected = request.text_to_inject
+            result.unknowns.extend(kbr.unknowns)
+
+            if not kbr.success:
+                result.stopped_reason = f"Keyboard fallback failed: {kbr.failure_reason}"
+                result.failure_stage = "inject_keyboard"
+                result.session_mode_at_end = _get_session_mode()
+                return result
+
+            _record_tool_call("inject_via_keyboard", f"text={request.text_to_inject[:40]!r}", "pasted")
+        else:
+            if control is None:
+                result.stopped_reason = (
+                    "inject_text requires a control or keyboard fallback. "
+                    "Set target_window_hint to enable fallback."
+                )
+                result.failure_stage = "inject_no_control"
+                result.session_mode_at_end = _get_session_mode()
+                return result
+
+            _record_tool_call("inject_text", f"text={request.text_to_inject[:40]!r}", "injecting...")
+            ir = ui_inject(control, request.text_to_inject, clear_first=True, press_enter=False)
+            result.text_injected = request.text_to_inject
+            _record_tool_call("inject_text", f"text={request.text_to_inject[:40]!r}",
+                              "verified" if ir.verified else "UNVERIFIED")
+
+            if not ir.success:
+                result.stopped_reason = f"Injection failed: {ir.failure_reason}"
+                result.failure_stage = "inject_text"
+                result.unknowns.extend(ir.unknowns)
+                result.session_mode_at_end = _get_session_mode()
+                return result
+
+            result.text_verified = ir.text_found
+            result.unknowns.extend(ir.unknowns)
+
+            if request.press_enter_after and request.approved_by_noah:
+                try:
+                    control._raw.type_keys("{ENTER}", pause=0.1)
+                    _record_tool_call("press_enter", "", "sent")
+                except Exception as e:
+                    result.unknowns.append(f"press_enter failed: {e}")
 
     elif request.action_type in (ACTION_FOCUS_WINDOW, ACTION_FOCUS_CONTROL):
         result.success = True  # focus already done in stages 5/6

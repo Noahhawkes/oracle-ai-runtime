@@ -1472,6 +1472,21 @@ def main():
                     print(f"\n[bridge-draft error: {e}]\n")
             continue
 
+        if user_input.lower().startswith("/controls "):
+            win_hint = user_input.split(" ", 1)[1].strip()
+            try:
+                from semantic_ui_bridge import find_window, dump_controls
+                w = find_window(title_contains=win_hint)
+                if w is None:
+                    print(f"\n  No window found matching: {win_hint!r}\n")
+                else:
+                    print(f"\n  Window: {w.title!r}  (pid={w.pid})\n")
+                    print(dump_controls(w))
+                    print()
+            except Exception as e:
+                print(f"\n[controls error: {e}]\n")
+            continue
+
         if user_input.lower() in ("/window-snapshot", "/win-snap"):
             try:
                 from window_janitor import get_janitor
@@ -1696,6 +1711,7 @@ Commands:
   /bridge-chatgpt-draft <question>   Draft a governed message to ChatGPT (does not send — dry run)
   /bridge-chatgpt-status             Show ChatGPT bridge status and pending drafts
   /window-snapshot                   List currently visible windows on the desktop
+  /controls <window>                 Dump all UIA controls discovered in a window (debug actuation)
   /route-task <description>          Route a task to the correct cognitive engine (brain router)
   /actuate <window> | <text>         Governed desktop injection: find window → find control → inject → verify
   /actuate-dry <window> | <text>     Dry run actuation — shows what would happen without executing

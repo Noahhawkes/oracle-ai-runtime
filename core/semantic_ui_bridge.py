@@ -401,6 +401,12 @@ def list_controls(
     return results
 
 
+# Control types to try in fuzzy search order — Electron/webview apps use Document/Pane
+_FUZZY_CONTROL_TYPES = ["Edit", "Document", "Text", "Pane", "Custom", "Group", "DataItem"]
+# Class name substrings that suggest an editable input
+_FUZZY_CLASS_HINTS = ["edit", "richedit", "input", "textarea", "chrome_widget", "webview", "cefclient"]
+
+
 def find_control(
     window_ref: WindowRef,
     name_contains: Optional[str] = None,
@@ -410,13 +416,16 @@ def find_control(
 ) -> Optional[ControlRef]:
     """
     Find a control within a window by name, type, or automation ID.
-    Returns None if not found — callers must stop cleanly.
+    When strict search fails, falls back to a fuzzy type/class search so
+    Electron/webview windows (e.g., Claude Desktop) can still be targeted.
+    Returns None if nothing found — callers decide whether to use keyboard fallback.
     """
     _require_windows()
     _require_backend()
 
     controls = list_controls(window_ref)
 
+    # ── Strict match first ────────────────────────────────────────────────────
     for ctrl in controls:
         match = True
         if name_contains and name_contains.lower() not in ctrl.name.lower():
@@ -430,7 +439,157 @@ def find_control(
         if match:
             return ctrl
 
+    # ── Fuzzy fallback: no name/automation_id constraints, just type/class ────
+    # Only activate when the caller specified a type but the strict match missed.
+    if control_type and not name_contains and not automation_id and not class_name:
+        for fuzzy_type in _FUZZY_CONTROL_TYPES:
+            for ctrl in controls:
+                if fuzzy_type.lower() in ctrl.control_type.lower():
+                    return ctrl
+        for hint in _FUZZY_CLASS_HINTS:
+            for ctrl in controls:
+                if hint.lower() in ctrl.class_name.lower():
+                    return ctrl
+
     return None
+
+
+def dump_controls(window_ref: WindowRef, max_controls: int = 60) -> str:
+    """
+    Return a formatted string listing every discovered control in a window.
+    Used by the /controls command to diagnose actuation failures.
+    """
+    _require_windows()
+    _require_backend()
+
+    controls = list_controls(window_ref)
+    if not controls:
+        return (
+            f"  No controls discovered in '{window_ref.title}'.\n"
+            "  Window likely uses a web/Electron renderer with no accessible UIA tree.\n"
+            "  Keyboard clipboard fallback will be used for actuation."
+        )
+
+    lines = [f"  Controls in '{window_ref.title}' ({len(controls)} total):"]
+    lines.append(f"  {'#':>3}  {'type':<16}  {'name':<30}  {'auto_id':<20}  class")
+    lines.append("  " + "-" * 90)
+    for i, c in enumerate(controls[:max_controls]):
+        lines.append(
+            f"  {i+1:>3}  {c.control_type:<16}  {c.name[:30]:<30}  "
+            f"{c.automation_id[:20]:<20}  {c.class_name}"
+        )
+    if len(controls) > max_controls:
+        lines.append(f"  ... {len(controls) - max_controls} more controls not shown")
+    return "\n".join(lines)
+
+
+def inject_via_keyboard(
+    window_ref: WindowRef,
+    text: str,
+    press_enter: bool = False,
+) -> BridgeResult:
+    """
+    Keyboard clipboard fallback for windows where find_control() fails
+    (Electron, CEF, webview-based apps such as Claude Desktop).
+
+    Sequence:
+      1. Focus the window via set_focus()
+      2. Click bottom-center of the window rect (12 % from bottom) to land
+         on the input area — uses window-relative position, not raw screen coords
+      3. Copy text to clipboard, paste with Ctrl+V
+      4. Restore prior clipboard content
+      5. Optionally press Enter
+
+    Returns BridgeResult. verified=False (can't read back from webview).
+    mouse_used=True to signal coordinate fallback was used.
+    """
+    result = BridgeResult(
+        operation="inject_via_keyboard",
+        target_window=window_ref.title,
+        text_injected=text,
+        mouse_used=True,
+        backend_used="pyautogui+clipboard",
+    )
+
+    try:
+        import pyautogui
+    except ImportError:
+        result.failure_reason = "pyautogui not installed — cannot use keyboard fallback"
+        return result
+
+    try:
+        import pyperclip
+        _has_pyperclip = True
+    except ImportError:
+        _has_pyperclip = False
+
+    try:
+        # 1. Focus window
+        if window_ref._raw:
+            try:
+                window_ref._raw.set_focus()
+                time.sleep(0.35)
+            except Exception as _fe:
+                result.unknowns.append(f"set_focus failed: {_fe} — continuing anyway")
+
+        # 2. Click bottom-center of window to land on the input
+        rect = None
+        try:
+            if window_ref._raw:
+                r = window_ref._raw.rectangle()
+                rect = (r.left, r.top, r.right, r.bottom)
+        except Exception:
+            pass
+
+        if rect:
+            cx = (rect[0] + rect[2]) // 2
+            # 12 % from the bottom — typical input bar position
+            cy = rect[3] - int((rect[3] - rect[1]) * 0.12)
+            pyautogui.click(cx, cy)
+            time.sleep(0.3)
+        else:
+            result.unknowns.append("Window rect unavailable — could not click input area")
+
+        # 3. Paste via clipboard
+        old_clip = ""
+        if _has_pyperclip:
+            try:
+                old_clip = pyperclip.paste()
+            except Exception:
+                pass
+            pyperclip.copy(text)
+            time.sleep(0.1)
+            pyautogui.hotkey("ctrl", "v")
+        else:
+            # No pyperclip — type characters directly (slower, less reliable)
+            pyautogui.typewrite(text, interval=0.02)
+            result.unknowns.append("pyperclip not installed — used typewrite fallback (may miss special chars)")
+
+        time.sleep(0.25)
+
+        # 4. Restore clipboard
+        if _has_pyperclip and old_clip:
+            try:
+                pyperclip.copy(old_clip)
+            except Exception:
+                pass
+
+        # 5. Enter
+        if press_enter:
+            pyautogui.press("enter")
+            time.sleep(0.2)
+
+        result.success = True
+        result.verified = False
+        result.unknowns.append(
+            "Keyboard clipboard fallback used (Electron/webview window). "
+            "Text pasted via Ctrl+V. Read-back verification not available for webview controls."
+        )
+
+    except Exception as e:
+        result.failure_reason = str(e)
+
+    return result
 
 
 def focus_control(control_ref: ControlRef) -> BridgeResult:
