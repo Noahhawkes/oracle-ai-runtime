@@ -272,9 +272,9 @@ class OracleTUI(App):
         try:
             from claude_code_bridge import is_code_task
             if is_code_task(text):
-                self.post_think("▶ code task detected — routing to Claude Code…")
+                self.post_think("▶ code task — handing off to Claude Code…")
                 threading.Thread(
-                    target=self._ask_claude_code, args=(text,), daemon=True
+                    target=self._type_into_claude, args=(text,), daemon=True
                 ).start()
                 return
         except Exception:
@@ -312,6 +312,7 @@ class OracleTUI(App):
             self.post_think(f"chat error: {e}")
 
     def _ask_claude_code(self, prompt: str) -> None:
+        """Non-interactive ask — runs claude -p and shows the answer inline."""
         try:
             from claude_code_bridge import ask_claude
             ok, reply = ask_claude(prompt)
@@ -320,11 +321,31 @@ class OracleTUI(App):
             self.post_convo(f"[dim]{ts}[/dim]  {label} {reply}")
             try:
                 from voice import speak
-                speak(reply[:300])  # cap TTS length for long code answers
+                speak(reply[:300])
             except Exception:
                 pass
         except Exception as e:
             self.post_convo(f"[red]Claude Code bridge error: {e}[/red]")
+
+    def _type_into_claude(self, prompt: str) -> None:
+        """Autonomous hand-off — ORACLE types the message into the Claude Code window."""
+        try:
+            from claude_code_bridge import type_into_claude
+            ok, detail = type_into_claude(prompt, open_if_missing=True)
+            ts = datetime.now().strftime("%H:%M")
+            if ok:
+                self.post_convo(
+                    f"[dim]{ts}[/dim]  [bold green]↗ Handed off to Claude Code.[/bold green]  {detail}"
+                )
+                try:
+                    from voice import speak
+                    speak("Handed off to Claude Code.")
+                except Exception:
+                    pass
+            else:
+                self.post_convo(f"[dim]{ts}[/dim]  [yellow]Claude Code hand-off failed: {detail}[/yellow]")
+        except Exception as e:
+            self.post_convo(f"[red]type_into_claude error: {e}[/red]")
 
     def _open_claude_session(self) -> None:
         try:
