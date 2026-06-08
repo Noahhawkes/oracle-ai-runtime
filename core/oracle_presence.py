@@ -77,7 +77,7 @@ def _analyze_screen(png_bytes: bytes) -> dict:
 
 
 def _get_oracle_context() -> dict:
-    """Read ORACLE state for the presence message — no model call."""
+    """Read live ORACLE state via resident_runtime, fallback to JSON files."""
     def _rj(p: Path):
         try:
             return json.loads(p.read_text(encoding="utf-8"))
@@ -85,6 +85,30 @@ def _get_oracle_context() -> dict:
             return None
 
     mem = ROOT / "Memory"
+
+    # --- Primary: pull from resident_runtime live state ---
+    rt_mode = "IDLE"
+    rt_project = "ORACLE.AI"
+    rt_next_step = ""
+    rt_blocker = ""
+    rt_pending = 0
+    rt_live = False
+    try:
+        import sys as _sys
+        import os as _os
+        _core = str(Path(__file__).parent)
+        if _core not in _sys.path:
+            _sys.path.insert(0, _core)
+        from resident_runtime import _load_runtime_state
+        rs = _load_runtime_state()
+        if rs.get("status") == "running":
+            rt_live = True
+            rt_mode = rs.get("last_priority", "IDLE") or "IDLE"
+            rt_next_step = (rs.get("last_action") or "")[:80]
+    except Exception:
+        pass
+
+    # --- Secondary: session_state + project_states for project/blocker/pending ---
     sess = _rj(mem / "session_state.json") or {}
     proj_raw = _rj(mem / "project_states.json") or {}
     if isinstance(proj_raw, dict):
@@ -95,25 +119,32 @@ def _get_oracle_context() -> dict:
         states = []
     states = [s for s in states if isinstance(s, dict)]
 
-    project = "ORACLE.AI"
-    next_step = ""
+    if not rt_live:
+        rt_mode = sess.get("mode", "IDLE")
+
     if states:
         p = max(states, key=lambda x: x.get("updated_at", ""))
-        project = p.get("project_name", "ORACLE.AI")
-        next_step = p.get("next_recommended_step", "") or ""
+        rt_project = p.get("project_name", "ORACLE.AI")
+        if not rt_live:
+            rt_next_step = (p.get("next_recommended_step", "") or "")[:80]
+        rt_blocker = (p.get("current_blocker", "") or "")[:60]
 
     vid_raw = _rj(mem / "video_observation_candidates.json") or []
     vid_pending = sum(1 for c in vid_raw if isinstance(c, dict) and c.get("status") == "pending")
     mc_raw = _rj(mem / "mindcoin_ledger.json") or {}
     mc_events = mc_raw.get("events", [])
     mc_pending = sum(1 for e in mc_events if isinstance(e, dict) and e.get("approval_status") == "pending")
+    rt_pending = vid_pending + mc_pending
 
     return {
-        "mode":       sess.get("mode", "IDLE"),
-        "project":    project,
-        "next_step":  next_step[:80] if next_step else "",
+        "mode":        rt_mode,
+        "project":     rt_project,
+        "next_step":   rt_next_step,
+        "blocker":     rt_blocker,
+        "pending":     rt_pending,
         "vid_pending": vid_pending,
-        "mc_pending": mc_pending,
+        "mc_pending":  mc_pending,
+        "live":        rt_live,
     }
 
 
@@ -160,6 +191,9 @@ def show_presence_window(analysis: dict, ctx: dict, auto_close_seconds: int = 8)
     mode = ctx.get("mode", "IDLE")
     project = ctx.get("project", "ORACLE.AI")
     next_step = ctx.get("next_step", "")
+    blocker = ctx.get("blocker", "")
+    pending = ctx.get("pending", 0)
+    live = ctx.get("live", False)
 
     # Color scheme — adapts to screen mood
     if mood == "dark":
@@ -213,14 +247,12 @@ def show_presence_window(analysis: dict, ctx: dict, auto_close_seconds: int = 8)
 
     # Status line
     sub_font = tkfont.Font(family="Segoe UI", size=9)
-    status_parts = [f"Mode: {mode}", f"Project: {project}"]
-    if ctx.get("vid_pending") or ctx.get("mc_pending"):
-        pend = []
-        if ctx.get("vid_pending"):
-            pend.append(f"{ctx['vid_pending']} video")
-        if ctx.get("mc_pending"):
-            pend.append(f"{ctx['mc_pending']} MindCoin")
-        status_parts.append(f"Pending: {', '.join(pend)}")
+    live_tag = " [LIVE]" if live else ""
+    status_parts = [f"Mode: {mode}{live_tag}", f"Project: {project}"]
+    if blocker:
+        status_parts.append(f"Blocker: {blocker}")
+    if pending:
+        status_parts.append(f"Pending: {pending}")
     tk.Label(inner, text="  ·  ".join(status_parts), font=sub_font,
              fg=text_sub, bg=bg, anchor="w", wraplength=380).pack(fill="x", pady=(6, 0))
 
@@ -364,9 +396,14 @@ def run_smoke_tests() -> int:
         check("get_oracle_context: has mode", "mode" in ctx)
         check("get_oracle_context: has project", "project" in ctx)
         check("get_oracle_context: mode is string", isinstance(ctx["mode"], str))
+        check("get_oracle_context: has blocker key", "blocker" in ctx)
+        check("get_oracle_context: has pending key", "pending" in ctx)
+        check("get_oracle_context: has live key", "live" in ctx)
+        check("get_oracle_context: live is bool", isinstance(ctx.get("live"), bool))
     except Exception as e:
         check("get_oracle_context: no crash", False, str(e))
-        ctx = {"mode": "IDLE", "project": "ORACLE.AI", "next_step": "", "vid_pending": 0, "mc_pending": 0}
+        ctx = {"mode": "IDLE", "project": "ORACLE.AI", "next_step": "",
+               "blocker": "", "pending": 0, "vid_pending": 0, "mc_pending": 0, "live": False}
 
     # 4. Log presence (writes to Memory/)
     try:
@@ -393,7 +430,7 @@ def run_smoke_tests() -> int:
     except Exception as e:
         check("appear dry_run: no crash", False, str(e))
 
-    total = 17
+    total = 21
     passed = total - failures
     print(f"{'='*55}")
     print(f"Result: {passed}/{total} passed")
