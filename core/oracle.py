@@ -821,6 +821,53 @@ def main():
                 print(f"\n[window-snapshot error: {e}]\n")
             continue
 
+        if user_input.lower().startswith("/actuate ") or user_input.lower().startswith("/type-into "):
+            # /actuate <window_hint> | <text to type>
+            raw = user_input.split(" ", 1)[1].strip() if " " in user_input else ""
+            if "|" not in raw:
+                print("\n  Usage: /actuate <window_hint> | <text to type>\n"
+                      "  Example: /actuate ChatGPT | Hello from ORACLE\n")
+                continue
+            win_hint, text = [p.strip() for p in raw.split("|", 1)]
+            print(f"\n[actuate] Target window: {win_hint!r}")
+            print(f"          Text to inject: {text!r}")
+            print("  Noah approval required. Type 'yes' to proceed or anything else to cancel.")
+            try:
+                confirm = input("  Approve? ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                confirm = ""
+            if confirm in ("yes", "y", "approve"):
+                try:
+                    from actuation_engine import type_into_window
+                    result = type_into_window(win_hint, text, approved=True)
+                    print(result.explain())
+                    if result.success and result.verified:
+                        speak(f"Text injected and verified in {win_hint}.")
+                    elif result.success:
+                        speak(f"Text injected but not verified. Check window.")
+                    else:
+                        speak(f"Actuation failed: {result.failure_stage}")
+                except Exception as e:
+                    log("ERROR", f"/actuate failed: {e}")
+                    print(f"\n[actuate error: {e}]\n")
+            else:
+                print("\n  Actuation cancelled.\n")
+            continue
+
+        if user_input.lower().startswith("/actuate-dry "):
+            raw = user_input.split(" ", 1)[1].strip()
+            if "|" not in raw:
+                print("\n  Usage: /actuate-dry <window_hint> | <text>\n")
+                continue
+            win_hint, text = [p.strip() for p in raw.split("|", 1)]
+            try:
+                from actuation_engine import type_into_window
+                result = type_into_window(win_hint, text, dry_run=True)
+                print(result.explain())
+            except Exception as e:
+                print(f"\n[actuate-dry error: {e}]\n")
+            continue
+
         if user_input.lower().startswith("/video-analyze "):
             raw_path = user_input[len("/video-analyze "):].strip()
             print(f"\n[video] Analyzing: {raw_path}")
@@ -932,6 +979,8 @@ Commands:
   /bridge-chatgpt-status             Show ChatGPT bridge status and pending drafts
   /window-snapshot                   List currently visible windows on the desktop
   /route-task <description>          Route a task to the correct cognitive engine (brain router)
+  /actuate <window> | <text>         Governed desktop injection: find window → find control → inject → verify
+  /actuate-dry <window> | <text>     Dry run actuation — shows what would happen without executing
   /video-analyze <path>              Analyze an approved video file — creates pending candidate
   /video-pending                     List pending video observation candidates
   /video-approve <id>                Approve a video candidate for recall
