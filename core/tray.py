@@ -84,18 +84,15 @@ def open_chat(icon, item):
 
 
 def show_status(icon, item):
-    from memory import get_facts
-    facts = get_facts()
-    recent = [f for f in facts if "autonomous_action" in f["key"]][-5:]
-    if recent:
-        msg = "Recent Oracle actions:\n" + "\n".join(
-            f"  {f['value'][:80]}" for f in recent
+    # Spawn resident_runtime status in a new console window
+    try:
+        subprocess.Popen(
+            [sys.executable, str(ROOT / "core" / "resident_runtime.py"), "--status"],
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
-    else:
-        msg = "Oracle is running. No autonomous actions logged yet."
-
-    import ctypes
-    ctypes.windll.user32.MessageBoxW(0, msg, "ORACLE.AI Status", 0x40)
+    except Exception as e:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(0, f"Status failed:\n{e}", "ORACLE.AI", 0x10)
 
 
 def quit_oracle(icon, item):
@@ -112,12 +109,16 @@ def _install_autostart(icon, menu_item):
 
 
 def open_patch_notes(icon, menu_item):
-    if _UPDATER_AVAILABLE:
-        import threading
-        threading.Thread(target=show_patch_notes_window, daemon=True).start()
-    else:
+    # tkinter cannot run in a non-main thread on Windows — spawn a new process
+    import subprocess, sys
+    try:
+        subprocess.Popen(
+            [sys.executable, str(Path(__file__).parent / "updater.py")],
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except Exception as e:
         import ctypes
-        ctypes.windll.user32.MessageBoxW(0, "Updater not available.", "ORACLE.AI", 0x10)
+        ctypes.windll.user32.MessageBoxW(0, f"Updater failed to launch:\n{e}", "ORACLE.AI", 0x10)
 
 
 def _remove_autostart(icon, menu_item):
@@ -166,6 +167,21 @@ def main():
 
     # Register auto-start in Task Scheduler if not already done
     threading.Thread(target=_ensure_autostart_registered, daemon=True).start()
+
+    # Boot cycle: run one resident_runtime tick immediately so ORACLE
+    # knows her state before the first daemon cycle fires.
+    def _boot_cycle():
+        try:
+            import sys as _sys
+            _core = str(ROOT / "core")
+            if _core not in _sys.path:
+                _sys.path.insert(0, _core)
+            from resident_runtime import run_one_cycle
+            run_one_cycle(show_presence=True)
+        except Exception:
+            pass
+
+    threading.Thread(target=_boot_cycle, daemon=True).start()
 
     # Start daemon in background
     threading.Thread(target=start_daemon, daemon=True).start()

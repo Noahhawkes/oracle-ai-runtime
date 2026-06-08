@@ -177,7 +177,7 @@ def _log_presence(screen_hash: str, analysis: dict, ctx: dict) -> None:
 
 # ── Presence window ───────────────────────────────────────────────────────────
 
-def show_presence_window(analysis: dict, ctx: dict, auto_close_seconds: int = 8) -> None:
+def show_presence_window(analysis: dict, ctx: dict, auto_close_seconds: int = 5) -> None:
     """
     Show the ORACLE presence window on the live desktop.
     Always on top. Branded. Real.
