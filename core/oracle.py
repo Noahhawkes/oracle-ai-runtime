@@ -131,31 +131,140 @@ LOCAL_TOOL_DEFINITIONS = [
 # Pending approval gate: {tool_name: {input}} waiting for Noah's confirm
 _pending_tool_approval: dict = {}
 
-# ── Hallucination patterns ────────────────────────────────────────────────────
-# Phrases local models emit when they fabricate success without evidence.
-_HALLUCINATION_PHRASES = [
-    "successfully created",
-    "successfully scaffolded",
-    "has been created",
-    "has been set up",
-    "has been initialized",
-    "project has been",
-    "files have been created",
-    "i have created",
-    "i've created",
-    "i created",
-    "i've set up",
-    "i set up",
-    "was created at",
-    "directory has been",
-    "folder has been",
+# ── Tool truthfulness ──────────────────────────────────────────────────────────
+# Phrases the local model uses to CLAIM it will act — without calling any tool.
+# These are caught post-LLM and replaced with [BLOCKED] + honest status.
+_ACTION_CLAIM_PATTERNS = [
+    # Future tense — "I'll X"
+    "i'll open", "i'll create", "i'll run", "i'll write", "i'll build",
+    "i'll launch", "i'll execute", "i'll start", "i'll take control",
+    "i'll type", "i'll click", "i'll send", "i'll do that",
+    "i'll handle", "i'll implement", "i'll make", "i'll set up",
+    "i'll use sov1", "i'll use the", "i'll now",
+    # Present progressive — "I'm opening"
+    "i'm opening", "i'm creating", "i'm running", "i'm launching",
+    "i'm taking", "i'm writing", "i'm executing", "i'm starting",
+    # "Let me" — also a claim without evidence
+    "let me open", "let me create", "let me run", "let me write",
+    "let me launch", "let me execute", "let me take",
+    # Past-tense fabrications
+    "successfully created", "successfully scaffolded", "has been created",
+    "has been set up", "has been initialized", "project has been",
+    "files have been created", "i have created", "i've created",
+    "i created", "i've set up", "i set up", "was created at",
+    "directory has been", "folder has been",
+    # The routing hallucination
+    "routing to claude code.",
 ]
+
+# Map: action verb → which tool capability covers it → how to describe the gap
+_ACTION_TO_CAPABILITY = {
+    "open": ("open_app / computer_operator", "SOV1 HANDS or open_app with an approved app name"),
+    "create": ("write_file / terminal_run", "write_file tool with Noah's approval"),
+    "run": ("terminal_run / run_shell", "terminal_run tool (runs safely after classifier check)"),
+    "write": ("write_file", "write_file tool with Noah's approval"),
+    "build": ("send_to_claude_code", "send_to_claude_code → Claude Code window"),
+    "launch": ("open_app", "open_app with an approved app name from config.yaml"),
+    "execute": ("terminal_run", "terminal_run tool"),
+    "take control": ("computer_operator", "computer_operator → SOV1 HANDS"),
+    "type": ("send_to_claude_code / computer_operator", "type_into_claude or SOV1 focus_window + paste_text"),
+    "send": ("send_to_claude_code", "send_to_claude_code tool"),
+    "implement": ("send_to_claude_code", "send_to_claude_code → Claude Code window"),
+}
+
+
+def _tool_registry_status() -> dict[str, bool]:
+    """
+    Return live working-status for each tool category.
+    Called once per turn — cheap checks only.
+    """
+    status: dict[str, bool] = {}
+
+    # Claude window injection
+    try:
+        from claude_code_bridge import find_claude_window
+        status["send_to_claude_code"] = find_claude_window() is not None
+    except Exception:
+        status["send_to_claude_code"] = False
+
+    # SOV1 hands (pyautogui + PIL)
+    try:
+        import pyautogui  # noqa
+        from PIL import Image  # noqa
+        status["computer_operator"] = True
+    except Exception:
+        status["computer_operator"] = False
+
+    # Terminal (always available)
+    status["terminal_run"] = True
+    status["run_shell"] = True
+
+    # File I/O (always available)
+    status["read_file"] = True
+    status["write_file"] = True
+
+    return status
+
+
+def _blocked_response(reply: str, tools_called: list[str], registry: dict[str, bool]) -> str | None:
+    """
+    Scan reply for action claims made without tool execution.
+    Return a [BLOCKED] response string, or None if reply is clean.
+    """
+    lower = reply.lower().strip()
+
+    # Which action verb was claimed?
+    claimed_verb = None
+    for pat in _ACTION_CLAIM_PATTERNS:
+        if pat in lower:
+            claimed_verb = pat
+            break
+
+    if claimed_verb is None:
+        return None  # no claim — reply is fine
+
+    # Was any tool actually called this turn?
+    if tools_called:
+        return None  # tool ran — claim is backed by execution
+
+    # Build [BLOCKED] message
+    # Map claim to capability
+    cap_name = "the requested capability"
+    cap_how = "the required tool"
+    for verb, (cap, how) in _ACTION_TO_CAPABILITY.items():
+        if verb in claimed_verb:
+            cap_name = cap
+            cap_how = how
+            break
+
+    # Check if the relevant tool is in registry and working
+    cap_working = any(
+        registry.get(t, False)
+        for t in registry
+        if any(verb in claimed_verb for verb in (t.replace("_", " "), t))
+    )
+
+    lines = [
+        "[BLOCKED]",
+        f"Desired action : {claimed_verb.strip('.')}",
+        f"Missing/broken : {cap_name}",
+    ]
+
+    # Suggest next manual step based on what's available
+    if registry.get("send_to_claude_code"):
+        lines.append("Next step      : Ask Claude Code — the window is open and ready.")
+    elif registry.get("computer_operator"):
+        lines.append("Next step      : Use SOV1 HANDS — type: use sov1 to <goal>")
+    else:
+        lines.append(f"Next step      : {cap_how}")
+
+    return "\n".join(lines)
 
 
 def _inject_local_context(user_input: str) -> str:
     """
     Prepend a compact ORACLE state block to user messages for local model calls.
-    Gives the 7B model grounding it won't derive from the system prompt alone.
+    Includes live tool registry so qwen knows what actually works before it responds.
     """
     lines = ["[ORACLE LIVE STATE]"]
     try:
@@ -176,7 +285,24 @@ def _inject_local_context(user_input: str) -> str:
             lines.append(f"Pending     : {n} items awaiting Noah's approval")
     except Exception:
         pass
-    lines.append(f"Mode        : LOCAL — implementation tasks route to Claude Code")
+
+    # Live tool registry — what is actually working right now
+    try:
+        reg = _tool_registry_status()
+        lines.append("")
+        lines.append("[WORKING TOOLS — only claim actions from this list]")
+        lines.append(f"  send_to_claude_code : {'YES — Claude window is open' if reg.get('send_to_claude_code') else 'NO — Claude window not found'}")
+        lines.append(f"  computer_operator   : {'YES — SOV1 HANDS available' if reg.get('computer_operator') else 'NO — pyautogui not available'}")
+        lines.append(f"  terminal_run        : YES — safe shell commands")
+        lines.append(f"  read_file           : YES — read any file")
+        lines.append(f"  write_file          : YES — requires Noah approval")
+        lines.append("")
+        lines.append("RULE: If a tool shows NO above, do NOT say 'I'll X' or 'I will X'.")
+        lines.append("RULE: If you cannot call a tool, say: [BLOCKED] and explain what is missing.")
+        lines.append("RULE: Never claim an action happened unless a tool actually ran.")
+    except Exception:
+        pass
+
     lines.append("")
     lines.append(f"Noah says: {user_input}")
     return "\n".join(lines)
@@ -184,24 +310,14 @@ def _inject_local_context(user_input: str) -> str:
 
 def _detect_hallucination(reply: str, tool_names_called: list[str]) -> str | None:
     """
-    Return a warning string if the reply claims success for an action that
-    wasn't in the executed tool list, or claims file/project creation when
-    no write tool was called.
-
-    Returns None if reply looks clean.
+    Kept for backwards compat — delegates to _blocked_response with a live registry.
+    Returns a [BLOCKED] string if the reply contains an unclaimed action, else None.
     """
-    lower = reply.lower()
-    claimed_creation = any(p in lower for p in _HALLUCINATION_PHRASES)
-    write_tools_called = any(
-        t in tool_names_called
-        for t in ("write_file", "create_project", "build_exe", "run_shell", "terminal_run")
-    )
-    if claimed_creation and not write_tools_called:
-        return (
-            "[ORACLE WARNING] The model claimed to create or set up something "
-            "but no write or create tool was called. This is a hallucinated success. "
-            "Nothing was actually changed on disk."
-        )
+    try:
+        reg = _tool_registry_status()
+        return _blocked_response(reply, tool_names_called, reg)
+    except Exception:
+        return None
 
 
 def _ansi(code: str) -> str:
@@ -1566,6 +1682,13 @@ Hands tools (SOV1 — operates the screen):
             else:
                 reply, history = chat(client, session_id, system_prompt, history, user_input, model)
 
+            # Tool-truthfulness guard: replace unclaimed action phrases with [BLOCKED] format
+            if local:
+                blocked = _detect_hallucination(reply, [])
+                if blocked:
+                    log("HALLUCINATION_DETECTED", f"reply: {reply[:120]}")
+                    reply = blocked
+
             # Post-LLM guard: if local model produced implementation stubs, re-route.
             # Also catch qwen saying "Routing to Claude Code." verbatim — that means
             # routing already fired (and failed), or the model is hallucinating the phrase.
@@ -1577,7 +1700,7 @@ Hands tools (SOV1 — operates the screen):
             _QWEN_ROUTING_HALLUCINATION = reply.strip().lower() in (
                 "routing to claude code.", "routing to claude code",
             )
-            if _qwen_routing_hallucination or any(p.lower() in reply.lower() for p in _IMPL_PATTERNS):
+            if _QWEN_ROUTING_HALLUCINATION or any(p.lower() in reply.lower() for p in _IMPL_PATTERNS):
                 print(f"\n  {C['byellow']}[GOVERNANCE]{C['reset']} Local model attempted implementation — re-routing to Claude Code.\n")
                 log("ROUTING", "post-LLM guard triggered — re-routing to Claude Code")
                 try:
