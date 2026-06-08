@@ -468,7 +468,8 @@ def chat(client, session_id, system_prompt, history, user_input):
             for block in response.content:
                 if block.type == "tool_use":
                     _tool_call_count += 1
-                    print(f"\n[Oracle → Tool: {block.name}]")
+                    # Dim — background work, not Noah-facing communication
+                    print(f"{C['dim']}  [thinking: {block.name}]{C['reset']}")
                     result = execute_tool(block.name, block.input)
                     tool_results.append({
                         "type": "tool_result",
@@ -543,7 +544,8 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
         if finish in ("tool_calls", "tool_use") and msg.tool_calls:
             for tc in msg.tool_calls:
                 _tool_call_count += 1
-                print(f"\n[Oracle → Tool: {tc.function.name}]")
+                # Dim — background work, not Noah-facing communication
+                print(f"{C['dim']}  [thinking: {tc.function.name}]{C['reset']}")
                 try:
                     inp = json.loads(tc.function.arguments)
                 except (json.JSONDecodeError, TypeError):
@@ -1036,7 +1038,7 @@ Hands tools (SOV1 — operates the screen):
                 reply, history = chat_local(client, session_id, system_prompt, history, user_input, model)
             else:
                 reply, history = chat(client, session_id, system_prompt, history, user_input)
-            print(f"\nOracle: {reply}\n")
+            print(f"\n{C['cyan']}Oracle:{C['reset']} {reply}\n")
             speak(reply)
         except Exception as e:
             msg = str(e)
@@ -1047,7 +1049,7 @@ Hands tools (SOV1 — operates the screen):
                 print("\n[Oracle recovered from an interrupted tool call. Retrying...]\n")
                 try:
                     reply, history = chat(client, session_id, system_prompt, history, user_input)
-                    print(f"\nOracle: {reply}\n")
+                    print(f"\n{C['cyan']}Oracle:{C['reset']} {reply}\n")
                     speak(reply)
                     continue
                 except Exception as e2:

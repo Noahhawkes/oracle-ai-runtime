@@ -275,8 +275,8 @@ def show_patch_notes_window(fetch_first: bool = False):
               activebackground="#1a1a2e", activeforeground=FG,
               padx=12, pady=4, cursor="hand2").pack(side=tk.RIGHT)
 
-    # Load notes
-    entries = get_patch_notes(40)
+    # Load notes — show last 15 by default, not 40
+    entries = get_patch_notes(15)
     render(entries)
     if fetch_first and has_remote():
         status_var.set("Fetching latest...")
@@ -284,7 +284,7 @@ def show_patch_notes_window(fetch_first: bool = False):
     else:
         pending = pending_commits()
         if pending:
-            status_var.set(f"{len(pending)} update(s) available.")
+            status_var.set(f"{len(pending)} update(s) available from remote.")
         else:
             status_var.set("Up to date." if has_remote() else "Local build — no remote configured.")
 
