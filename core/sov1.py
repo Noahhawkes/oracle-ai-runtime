@@ -97,7 +97,14 @@ YOUR OPERATING RULES (Noah set these):
    remember_lesson with a short, concrete note (e.g. what to click, what to
    avoid). Those lessons load on every future run so you get faster. Also record
    a lesson when you discover a faster path.
-10. TYPING RULES — READ CAREFULLY:
+10. AUTONOMOUS DECISION MAKING:
+    - You have an ask_oracle tool. Use it when you need context about what ORACLE knows,
+      what the active project is, what is blocked, or what the next recommended step is.
+    - If Noah says "what should I do" or "auto" or gives a vague goal, call ask_oracle
+      first, then act on the recommendation it returns.
+    - ask_oracle never moves the mouse — it only reads ORACLE's state files.
+    - If ask_oracle returns "APPROVAL REQUIRED", stop and tell Noah. Do not act.
+11. TYPING RULES — READ CAREFULLY:
     - NEVER open Notepad as a workaround for typing into Claude, ChatGPT, or any browser.
       If you can't type into an app, stop and report — do not fall back to Notepad.
     - To type into ChatGPT or Claude:  focus_window("ChatGPT") → paste_text("your text")
@@ -124,6 +131,9 @@ RULES:
 4. Use ask_noah only when you genuinely cannot determine what Noah wants.
 5. After each action the screen will be re-observed automatically — do NOT call take_screenshot.
 6. When the goal is complete, call task_done.
+7. If the goal is vague (e.g. "what should I do", "auto", "next step"), call ask_oracle first
+   to get ORACLE's current state and recommendation, then act on the recommendation.
+8. If ask_oracle returns APPROVAL REQUIRED, stop and report — do not act autonomously.
 
 You are decisive and competent. Act on the screen description you are given."""
 
@@ -200,6 +210,9 @@ TOOLS = [
          "path": {"type": "string", "description": "Absolute or relative path to read"},
          "lines": {"type": "integer", "description": "Max number of lines to read (default: all)"}},
          "required": ["path"]}},
+    {"name": "ask_oracle", "description": "Ask ORACLE for its current state and recommended next action. Returns mode, active project, blocker, pending approvals, and exactly one next-step recommendation. Use this to decide what to do autonomously without waiting for Noah.",
+     "input_schema": {"type": "object", "properties": {
+         "question": {"type": "string", "description": "Optional: specific question about state (e.g. 'what is blocked?', 'what should I build next?'). If omitted, returns full state summary."}}}},
 ]
 
 
@@ -336,6 +349,113 @@ def _navigate_address_bar(url: str) -> tuple[str, object]:
     cc.press("enter")
     time.sleep(2.5)   # wait for page to start loading
     return f"Navigated to {url}", _screenshot_block()
+
+
+def _ask_oracle(question: str = "") -> str:
+    """
+    Query ORACLE's live state and return a structured answer SOV1 can act on.
+    Reads Memory JSON files directly — no subprocess, no model call.
+    Returns a plain-text block with mode, project, blocker, queue, and one next action.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    mem = ROOT / "Memory"
+
+    def _rj(p: _Path):
+        try:
+            return _json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+
+    # Session
+    sess = _rj(mem / "session_state.json") or {}
+    mode = sess.get("mode", "UNKNOWN")
+
+    # Project
+    proj_raw = _rj(mem / "project_states.json") or {}
+    if isinstance(proj_raw, dict):
+        states = list(proj_raw.values())
+    elif isinstance(proj_raw, list):
+        states = proj_raw
+    else:
+        states = []
+    states = [s for s in states if isinstance(s, dict)]
+    if states:
+        p = max(states, key=lambda x: x.get("updated_at", ""))
+        project_name   = p.get("project_name", "UNKNOWN")
+        blocker        = p.get("current_blocker", "") or ""
+        next_step      = p.get("next_recommended_step", "") or ""
+        next_reason    = p.get("next_step_reason", "") or ""
+        confidence     = int(p.get("confidence", 0.5) * 100)
+        last_step      = p.get("last_completed_step", "") or ""
+    else:
+        project_name = blocker = next_step = next_reason = last_step = "UNKNOWN"
+        confidence = 0
+
+    # Queue
+    rm_idx = _rj(mem / "remember_me" / "index.json") or {}
+    mem_pending = sum(1 for v in rm_idx.values() if isinstance(v, dict) and v.get("status") == "pending") \
+                  if isinstance(rm_idx, dict) else 0
+    vid_raw = _rj(mem / "video_observation_candidates.json") or []
+    vid_pending = sum(1 for c in vid_raw if isinstance(c, dict) and c.get("status") == "pending")
+    mc_raw = _rj(mem / "mindcoin_ledger.json") or {}
+    mc_events = mc_raw.get("events", [])
+    mc_pending = sum(1 for e in mc_events if isinstance(e, dict) and e.get("approval_status") == "pending")
+
+    # Ollama
+    try:
+        from llm import check_ollama
+        ollama_ok, _ = check_ollama()
+    except Exception:
+        ollama_ok = False
+
+    total_pending = mem_pending + vid_pending
+
+    # One next action (mirror of dashboard logic)
+    if not ollama_ok:
+        action = "ORACLE cannot reason: Ollama is offline. Start Ollama first."
+        approval = False
+    elif mode in ("BLOCKED", "ERROR_RECOVERY"):
+        action = f"Session is in {mode}. Run ACTION_DIAGNOSTIC before anything else."
+        approval = False
+    elif blocker and blocker != "UNKNOWN":
+        action = f"Resolve blocker: {blocker}"
+        approval = False
+    elif total_pending > 0:
+        action = f"Review {total_pending} pending memory/video approval(s) — Noah must approve."
+        approval = True
+    elif next_step and next_step != "UNKNOWN":
+        action = next_step
+        approval = False
+    else:
+        action = "Run continuity export: python core/continuity_export.py --export"
+        approval = False
+
+    q = question.lower().strip()
+    lines = [
+        f"ORACLE STATE — {mode}",
+        f"  Project      : {project_name} (confidence {confidence}%)",
+        f"  Last step    : {last_step[:80]}",
+        f"  Blocker      : {blocker or 'none'}",
+        f"  Pending queue: {mem_pending} memory  {vid_pending} video  {mc_pending} MindCoin",
+        f"  Ollama       : {'running' if ollama_ok else 'OFFLINE'}",
+        "",
+        f"ONE NEXT ACTION{'  [APPROVAL REQUIRED]' if approval else ''}:",
+        f"  {action}",
+    ]
+    if next_reason and not approval and not blocker:
+        lines.append(f"  Reason: {next_reason[:100]}")
+
+    # If a specific question was asked, filter/augment
+    if "block" in q:
+        lines.insert(0, f"[Question: blockers] Blocker = '{blocker or 'none'}'")
+    elif "next" in q or "build" in q:
+        lines.insert(0, f"[Question: next step] → {next_step or 'none recorded'}")
+    elif "pend" in q or "approv" in q:
+        lines.insert(0, f"[Question: pending] {total_pending} items need Noah's approval.")
+
+    return "\n".join(lines)
 
 
 def _run_tool(name, inp):
@@ -598,6 +718,9 @@ def _run_tool(name, inp):
             return f"Contents of {p}:\n{content}", None, None
         except Exception as e:
             return f"read_file failed: {e}", None, None
+
+    if name == "ask_oracle":
+        return _ask_oracle(inp.get("question", "")), None, None
 
     return f"Unknown tool: {name}", None, None
 
@@ -1036,6 +1159,20 @@ def _smoke_test():
     check("_api_status_report: returns string", isinstance(report, str), True)
     check("_api_status_report: contains independence label", "API Independent" in report, True)
 
+    # 9. ask_oracle tool
+    r, _, _ = _run_tool("ask_oracle", {})
+    check("ask_oracle: returns string", isinstance(r, str), True)
+    check("ask_oracle: contains ORACLE STATE", "ORACLE STATE" in r, True)
+    check("ask_oracle: contains ONE NEXT ACTION", "ONE NEXT ACTION" in r, True)
+    check("ask_oracle: contains Project line", "Project" in r, True)
+
+    # ask_oracle with question filter
+    r2, _, _ = _run_tool("ask_oracle", {"question": "what is blocked?"})
+    check("ask_oracle: question 'blocked' adds filter header", "block" in r2.lower(), True)
+
+    r3, _, _ = _run_tool("ask_oracle", {"question": "what should I build next?"})
+    check("ask_oracle: question 'next' adds filter header", "next" in r3.lower() or "build" in r3.lower(), True)
+
     print(f"\n{passed}/{passed+failed} smoke tests passed.")
     if failed:
         print("SOME TESTS FAILED — check output above.")
@@ -1117,6 +1254,45 @@ def main():
         # ── API independence status ───────────────────────────────────────────
         if goal.lower() in ("/api-status", "/api", "api status", "api-status"):
             print(_api_status_report())
+            continue
+
+        # ── Auto: ask ORACLE what to do, then act ────────────────────────────
+        if goal.lower() in ("/auto", "auto", "what should i do", "what next", "/oracle"):
+            oracle_state = _ask_oracle()
+            print(f"\n{oracle_state}\n")
+            # Extract the one next action and hand it to the operator
+            lines = oracle_state.splitlines()
+            action_line = next((l for l in lines if l.strip().startswith("  ") and
+                                not l.strip().startswith("Project") and
+                                not l.strip().startswith("Last") and
+                                not l.strip().startswith("Blocker") and
+                                not l.strip().startswith("Pending") and
+                                not l.strip().startswith("Ollama") and
+                                not l.strip().startswith("Reason") and
+                                "ORACLE STATE" not in l and
+                                "NEXT ACTION" not in l and
+                                "[Question" not in l), "")
+            action = action_line.strip()
+            if not action:
+                print("[AUTO] No actionable step found in ORACLE state.")
+                continue
+            if "APPROVAL REQUIRED" in oracle_state:
+                print(f"[AUTO] Next action requires Noah's approval — not executing automatically.")
+                print(f"       Action: {action}")
+                continue
+            print(f"[AUTO] ORACLE recommends: {action}")
+            print(f"[AUTO] Executing as goal...\n")
+            goal = action
+            _recent_actions.clear()
+            reset_typing_guard()
+            try:
+                if local:
+                    operate_local(client, goal, model)
+                else:
+                    operate(client, goal, model)
+            except Exception as e:
+                log("ERROR", f"SOV1 auto operate failed: {e}")
+                print(f"\n[SOV1 auto hit an error: {e}]\n")
             continue
 
         # ── Safety mode commands ──────────────────────────────────────────────
