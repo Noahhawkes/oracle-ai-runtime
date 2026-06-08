@@ -1541,11 +1541,11 @@ def main():
                 print("\n  Usage: /actuate <window_hint> | <text to type>\n"
                       "  Example: /actuate ChatGPT | Hello from ORACLE\n")
                 continue
+            win_hint, text = [p.strip() for p in raw.split("|", 1)]
             # Optional --no-enter flag: /actuate Claude | text --no-enter
             _no_enter = text.endswith("--no-enter")
             if _no_enter:
                 text = text[: -len("--no-enter")].strip()
-            win_hint, text = win_hint, text
             print(f"\n[actuate] Target window: {win_hint!r}")
             print(f"          Text to inject: {text!r}")
             print(f"          Press Enter  : {'no (--no-enter)' if _no_enter else 'YES — will submit'}")
