@@ -265,7 +265,7 @@ class OracleTUI(App):
                 from oracle import chat
                 reply, ss["history"] = chat(
                     ss["client"], ss["session_id"], ss["system_prompt"],
-                    ss["history"], user_input
+                    ss["history"], user_input, ss["model"]
                 )
             ts = datetime.now().strftime("%H:%M")
             self.post_convo(f"[dim]{ts}[/dim]  [bold cyan]Oracle:[/bold cyan] {reply}")

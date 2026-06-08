@@ -35,26 +35,26 @@ from voice import speak, set_voice_enabled, is_voice_enabled
 MAX_TOKENS = 4096
 MAX_TOOL_CALLS_PER_TURN = 12   # hard cap — stops infinite tool spirals
 
-# ── Local model safe tool list ────────────────────────────────────────────────
-# The 7B local model only gets read-only and memory-query tools.
-# Write, execute, browser, create, install, and actuation tools are stripped
-# to prevent hallucinated success on destructive/irreversible actions.
-_LOCAL_SAFE_TOOL_NAMES = frozenset([
-    "read_file",
-    "list_directory",
-    "recall_facts",
-    "remember_fact",        # candidate only — pending Noah approval
-    "filesystem_search",
-    "filesystem_summary",
-    "source_map_search",
-    "terminal_status",      # read-only status check
-    "ask_oracle",           # reads ORACLE state files, never actuates
+# ── Local model tool tiers ─────────────────────────────────────────────────────
+# READ — always allowed, no confirmation needed
+_LOCAL_READ_TOOLS = frozenset([
+    "read_file", "list_directory", "recall_facts", "filesystem_search",
+    "filesystem_summary", "source_map_search", "terminal_status",
 ])
+# WRITE — allowed but require Noah's explicit approval before execution
+_LOCAL_WRITE_TOOLS = frozenset([
+    "write_file", "remember_fact", "run_shell", "terminal_run",
+    "terminal_cd", "open_app", "run_script",
+])
+_LOCAL_SAFE_TOOL_NAMES = _LOCAL_READ_TOOLS | _LOCAL_WRITE_TOOLS
 
 LOCAL_TOOL_DEFINITIONS = [
     t for t in TOOL_DEFINITIONS
     if t["name"] in _LOCAL_SAFE_TOOL_NAMES
 ]
+
+# Pending approval gate: {tool_name: {input}} waiting for Noah's confirm
+_pending_tool_approval: dict = {}
 
 # ── Hallucination patterns ────────────────────────────────────────────────────
 # Phrases local models emit when they fabricate success without evidence.
@@ -151,6 +151,55 @@ C = {
     "white":   _ansi("97"),
     "grey":    _ansi("90"),
 }
+
+
+def _print_thinking(name: str, inp: dict) -> None:
+    """Print a tool call in the 'thinking' visual style — dim, not Oracle's voice."""
+    preview = ""
+    for key in ("path", "command", "query", "app_name", "text", "content"):
+        val = inp.get(key, "")
+        if val:
+            preview = f"  {str(val)[:60]}"
+            break
+    print(f"{C['grey']}  ◌ {name}{C['reset']}{C['dim']}{preview}{C['reset']}")
+
+
+def _print_thought_result(name: str, result: str) -> None:
+    """Print the result of a tool call — very dim, clipped."""
+    if not result or not result.strip():
+        return
+    first_line = result.strip().splitlines()[0][:80]
+    print(f"{C['dim']}    └ {first_line}{C['reset']}")
+
+
+def _print_oracle_reply(reply: str) -> None:
+    """Print Oracle's reply in a clearly distinct visual block."""
+    W = 68
+    # Word-wrap reply into lines
+    wrapped: list[str] = []
+    for paragraph in reply.splitlines():
+        if not paragraph.strip():
+            wrapped.append("")
+            continue
+        words = paragraph.split()
+        cur = ""
+        for w in words:
+            if len(cur) + len(w) + 1 > W:
+                wrapped.append(cur)
+                cur = w
+            else:
+                cur = (cur + " " + w).strip()
+        if cur:
+            wrapped.append(cur)
+
+    bar = "─" * (W + 2)
+    print()
+    print(f"  {C['cyan']}┌─ Oracle {bar[9:]}┐{C['reset']}")
+    for line in wrapped:
+        padded = line.ljust(W)
+        print(f"  {C['cyan']}│{C['reset']} {padded} {C['cyan']}│{C['reset']}")
+    print(f"  {C['cyan']}└{bar}┘{C['reset']}")
+    print()
 
 
 def _print_slow(text: str, delay: float = 0.018, end: str = "\n"):
@@ -515,12 +564,11 @@ def _repair_history(history):
     return repaired
 
 
-def chat(client, session_id, system_prompt, history, user_input):
+def chat(client, session_id, system_prompt, history, user_input, model="claude-sonnet-4-6"):
     history.append({"role": "user", "content": user_input})
     save_message(session_id, "user", user_input)
     log("INPUT", user_input)
 
-    # Agentic tool-use loop — Oracle keeps going until it produces a final text reply
     _tool_call_count = 0
     while True:
         if _tool_call_count >= MAX_TOOL_CALLS_PER_TURN:
@@ -545,7 +593,7 @@ def chat(client, session_id, system_prompt, history, user_input):
             save_message(session_id, "assistant", reply)
             return reply, history
         response = client.messages.create(
-            model=MODEL,
+            model=model,
             max_tokens=MAX_TOKENS,
             system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
             messages=history,
@@ -556,24 +604,21 @@ def chat(client, session_id, system_prompt, history, user_input):
         history.append({"role": "assistant", "content": response.content})
 
         if response.stop_reason == "tool_use":
-            # Execute each tool call and collect results
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
                     _tool_call_count += 1
-                    # Dim — background work, not Noah-facing communication
-                    print(f"{C['dim']}  [thinking: {block.name}]{C['reset']}")
+                    _print_thinking(block.name, block.input)
                     result = execute_tool(block.name, block.input)
+                    _print_thought_result(block.name, result)
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
                         "content": result,
                     })
             history.append({"role": "user", "content": tool_results})
-            # Loop — let Claude respond to the tool results
             continue
 
-        # stop_reason == "end_turn" — extract the final text reply
         reply = ""
         for block in response.content:
             if hasattr(block, "text"):
@@ -646,22 +691,48 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
             for tc in msg.tool_calls:
                 _tool_call_count += 1
                 tool_name = tc.function.name
-                # Block tools not in the safe list — local model should never call them
+
+                # Block tools outside the safe set entirely
                 if tool_name not in _LOCAL_SAFE_TOOL_NAMES:
                     blocked_msg = (
-                        f"[BLOCKED] Tool '{tool_name}' is not available in local mode. "
-                        f"Write, create, execute, and browser tools require cloud mode."
+                        f"[BLOCKED] Tool '{tool_name}' is not available in local mode."
                     )
-                    print(f"{C['bred']}  [blocked: {tool_name}]{C['reset']}")
+                    print(f"{C['bred']}  ✗ blocked: {tool_name}{C['reset']}")
                     history.append({"role": "tool", "tool_call_id": tc.id, "content": blocked_msg})
                     log("HALLUCINATION_BLOCK", f"local model attempted blocked tool: {tool_name}")
                     continue
-                print(f"{C['dim']}  [thinking: {tool_name}]{C['reset']}")
+
                 try:
                     inp = json.loads(tc.function.arguments)
                 except (json.JSONDecodeError, TypeError):
                     inp = {}
+
+                # Write tools need Noah's explicit approval before execution
+                if tool_name in _LOCAL_WRITE_TOOLS:
+                    print()
+                    print(f"  {C['byellow']}▶ APPROVAL NEEDED{C['reset']}")
+                    print(f"  {C['bold']}Tool   :{C['reset']} {tool_name}")
+                    for key in ("path", "command", "app_name", "text", "content"):
+                        val = inp.get(key, "")
+                        if val:
+                            print(f"  {C['bold']}{key.ljust(7)}:{C['reset']} {str(val)[:100]}")
+                    print(f"\n  Type {C['bold']}approve{C['reset']} to execute or {C['bold']}reject{C['reset']} to cancel: ", end="")
+                    try:
+                        answer = input().strip().lower()
+                    except (EOFError, KeyboardInterrupt):
+                        answer = "reject"
+                    if answer not in ("approve", "yes", "y", "ok", "confirmed"):
+                        rejection = f"[REJECTED] Noah did not approve {tool_name}."
+                        print(f"  {C['grey']}Rejected.{C['reset']}\n")
+                        history.append({"role": "tool", "tool_call_id": tc.id, "content": rejection})
+                        log("APPROVAL_REJECTED", f"Noah rejected local write tool: {tool_name}")
+                        continue
+                    print(f"  {C['bgreen']}Approved.{C['reset']}\n")
+                    log("APPROVAL_GRANTED", f"Noah approved: {tool_name}")
+
+                _print_thinking(tool_name, inp)
                 result = execute_tool(tool_name, inp)
+                _print_thought_result(tool_name, result)
                 _tools_called.append(tool_name)
                 history.append({"role": "tool", "tool_call_id": tc.id, "content": result})
             continue
@@ -1308,27 +1379,26 @@ Hands tools (SOV1 — operates the screen):
             if local:
                 reply, history = chat_local(client, session_id, system_prompt, history, user_input, model)
             else:
-                reply, history = chat(client, session_id, system_prompt, history, user_input)
-            print(f"\n{C['cyan']}Oracle:{C['reset']} {reply}\n")
+                reply, history = chat(client, session_id, system_prompt, history, user_input, model)
+            _print_oracle_reply(reply)
             speak(reply)
         except Exception as e:
             msg = str(e)
             log("ERROR", msg)
-            # Self-heal dangling tool_use/tool_result mismatch (Anthropic cloud error pattern)
             if not local and "tool_use" in msg and "tool_result" in msg:
                 history = _repair_history(history)
                 print("\n[Oracle recovered from an interrupted tool call. Retrying...]\n")
                 try:
-                    reply, history = chat(client, session_id, system_prompt, history, user_input)
-                    print(f"\n{C['cyan']}Oracle:{C['reset']} {reply}\n")
+                    reply, history = chat(client, session_id, system_prompt, history, user_input, model)
+                    _print_oracle_reply(reply)
                     speak(reply)
                     continue
                 except Exception as e2:
                     log("ERROR", f"Retry failed: {e2}")
                     history = []
-                    print("\n[Oracle reset its conversation buffer. Memory is intact. Try again.]\n")
+                    print("\n[Oracle reset her conversation buffer. Memory is intact. Try again.]\n")
             else:
-                print(f"\n[Error: {e}]\n")
+                print(f"\n{C['bred']}  [Error: {e}]{C['reset']}\n")
 
 
 if __name__ == "__main__":
