@@ -41,12 +41,16 @@ _LOCAL_READ_TOOLS = frozenset([
     "read_file", "list_directory", "recall_facts", "filesystem_search",
     "filesystem_summary", "source_map_search", "terminal_status",
 ])
-# WRITE — allowed but require Noah's explicit approval before execution
+# HANDS — SOV1 screen/app control — no approval gate (actuation_engine governs internally)
+_LOCAL_HANDS_TOOLS = frozenset([
+    "open_app", "computer_operator",
+])
+# WRITE — file/shell mutations — require Noah's explicit approval before execution
 _LOCAL_WRITE_TOOLS = frozenset([
     "write_file", "remember_fact", "run_shell", "terminal_run",
-    "terminal_cd", "open_app", "run_script",
+    "terminal_cd", "run_script",
 ])
-_LOCAL_SAFE_TOOL_NAMES = _LOCAL_READ_TOOLS | _LOCAL_WRITE_TOOLS
+_LOCAL_SAFE_TOOL_NAMES = _LOCAL_READ_TOOLS | _LOCAL_HANDS_TOOLS | _LOCAL_WRITE_TOOLS
 
 LOCAL_TOOL_DEFINITIONS = [
     t for t in TOOL_DEFINITIONS
@@ -707,7 +711,8 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
                 except (json.JSONDecodeError, TypeError):
                     inp = {}
 
-                # Write tools need Noah's explicit approval before execution
+                # Hands tools (SOV1) execute directly — actuation_engine governs internally
+                # Write tools (file/shell mutations) need Noah's explicit approval
                 if tool_name in _LOCAL_WRITE_TOOLS:
                     print()
                     print(f"  {C['byellow']}▶ APPROVAL NEEDED{C['reset']}")

@@ -84,8 +84,8 @@ TOOL RULES — READ THIS BEFORE CALLING ANY TOOL
 
 - Maximum 2 tool calls per response. If you need more, stop and report what you found.
 - NEVER call the same tool twice with the same arguments. If it failed once, report the failure.
-- NEVER call open_app to launch "sov1", "claude", or "chatgpt" — that is handled by the bridge.
-- read_file and list_directory: use freely, no confirmation needed.
+- read_file, list_directory: use freely, no confirmation needed.
+- open_app, computer_operator: use freely — SOV1 handles screen actions, no gate needed.
 - run_shell, terminal_run, write_file: ONLY when Noah explicitly says "run", "execute", "write to file".
 - remember_fact: submit candidate only — never store without Noah typing "approve".
 
