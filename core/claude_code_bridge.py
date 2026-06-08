@@ -380,7 +380,7 @@ def open_claude_session(
 
 _CODE_KEYWORDS = {
     # Implementation verbs
-    "implement", "build", "create", "write", "add", "fix", "refactor",
+    "implement", "build", "code", "create", "write", "add", "fix", "refactor",
     "edit", "update", "change", "modify", "delete", "remove", "rename",
     "scaffold", "generate", "deploy", "integrate", "wire up", "hook up",
     # File / code references
@@ -406,6 +406,8 @@ _CLAUDE_DIRECT_PATTERNS = [
     "hand to claude", "into this window", "into the new claude",
     "into the session", "into claude code", "to claude code",
     "for claude", "give claude", "show claude",
+    "with claude", "using claude", "via claude",
+    "code yourself", "code yourself with", "let claude", "have claude",
 ]
 
 
