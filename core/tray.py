@@ -176,6 +176,33 @@ def main():
             _core = str(ROOT / "core")
             if _core not in _sys.path:
                 _sys.path.insert(0, _core)
+
+            # Clear Codex packed-refs.lock if present — it blocks git geometric repack
+            lock = ROOT / ".git" / "packed-refs.lock"
+            try:
+                if lock.exists():
+                    lock.unlink()
+            except Exception:
+                pass
+
+            # Refresh drive scope if stale (>24h) or missing
+            try:
+                import json as _json
+                from datetime import datetime, timezone, timedelta
+                scope_file = ROOT / "Memory" / "drive_scope.json"
+                needs_refresh = True
+                if scope_file.exists():
+                    raw = _json.loads(scope_file.read_text(encoding="utf-8"))
+                    discovered_at = raw.get("discovered_at", "")
+                    if discovered_at:
+                        age = datetime.now(timezone.utc) - datetime.fromisoformat(discovered_at)
+                        needs_refresh = age > timedelta(hours=24)
+                if needs_refresh:
+                    from drive_scope import discover
+                    discover()
+            except Exception:
+                pass
+
             from resident_runtime import run_one_cycle
             run_one_cycle(show_presence=True)
         except Exception:
