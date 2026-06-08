@@ -75,7 +75,40 @@ def scrub_secrets(text: str) -> str:
 # ── Claude Code CLI detection ──────────────────────────────────────────────────
 
 def _claude_exe() -> str | None:
-    return shutil.which("claude")
+    # 1. Standard PATH lookup
+    found = shutil.which("claude")
+    if found:
+        return found
+
+    # 2. Windows npm global install locations — shutil.which misses these when
+    #    Python's subprocess PATH doesn't include AppData\Roaming\npm
+    import os
+    candidates = []
+    appdata = os.environ.get("APPDATA", "")
+    userprofile = os.environ.get("USERPROFILE", "")
+    if appdata:
+        candidates += [
+            os.path.join(appdata, "npm", "claude.cmd"),
+            os.path.join(appdata, "npm", "claude"),
+        ]
+    if userprofile:
+        candidates += [
+            os.path.join(userprofile, "AppData", "Roaming", "npm", "claude.cmd"),
+            os.path.join(userprofile, "AppData", "Local", "npm", "claude.cmd"),
+            os.path.join(userprofile, ".npm-global", "bin", "claude"),
+        ]
+    # Also try nvm / fnm / volta install paths
+    for env_var in ("NVM_HOME", "VOLTA_HOME", "FNM_DIR"):
+        base = os.environ.get(env_var, "")
+        if base:
+            candidates.append(os.path.join(base, "bin", "claude"))
+            candidates.append(os.path.join(base, "bin", "claude.cmd"))
+
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+
+    return None
 
 
 def claude_available() -> bool:
