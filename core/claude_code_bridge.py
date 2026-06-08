@@ -460,6 +460,9 @@ _CLAUDE_DIRECT_PATTERNS = [
     "for claude", "give claude", "show claude",
     "with claude", "using claude", "via claude",
     "code yourself", "code yourself with", "let claude", "have claude",
+    # Screen/hands control — local model cannot do these, bridge handles them
+    "take over", "keyboard", "mouse", "screen control", "take control",
+    "type into", "click on", "move the mouse", "open claude",
 ]
 
 

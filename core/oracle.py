@@ -33,7 +33,7 @@ from llm import is_local, make_client, get_model, to_openai_tools, startup_statu
 from voice import speak, set_voice_enabled, is_voice_enabled
 
 MAX_TOKENS = 4096
-MAX_TOOL_CALLS_PER_TURN = 12   # hard cap — stops infinite tool spirals
+MAX_TOOL_CALLS_PER_TURN = 3    # hard cap — local 7B models loop; keep it tight
 
 # ── Local model tool tiers ─────────────────────────────────────────────────────
 # READ — always allowed, no confirmation needed
