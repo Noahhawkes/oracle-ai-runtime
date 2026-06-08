@@ -104,6 +104,25 @@ def _claude_exe() -> str | None:
             candidates.append(os.path.join(base, "bin", "claude"))
             candidates.append(os.path.join(base, "bin", "claude.cmd"))
 
+    # Claude Code desktop app on Windows bundles claude.exe in a versioned subdir
+    # under %APPDATA%\Claude\claude-code\<version>\claude.exe — glob for latest version
+    if appdata:
+        versioned_base = os.path.join(appdata, "Claude", "claude-code")
+        if os.path.isdir(versioned_base):
+            try:
+                versions = sorted(
+                    [d for d in os.listdir(versioned_base)
+                     if os.path.isdir(os.path.join(versioned_base, d))],
+                    reverse=True,
+                )
+                for v in versions:
+                    exe = os.path.join(versioned_base, v, "claude.exe")
+                    if os.path.isfile(exe):
+                        candidates.insert(0, exe)  # highest priority — known good path
+                        break
+            except Exception:
+                pass
+
     for path in candidates:
         if os.path.isfile(path):
             return path
