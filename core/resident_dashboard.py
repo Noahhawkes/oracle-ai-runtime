@@ -464,14 +464,35 @@ def compute_next_action(state: dict) -> dict:
 
 def _collect_governance() -> dict:
     """
-    Read safety and governance settings. Never approves anything.
-    Reports UNKNOWN for settings not found — never invents values.
+    Read safety and governance settings from core.governance (authoritative source).
+    Falls back to env vars if governance module unavailable.
+    Never approves anything. Never invents values.
     """
     import os
 
-    raw_capture    = os.environ.get("ORACLE_RAW_CAPTURE", "UNKNOWN")
-    approval_req   = os.environ.get("ORACLE_MEMORY_APPROVAL_REQUIRED", "UNKNOWN")
-    local_mode     = os.environ.get("LOCAL_MODE", "true")
+    # Try authoritative governance module first
+    try:
+        import importlib, sys as _sys
+        _gmod = importlib.import_module("governance") if "governance" in _sys.modules else None
+        if _gmod is None:
+            import importlib.util, pathlib as _pl
+            _spec = importlib.util.spec_from_file_location(
+                "governance",
+                _pl.Path(__file__).parent / "governance.py"
+            )
+            _gmod = importlib.util.module_from_spec(_spec)
+            _spec.loader.exec_module(_gmod)
+        raw_capture  = str(_gmod.is_raw_capture_allowed()).lower()
+        approval_req = str(_gmod.is_approval_required()).lower()
+        local_mode   = str(_gmod.is_local_mode_default()).lower()
+        _gov_summary = _gmod.governance_summary()
+        _gov_source  = "governance.py (authoritative)"
+    except Exception:
+        raw_capture  = os.environ.get("ORACLE_RAW_CAPTURE", "UNKNOWN")
+        approval_req = os.environ.get("ORACLE_MEMORY_APPROVAL_REQUIRED", "UNKNOWN")
+        local_mode   = os.environ.get("LOCAL_MODE", "true")
+        _gov_summary = {}
+        _gov_source  = "env vars (governance.py unavailable)"
 
     # Check if raw screenshots are being stored as memory
     presence_log = ROOT / "Memory" / "presence_log.jsonl"
@@ -511,6 +532,8 @@ def _collect_governance() -> dict:
         "auto_approved_events":   auto_approved,
         "presence_log_exists":    presence_log.exists(),
         "oracle_root":            str(detect_root()),
+        "governance_source":      _gov_source,
+        "governance_detail":      _gov_summary,
     }
 
 
@@ -970,19 +993,32 @@ def render_dashboard_html(state: dict) -> str:
     auto_app    = gov.get("auto_approved_events", 0)
     local_m     = gov.get("local_mode", "UNKNOWN")
     oracle_root = gov.get("oracle_root", str(ROOT))
+    gov_src     = gov.get("governance_source", "unknown")
+
+    def _gov_bool_badge(val: str, safe_is_false: bool = True) -> str:
+        """Render a governance bool value as a badge, never UNKNOWN."""
+        if val == "UNKNOWN":
+            return _badge("UNKNOWN", "gray")
+        is_true = str(val).lower() in ("true", "1", "yes")
+        # For raw_capture: safe is false (off). For approval: safe is true (on).
+        safe    = (not is_true) if safe_is_false else is_true
+        color   = "green" if safe else "red"
+        return _badge(str(val), color)
 
     raw_ss_badge  = _badge("NO raw pixels stored", "green") if not raw_ss else _badge("WARNING: raw screenshots in memory", "red")
     appr_badge    = _badge("enforced", "green") if gov.get("candidate_approval_enforced") else _badge("NOT enforced", "red")
     local_badge   = _badge("local (API-independent)", "green") if local_m.lower() in ("true","1","yes") else _badge(f"cloud — LOCAL_MODE={local_m}", "yellow")
     auto_badge    = _badge("none", "green") if auto_app == 0 else _badge(f"{auto_app} auto-approved", "red")
+    src_color     = "green" if "authoritative" in gov_src else "yellow"
+    src_badge     = _badge(gov_src[:45], src_color)
 
     panel_gov = f"""
 <div class="panel full-width">
   <h2>Safety / Governance</h2>
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
     <div>
-      {_row("ORACLE_RAW_CAPTURE",     _esc(raw_cap) if raw_cap != "UNKNOWN" else _badge("UNKNOWN","gray"))}
-      {_row("Approval required",       _esc(appr_req) if appr_req != "UNKNOWN" else _badge("UNKNOWN","gray"))}
+      {_row("Raw capture allowed",    _gov_bool_badge(raw_cap, safe_is_false=True))}
+      {_row("Approval required",       _gov_bool_badge(appr_req, safe_is_false=False))}
       {_row("Candidate approval",      appr_badge)}
       {_row("Auto-approved events",    auto_badge)}
     </div>
@@ -996,7 +1032,7 @@ def render_dashboard_html(state: dict) -> str:
       {_row("ORACLE root",             f'<code style="font-size:10px;color:#7ee787">{_esc(oracle_root[:50])}</code>')}
       {_row("51/49 sovereignty",       _badge("Noah holds 51%", "green"))}
       {_row("Approval gate",           _badge("always active", "green"))}
-      {_row("Irreversible block",      _badge("enforced by code", "green"))}
+      {_row("Settings source",         src_badge)}
     </div>
   </div>
 </div>"""
@@ -1308,7 +1344,8 @@ def print_full_dashboard() -> None:
 
     # 6. Safety / Governance
     section("6. Safety / Governance")
-    row("ORACLE_RAW_CAPTURE",       gov.get("raw_capture_setting", "UNKNOWN"))
+    row("Settings source",          gov.get("governance_source", "UNKNOWN"))
+    row("Raw capture allowed",      gov.get("raw_capture_setting", "UNKNOWN"))
     row("Approval required",        gov.get("approval_required", "UNKNOWN"))
     row("Candidate approval",       "ENFORCED" if gov.get("candidate_approval_enforced") else "NOT ENFORCED")
     row("Auto-approved events",     gov.get("auto_approved_events", 0))
