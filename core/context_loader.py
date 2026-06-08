@@ -174,6 +174,41 @@ PRIORITY:
 
 SOV1.AI holds authority above ORACLE. Noah holds authority above SOV1."""
 
+    # ── Current build state (project continuity) ──────────────────────────────
+    try:
+        from project_state import load_state
+        ps = load_state("ORACLE.AI")
+        if ps and ps.current_phase:
+            build_lines = [
+                "YOUR CURRENT BUILD STATE (ORACLE.AI)",
+                f"Phase           : {ps.current_phase}",
+                f"Last done       : {ps.last_completed_step}",
+                f"Evidence        : {ps.last_completed_evidence}",
+                f"Next step       : {ps.next_recommended_step}",
+                f"Why             : {ps.next_step_reason}",
+            ]
+            if ps.current_blocker:
+                build_lines.append(f"BLOCKER         : {ps.current_blocker}")
+            if ps.lessons_learned:
+                build_lines.append("")
+                build_lines.append("COMPLETED STEPS (verified):")
+                for lesson in ps.lessons_learned:
+                    build_lines.append(f"  {lesson}")
+            sections.append("\n".join(build_lines))
+    except Exception:
+        pass
+
+    # ── Module inventory (what you're made of) ─────────────────────────────────
+    try:
+        core_dir = ROOT / "core"
+        modules = sorted(p.stem for p in core_dir.glob("*.py") if not p.stem.startswith("_"))
+        sections.append(
+            "YOUR CORE MODULES (core/)\n"
+            + "  " + ", ".join(modules)
+        )
+    except Exception:
+        pass
+
     if sections:
         return base + "\n\n" + "\n\n".join(sections)
     return base

@@ -401,8 +401,48 @@ def run_one_cycle(show_presence: bool = True) -> dict:
     })
     _save_runtime_state(state)
 
+    # 6. Update project state so ORACLE knows what she just did
+    _update_project_state(cycle_result)
+
     _log(f"--- Cycle #{cycle_num} complete ---")
     return cycle_result
+
+
+def _update_project_state(cycle_result: dict) -> None:
+    """
+    Write cycle outcome back to project_states.json so ORACLE retains cross-session
+    continuity without Noah having to re-explain context.
+    Never overwrites manually set state — only updates cycle-derived fields.
+    """
+    try:
+        from project_state import load_state, save_state, add_lesson, record_blocker
+        ps = load_state("ORACLE.AI")
+        if ps is None:
+            return
+
+        action = cycle_result.get("action", "")
+        priority = cycle_result.get("priority", "")
+        next_step = cycle_result.get("next_step", "")
+        error = cycle_result.get("error")
+
+        # Surface next_step from oracle_runtime into project state
+        if next_step and next_step != ps.next_recommended_step:
+            ps.next_recommended_step = next_step
+
+        # Record error as a blocker candidate (don't overwrite an existing human-set blocker)
+        if error and not ps.current_blocker:
+            ps.current_blocker = f"Runtime cycle error: {error[:120]}"
+
+        # Add cycle lesson if action contains notable signal
+        if action and any(kw in action.lower() for kw in ("risk", "blocked", "approved", "lesson")):
+            lesson = f"[cycle] {priority}: {action[:100]}"
+            if lesson not in ps.lessons_learned:
+                ps.lessons_learned.append(lesson)
+                ps.lessons_learned = ps.lessons_learned[-40:]  # keep last 40
+
+        save_state(ps)
+    except Exception:
+        pass  # never crash the runtime loop
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────────

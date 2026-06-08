@@ -37,19 +37,49 @@ PROTECTED_FILES = {
 
 # The core modules ORACLE knows about and can reason over
 SELF_MAP = [
-    ("core/oracle.py",            "Main REPL and session loop"),
-    ("core/sov1.py",              "Computer-use operator (SOV1 hands)"),
-    ("core/computer_control.py",  "Low-level mouse/keyboard/window control"),
-    ("core/terminal.py",          "Persistent shell session"),
-    ("core/voice.py",             "TTS voice output"),
-    ("core/memory.py",            "Memory DB and fact storage"),
-    ("core/curiosity_engine.py",  "Governed curiosity and gap detection"),
-    ("core/context_loader.py",    "System prompt and identity loading"),
-    ("core/lootdrop.py",          "Momentum recognition system"),
-    ("core/live_context.py",      "Live operational context tracker"),
-    ("core/integration_gate.py",  "Approval gate for memory candidates"),
-    ("tools/executor.py",         "Tool dispatcher"),
-    ("tools/definitions.py",      "Tool schemas for Claude"),
+    # Core intelligence
+    ("core/oracle.py",               "Main REPL and session loop — primary interface with Noah"),
+    ("core/sov1.py",                 "Computer-use operator (SOV1 hands) — controls screen"),
+    ("core/context_loader.py",       "System prompt and identity loading — what ORACLE knows at startup"),
+    ("core/project_state.py",        "Cross-session build state — last step, next step, blockers, lessons"),
+    ("core/self_build.py",           "Self-build engine — reads codebase, proposes highest-value improvement"),
+    # Governance layer (MYTHIC BUILD PASS Steps 1-7)
+    ("core/governance.py",           "Authoritative safety defaults — SAFE_SLEEP, risk levels, approval rules"),
+    ("core/action_candidates.py",    "Proposal gate — all candidates born pending, approval required"),
+    ("core/approval_center.py",      "Unified approval API — memory, video, MindCoin, candidates, OBS"),
+    ("core/identity_compliance.py",  "Identity and governance compliance enforcement"),
+    # Runtime and presence (Steps 2-4)
+    ("core/resident_runtime.py",     "Heartbeat — the loop that makes ORACLE live on Noah's machine"),
+    ("core/resident_dashboard.py",   "HTML dashboard — live project state, pending approvals, cycle count"),
+    ("core/oracle_presence.py",      "Presence window — what ORACLE is doing right now, shown on boot"),
+    ("core/tray.py",                 "System tray — entry point, boot cycle, self-update, show status"),
+    # Memory and continuity (Steps 8-9)
+    ("core/continuity_scheduler.py", "Backup scheduler — safe local exports, disabled by default"),
+    ("core/continuity_export.py",    "Export builder — governed state snapshots"),
+    ("core/drive_scope.py",          "Drive scope — maps all drives and approved paths on Noah's PC"),
+    ("core/workspace_steward.py",    "Workspace steward — detects messy state, proposes one safe next action"),
+    # Memory and learning
+    ("core/memory.py",               "Memory DB — facts, sessions, messages"),
+    ("core/remember_me.py",          "Memory candidate submission — pending approval before storage"),
+    ("core/mindcoin.py",             "MindCoin ledger — proof-of-meaning, not crypto"),
+    ("core/relationship_memory.py",  "Relationship memory — people ORACLE knows"),
+    ("core/live_context.py",         "Live operational context tracker"),
+    # Computer use and actuation
+    ("core/computer_control.py",     "Low-level mouse/keyboard/window control"),
+    ("core/actuation_engine.py",     "Governed actuation — approval-gated execution"),
+    ("core/window_janitor.py",       "Window inventory and classification"),
+    ("core/terminal.py",             "Persistent shell session"),
+    # Voice and output
+    ("core/voice.py",                "TTS voice output"),
+    # Other intelligence modules
+    ("core/curiosity_engine.py",     "Governed curiosity and gap detection"),
+    ("core/lootdrop.py",             "Momentum recognition system"),
+    ("core/integration_gate.py",     "Approval gate for memory candidates"),
+    ("core/daemon.py",               "Background daemon proposals"),
+    ("core/planner.py",              "Task planning and sequencing"),
+    # Tool infrastructure
+    ("tools/executor.py",            "Tool dispatcher"),
+    ("tools/definitions.py",         "Tool schemas for Claude"),
 ]
 
 _SCAN_PROMPT = """\
