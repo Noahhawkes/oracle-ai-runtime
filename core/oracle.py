@@ -821,6 +821,54 @@ def main():
                 print(f"\n[window-snapshot error: {e}]\n")
             continue
 
+        if user_input.lower().startswith("/video-analyze "):
+            raw_path = user_input[len("/video-analyze "):].strip()
+            print(f"\n[video] Analyzing: {raw_path}")
+            print("  Noah approval required. Type 'yes' to confirm or anything else to cancel.")
+            try:
+                confirm = input("  Approve analysis? ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                confirm = ""
+            if confirm in ("yes", "y", "approve"):
+                try:
+                    from video_intelligence import analyze_video
+                    candidate = analyze_video(raw_path, approved_by_noah=True)
+                    print(f"\n{candidate.full_summary()}\n")
+                    print(f"  Saved as PENDING. Use /video-approve {candidate.id} to approve for recall.\n")
+                    speak(f"Video observation candidate created. Status: pending. ID: {candidate.id[:6]}.")
+                except Exception as e:
+                    log("ERROR", f"/video-analyze failed: {e}")
+                    print(f"\n[video error: {e}]\n")
+            else:
+                print("\n  Analysis cancelled. Noah approval not confirmed.\n")
+            continue
+
+        if user_input.lower() in ("/video-pending", "/video pending"):
+            try:
+                from video_intelligence import list_pending
+                pending = list_pending()
+                if not pending:
+                    print("\n  No pending video candidates.\n")
+                else:
+                    print(f"\n  Pending video candidates ({len(pending)}):\n")
+                    for c in pending:
+                        print(f"    {c.summary_line()}")
+                    print()
+            except Exception as e:
+                print(f"\n[video-pending error: {e}]\n")
+            continue
+
+        if user_input.lower().startswith("/video-approve "):
+            cid = user_input[len("/video-approve "):].strip()
+            try:
+                from video_intelligence import approve_candidate
+                c = approve_candidate(cid, approved_by="Noah")
+                print(f"\n  Approved: {c.summary_line()}\n")
+                speak(f"Video candidate {cid[:6]} approved for recall.")
+            except Exception as e:
+                print(f"\n[video-approve error: {e}]\n")
+            continue
+
         if user_input.lower() in ("/session", "/session-state", "/session-status"):
             try:
                 from session_state import action_diagnostic
@@ -884,6 +932,9 @@ Commands:
   /bridge-chatgpt-status             Show ChatGPT bridge status and pending drafts
   /window-snapshot                   List currently visible windows on the desktop
   /route-task <description>          Route a task to the correct cognitive engine (brain router)
+  /video-analyze <path>              Analyze an approved video file — creates pending candidate
+  /video-pending                     List pending video observation candidates
+  /video-approve <id>                Approve a video candidate for recall
   /session                           Show full session state diagnostic (mode, prompt, tool history)
   ACTION_DIAGNOSTIC                  Real structured diagnostic (not prose) — mode, prompt, tool calls, recovery hint
   CLEAR_PROMPT                       Clear any active terminal prompt (stop prompt hijacking)
