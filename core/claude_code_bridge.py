@@ -21,6 +21,7 @@ Usage:
     from claude_code_bridge import ask_claude, type_into_claude, open_claude_session, is_code_task
 """
 
+import re
 import subprocess
 import sys
 import shutil
@@ -42,6 +43,33 @@ _CLAUDE_TITLE_FRAGMENTS = [
 ]
 # We narrow by title AND by checking if the process is running `claude`
 _CLAUDE_PROCESS_NAMES = {"node.exe", "claude.exe", "claude"}
+
+
+# ── Secret scanner ────────────────────────────────────────────────────────────
+
+_SECRET_PATTERNS = [
+    r"sk-[A-Za-z0-9]{20,}",                      # OpenAI / Anthropic keys
+    r"api[_\-]?key\s*[=:]\s*\S+",                # api_key = ...
+    r"secret\s*[=:]\s*\S{6,}",                   # secret = ...
+    r"password\s*[=:]\s*\S{4,}",                 # password = ...
+    r"token\s*[=:]\s*[A-Za-z0-9\-._~+/]{20,}",  # token = long_value
+    r"bearer\s+[A-Za-z0-9\-._~+/]{20,}",         # Bearer <token>
+]
+
+
+def contains_secret(text: str) -> bool:
+    """Return True if text appears to contain a credential or secret pattern."""
+    for pat in _SECRET_PATTERNS:
+        if re.search(pat, text, re.IGNORECASE):
+            return True
+    return False
+
+
+def scrub_secrets(text: str) -> str:
+    """Replace secret patterns with [REDACTED]."""
+    for pat in _SECRET_PATTERNS:
+        text = re.sub(pat, "[REDACTED]", text, flags=re.IGNORECASE)
+    return text
 
 
 # ── Claude Code CLI detection ──────────────────────────────────────────────────
@@ -351,18 +379,45 @@ def open_claude_session(
 # ── Code-task classifier ───────────────────────────────────────────────────────
 
 _CODE_KEYWORDS = {
+    # Implementation verbs
     "implement", "build", "create", "write", "add", "fix", "refactor",
     "edit", "update", "change", "modify", "delete", "remove", "rename",
-    "core/", ".py", "file", "function", "class", "module", "import",
-    "step ", "mythic", "voice_hooks", "voice.py", "oracle.py", "tui",
+    "scaffold", "generate", "deploy", "integrate", "wire up", "hook up",
+    # File / code references
+    "core/", ".py", ".ts", ".js", ".json", "file", "function", "class",
+    "module", "import", "endpoint", "route", "schema", "database", "api",
+    # Build pass / MYTHIC references
+    "step ", "mythic", "build pass", "handoff", "hand off", "hand-off",
+    "voice_hooks", "voice.py", "oracle.py", "tui", "oracle_tui",
+    # Architecture / design
+    "architecture", "design", "pattern", "structure", "refactor", "plan",
+    # Question patterns about code
     "does ", "where is", "what file", "how does", "explain the code",
-    "check if", "look at", "read the", "find the",
+    "check if", "look at", "read the", "find the", "show me the",
+    "what does", "why does", "how is", "what is the",
+    # Action patterns often directed at code work
+    "paste", "inject", "insert", "send this", "post this",
 }
+
+# Phrases that mean the user or ORACLE is directly addressing Claude Code
+_CLAUDE_DIRECT_PATTERNS = [
+    "into claude", "into the claude", "tell claude", "ask claude",
+    "paste this into", "paste into", "send to claude", "hand off to claude",
+    "hand to claude", "into this window", "into the new claude",
+    "into the session", "into claude code", "to claude code",
+    "for claude", "give claude", "show claude",
+]
+
+
+def is_claude_directed(text: str) -> bool:
+    """Return True if the message is explicitly addressed to / directed at Claude Code."""
+    lower = text.lower()
+    return any(p in lower for p in _CLAUDE_DIRECT_PATTERNS)
 
 
 def is_code_task(text: str) -> bool:
     lower = text.lower()
-    return any(kw in lower for kw in _CODE_KEYWORDS)
+    return is_claude_directed(text) or any(kw in lower for kw in _CODE_KEYWORDS)
 
 
 # ── Prompt builder ─────────────────────────────────────────────────────────────

@@ -34,6 +34,25 @@ MEM = ROOT / "Memory"
 
 _NOW = lambda: datetime.now(timezone.utc).isoformat()
 
+# ── Secret guard ───────────────────────────────────────────────────────────────
+
+def _contains_secret(text: str) -> bool:
+    """Return True if text contains a credential/secret pattern."""
+    try:
+        from claude_code_bridge import contains_secret
+        return contains_secret(text)
+    except Exception:
+        import re
+        _PATS = [
+            r"sk-[A-Za-z0-9]{20,}", r"api[_\-]?key\s*[=:]\s*\S+",
+            r"secret\s*[=:]\s*\S{6,}", r"password\s*[=:]\s*\S{4,}",
+            r"token\s*[=:]\s*[A-Za-z0-9\-._~+/]{20,}",
+        ]
+        for p in _PATS:
+            if re.search(p, text, re.IGNORECASE):
+                return True
+        return False
+
 # ── Source loaders ─────────────────────────────────────────────────────────────
 
 def _rj(p: Path):
@@ -182,6 +201,22 @@ def _approve_memory(candidate_id: str, approved_by: str) -> bool:
     idx_path = MEM / "remember_me" / "index.json"
     idx = _rj(idx_path)
     if not isinstance(idx, dict) or candidate_id not in idx:
+        return False
+    entry = idx[candidate_id]
+    # Block approval if candidate text contains secret/credential patterns
+    candidate_text = " ".join([
+        str(entry.get("summary", "")),
+        str(entry.get("content", "")),
+        str(entry.get("title", "")),
+    ])
+    if _contains_secret(candidate_text):
+        idx[candidate_id]["status"] = "rejected"
+        idx[candidate_id]["rejection_reason"] = (
+            "AUTO-BLOCKED: candidate content matched secret/credential pattern "
+            "(sk-, api_key, token, password, secret). Approve manually after review."
+        )
+        idx[candidate_id]["rejected_at"] = _NOW()
+        _wj(idx_path, idx)
         return False
     idx[candidate_id]["status"] = "approved"
     idx[candidate_id]["approved_by"] = approved_by
@@ -339,7 +374,8 @@ def _cli_list() -> None:
     print(f"{'='*60}")
     for item in items:
         risk = f"  risk={item['risk_level']}" if "risk_level" in item else ""
-        print(f"  [{item['source'].upper():16}] {item['id'][:8]}  {item['title']}{risk}")
+        secret_flag = "  [⚠ SECRET PATTERN DETECTED]" if _contains_secret(item.get("title", "")) else ""
+        print(f"  [{item['source'].upper():16}] {item['id'][:8]}  {item['title']}{risk}{secret_flag}")
     print()
 
 

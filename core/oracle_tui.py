@@ -88,6 +88,22 @@ def _strip_ansi(text: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
+# Patterns that suggest the local model generated implementation code rather than
+# routing to Claude Code.  If these appear in a local-model reply, we intercept.
+_IMPL_RESPONSE_PATTERNS = [
+    "def ", "class ", "```python", "```\npython", "```\r\npython",
+    "voice_hooks.py", "core/voice", "i'll create", "i'll implement",
+    "here's the implementation", "i'll write", "i'll add", "i'll build",
+    "i'll generate", "touch core/", "mkdir", "pip install",
+    "## step", "# step 1", "# step 2",
+]
+
+
+def _is_implementation_response(text: str) -> bool:
+    lower = text.lower()
+    return any(p.lower() in lower for p in _IMPL_RESPONSE_PATTERNS)
+
+
 # ── TUI App ───────────────────────────────────────────────────────────────────
 
 CSS = """
@@ -268,17 +284,32 @@ class OracleTUI(App):
         ts = datetime.now().strftime("%H:%M")
         self.post_convo(f"[dim]{ts}[/dim]  [bold white]You:[/bold white] {text}")
 
-        # Auto-route code tasks to Claude Code, everything else to local model
+        # Auto-route code / Claude-directed tasks BEFORE local model — two tiers:
+        #   1. is_claude_directed: message explicitly addressed to Claude Code
+        #   2. is_code_task: implementation, build, architecture, file questions
+        # Both route to Claude Code; local model never sees implementation requests.
         try:
-            from claude_code_bridge import is_code_task
+            from claude_code_bridge import is_claude_directed, is_code_task
+            if is_claude_directed(text):
+                self.post_convo(
+                    f"[dim]{ts}[/dim]  [bold green]↗ Routing to Claude Code…[/bold green]"
+                )
+                self.post_think("▶ Claude-directed message — routing to Claude Code…")
+                threading.Thread(
+                    target=self._type_into_claude, args=(text,), daemon=True
+                ).start()
+                return
             if is_code_task(text):
+                self.post_convo(
+                    f"[dim]{ts}[/dim]  [bold green]↗ Routing to Claude Code…[/bold green]"
+                )
                 self.post_think("▶ code task — handing off to Claude Code…")
                 threading.Thread(
                     target=self._type_into_claude, args=(text,), daemon=True
                 ).start()
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            self.post_think(f"[WARN] claude_code_bridge routing error: {e} — falling back to local model")
 
         # Send to ORACLE in background thread
         threading.Thread(target=self._chat, args=(text,), daemon=True).start()
@@ -300,6 +331,22 @@ class OracleTUI(App):
                     ss["history"], user_input, ss["model"]
                 )
             ts = datetime.now().strftime("%H:%M")
+
+            # Post-LLM guard: if local model produced implementation code, intercept
+            # and re-route to Claude Code rather than displaying hallucinated stubs.
+            if _is_implementation_response(reply):
+                self.post_convo(
+                    f"[dim]{ts}[/dim]  [yellow]⚠ Local model attempted implementation — "
+                    f"re-routing to Claude Code.[/yellow]"
+                )
+                self.post_think(
+                    "▶ post-LLM guard: implementation response detected — routing to Claude Code"
+                )
+                threading.Thread(
+                    target=self._ask_claude_code, args=(user_input,), daemon=True
+                ).start()
+                return
+
             self.post_convo(f"[dim]{ts}[/dim]  [bold cyan]Oracle:[/bold cyan] {reply}")
             # Voice
             try:
@@ -314,9 +361,15 @@ class OracleTUI(App):
     def _ask_claude_code(self, prompt: str) -> None:
         """Non-interactive ask — runs claude -p and shows the answer inline."""
         try:
-            from claude_code_bridge import ask_claude
+            from claude_code_bridge import ask_claude, contains_secret, scrub_secrets
             ok, reply = ask_claude(prompt)
             ts = datetime.now().strftime("%H:%M")
+            if contains_secret(reply):
+                self.post_convo(
+                    f"[dim]{ts}[/dim]  [bold red]⚠ Response contained secret pattern "
+                    f"(sk-, api_key, token, password) — redacted before display.[/bold red]"
+                )
+                reply = scrub_secrets(reply)
             label = "[bold green]Claude Code:[/bold green]" if ok else "[bold red]Claude Code error:[/bold red]"
             self.post_convo(f"[dim]{ts}[/dim]  {label} {reply}")
             try:
