@@ -75,6 +75,24 @@ def scrub_secrets(text: str) -> str:
 # ── Claude Code CLI detection ──────────────────────────────────────────────────
 
 def _claude_exe() -> str | None:
+    import os
+
+    # 0. Known installed path on this machine — checked first, version-scanned
+    _known_base = r"C:\Users\noahh\AppData\Roaming\Claude\claude-code"
+    if os.path.isdir(_known_base):
+        try:
+            versions = sorted(
+                [d for d in os.listdir(_known_base)
+                 if os.path.isdir(os.path.join(_known_base, d))],
+                reverse=True,
+            )
+            for v in versions:
+                exe = os.path.join(_known_base, v, "claude.exe")
+                if os.path.isfile(exe):
+                    return exe
+        except Exception:
+            pass
+
     # 1. Standard PATH lookup
     found = shutil.which("claude")
     if found:
