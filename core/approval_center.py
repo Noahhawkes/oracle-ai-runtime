@@ -77,12 +77,19 @@ def _pending_memory() -> list[dict]:
     out = []
     for key, v in idx.items():
         if isinstance(v, dict) and v.get("status") == "pending":
+            candidate_text = " ".join([
+                str(v.get("summary", "")),
+                str(v.get("content", "")),
+                str(v.get("title", "")),
+                str(v.get("value", "")),
+            ])
             out.append({
                 "source": "memory",
                 "id": key,
                 "title": v.get("summary", key)[:80],
                 "status": "pending",
                 "created_at": v.get("created_at", ""),
+                "sensitive_flag": _contains_secret(candidate_text),
             })
     return out
 
@@ -299,11 +306,33 @@ def _reject_mindcoin(candidate_id: str, reason: str) -> bool:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+def _is_secret_candidate(candidate_id: str) -> bool:
+    """Return True if ANY source's candidate with this id contains secret patterns."""
+    # Check memory index
+    idx = _rj(MEM / "remember_me" / "index.json") or {}
+    if isinstance(idx, dict) and candidate_id in idx:
+        v = idx[candidate_id]
+        text = " ".join([str(v.get(k, "")) for k in ("summary", "content", "title", "value")])
+        if _contains_secret(text):
+            return True
+    return False
+
+
 def approve(candidate_id: str, source: str = "", approved_by: str = "noah") -> dict:
     """
     Approve a candidate by id. source is optional; if not given, all sources
     are tried in order. Returns {"ok": bool, "source": str, "id": str}.
+    Secret-containing candidates are auto-rejected and cannot be approved.
     """
+    # Hard block: secret pattern present — auto-reject and refuse approval
+    if _is_secret_candidate(candidate_id):
+        reject(candidate_id, source=source or "memory",
+               reason="AUTO-BLOCKED: secret pattern detected — approval impossible")
+        return {
+            "ok": False, "id": candidate_id,
+            "error": "[BLOCKED] Item contains a secret/credential pattern and cannot be approved. It has been auto-rejected.",
+        }
+
     sources_to_try = [source] if source else ["action_candidate", "memory", "video", "mindcoin", "obs"]
     for src in sources_to_try:
         if src == "action_candidate":

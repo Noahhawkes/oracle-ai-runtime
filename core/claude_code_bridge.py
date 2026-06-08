@@ -172,15 +172,35 @@ def _audit(action: str, detail: str = ""):
 
 # ── Window finder ──────────────────────────────────────────────────────────────
 
+def _hwnd_for_pid(pid: int):
+    """Return the first top-level visible HWND for a given PID via EnumWindows."""
+    try:
+        import ctypes
+        result = []
+        lp_pid = ctypes.c_ulong()
+
+        def _cb(hwnd, _):
+            ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(lp_pid))
+            if lp_pid.value == pid and ctypes.windll.user32.IsWindowVisible(hwnd):
+                result.append(hwnd)
+            return True
+
+        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
+        ctypes.windll.user32.EnumWindows(WNDENUMPROC(_cb), 0)
+        return result[0] if result else None
+    except Exception:
+        return None
+
+
 def find_claude_window() -> dict | None:
     """
-    Search open windows for a Claude Code terminal session.
+    Search open windows for a running Claude Code session.
 
-    Strategy:
-      1. pywinauto UIA — find windows whose title contains 'claude'
-      2. pygetwindow fallback — same title scan
-      3. If no title match, look for any terminal window running node.exe
-         (the Claude Code process tree) via psutil
+    Strategy (first match wins):
+      1. pywinauto UIA  — title contains 'claude'
+      2. pygetwindow    — title contains 'claude'
+      3. psutil Claude.exe — Electron main process (Windows Store / desktop app)
+      4. psutil node.exe  — bundled Node worker whose cmdline mentions claude
 
     Returns a dict with title/handle/method, or None.
     """
@@ -192,11 +212,8 @@ def find_claude_window() -> dict | None:
             try:
                 title = (win.window_text() or "").lower()
                 if "claude" in title:
-                    return {
-                        "title": win.window_text(),
-                        "handle": win.handle,
-                        "method": "pywinauto_title",
-                    }
+                    return {"title": win.window_text(), "handle": win.handle,
+                            "method": "pywinauto_title"}
             except Exception:
                 pass
     except Exception:
@@ -206,53 +223,39 @@ def find_claude_window() -> dict | None:
     try:
         import pygetwindow as gw
         for w in gw.getAllWindows():
-            if "claude" in w.title.lower():
-                return {
-                    "title": w.title,
-                    "handle": getattr(w, "_hWnd", 0),
-                    "method": "pygetwindow_title",
-                }
+            if "claude" in (w.title or "").lower():
+                return {"title": w.title, "handle": getattr(w, "_hWnd", 0),
+                        "method": "pygetwindow_title"}
     except Exception:
         pass
 
-    # 3. psutil: find a terminal whose child is node (Claude Code runs on Node)
+    # 3 & 4. psutil — scan running processes
     try:
-        import psutil
-        import ctypes
-
-        def get_window_for_pid(pid: int) -> int | None:
-            """Return the top-level HWND for a given PID, or None."""
-            result = []
-
-            def callback(hwnd, _):
-                _, wpid = ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(ctypes.c_ulong()))
-                # GetWindowThreadProcessId second arg needs to be a pointer
-                lp_pid = ctypes.c_ulong()
-                ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(lp_pid))
-                if lp_pid.value == pid:
-                    result.append(hwnd)
-                return True
-
-            WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
-            ctypes.windll.user32.EnumWindows(WNDENUMPROC(callback), 0)
-            return result[0] if result else None
-
+        import psutil, ctypes
         for proc in psutil.process_iter(["pid", "name", "cmdline"]):
             try:
-                name = (proc.info["name"] or "").lower()
+                pname = (proc.info["name"] or "").lower()
                 cmdline = " ".join(proc.info["cmdline"] or []).lower()
-                if name == "node.exe" and "claude" in cmdline:
+
+                # Strategy 3: Claude.exe Electron main process
+                if pname in ("claude.exe", "claude"):
+                    hwnd = _hwnd_for_pid(proc.pid)
+                    if hwnd:
+                        buf = ctypes.create_unicode_buffer(512)
+                        ctypes.windll.user32.GetWindowTextW(hwnd, buf, 512)
+                        return {"title": buf.value or "Claude", "handle": hwnd,
+                                "method": "psutil_claude_exe"}
+
+                # Strategy 4: node.exe worker launched by Claude Code
+                if pname == "node.exe" and "claude" in cmdline:
                     parent = proc.parent()
-                    if parent:
-                        hwnd = get_window_for_pid(parent.pid)
-                        if hwnd:
-                            buf = ctypes.create_unicode_buffer(512)
-                            ctypes.windll.user32.GetWindowTextW(hwnd, buf, 512)
-                            return {
-                                "title": buf.value or f"Terminal (PID {parent.pid})",
-                                "handle": hwnd,
-                                "method": "psutil_node_parent",
-                            }
+                    target = parent if parent else proc
+                    hwnd = _hwnd_for_pid(target.pid)
+                    if hwnd:
+                        buf = ctypes.create_unicode_buffer(512)
+                        ctypes.windll.user32.GetWindowTextW(hwnd, buf, 512)
+                        return {"title": buf.value or f"Claude (PID {target.pid})",
+                                "handle": hwnd, "method": "psutil_node_parent"}
             except Exception:
                 pass
     except Exception:
@@ -311,59 +314,81 @@ def type_into_claude(
     open_if_missing: bool = True,
 ) -> tuple[bool, str]:
     """
-    Find the live Claude Code terminal window and type `prompt` into it,
-    then press Enter — as if Noah had typed it himself.
+    Deliver `prompt` to the running Claude Code session.  Three tiers:
 
-    Governed:
-      - SAFE_SLEEP blocks all typing.
-      - Every injection is audit-logged.
-      - pyautogui failsafe is active (mouse to corner = abort).
+    Tier 1 — Window injection (preferred):
+        Find the running Claude Code window → focus it → paste prompt via
+        clipboard → press Enter.  Requires pyautogui + pyperclip.
 
-    If no Claude Code window is found and open_if_missing=True, a new
-    session is launched first.
+    Tier 2 — Launch + handoff:
+        No window found but `open_if_missing=True` → launch via desktop
+        shortcut → save prompt to handoff file → tell Noah to paste it.
 
-    Returns (success, detail).
+    Tier 3 — CLAUDE UNAVAILABLE:
+        Neither works → return False with [CLAUDE UNAVAILABLE] label and
+        the exact prompt text for Noah to paste manually.
+
+    Governed: SAFE_SLEEP blocks all typing.
+    Returns (success, detail_string).
     """
     if _is_safe_sleep():
         return False, "SAFE_SLEEP active — autonomous typing blocked."
 
     _audit("type_into_claude", f"prompt[:60]={prompt[:60]!r}")
+    full = _build_prompt(prompt, context)
 
+    # ── Tier 1: find window and inject ───────────────────────────────────────
     win = find_claude_window()
+    if win is not None:
+        if _focus_window(win):
+            try:
+                import pyautogui
+                try:
+                    import pyperclip
+                    pyperclip.copy(full)
+                    time.sleep(0.25)
+                    pyautogui.hotkey("ctrl", "v")
+                except Exception:
+                    pyautogui.typewrite(full[:500], interval=0.02)
+                time.sleep(0.2)
+                pyautogui.press("enter")
+                _audit("type_into_claude", f"[CLAUDE DESKTOP] injected into '{win.get('title')}'")
+                return True, f"[CLAUDE DESKTOP] Message delivered to '{win.get('title')}'."
+            except Exception as e:
+                _audit("type_into_claude", f"pyautogui failed: {e}")
+                # fall through to tier 2
+        # Focus failed — fall through
 
-    if win is None:
-        if open_if_missing:
-            ok, detail = open_claude_session(prompt, context)
-            if ok:
-                _audit("type_into_claude", "opened new session instead of typing")
-            return ok, detail
-        return False, "No Claude Code window found and open_if_missing=False."
-
-    # Focus the window
-    if not _focus_window(win):
-        return False, f"Could not focus Claude Code window: {win.get('title')}"
-
-    # Use pyautogui to type the message
-    try:
-        import pyautogui
-        full = _build_prompt(prompt, context)
-
-        # Use clipboard for multi-line / long messages — avoids key-repeat issues
+    # ── Tier 2: launch app and save handoff ──────────────────────────────────
+    if open_if_missing:
+        import os as _os
+        handoff_saved = False
         try:
-            import pyperclip
-            pyperclip.copy(full)
-            time.sleep(0.2)
-            pyautogui.hotkey("ctrl", "v")
+            tmp = ROOT / "Memory" / "_claude_handoff.txt"
+            tmp.parent.mkdir(parents=True, exist_ok=True)
+            tmp.write_text(full, encoding="utf-8")
+            handoff_saved = True
         except Exception:
-            # Fallback: typewrite (ASCII-safe only)
-            pyautogui.typewrite(full[:500], interval=0.02)
+            pass
 
-        time.sleep(0.15)
-        pyautogui.press("enter")
-        _audit("type_into_claude", f"typed and submitted to '{win.get('title')}'")
-        return True, f"Message delivered to Claude Code window '{win.get('title')}'."
-    except Exception as e:
-        return False, f"pyautogui error: {e}"
+        if _os.path.exists(_CLAUDE_DESKTOP_SHORTCUT):
+            try:
+                _os.startfile(_CLAUDE_DESKTOP_SHORTCUT)
+                _audit("type_into_claude", "[CLAUDE DESKTOP] launched via shortcut")
+                msg = "[CLAUDE DESKTOP] Claude Code opened."
+                if handoff_saved:
+                    msg += f" Handoff saved to Memory/_claude_handoff.txt — paste it when Claude loads."
+                return True, msg
+            except Exception as e:
+                pass
+
+    # ── Tier 3: unavailable — give Noah the exact prompt to paste ────────────
+    _audit("type_into_claude", "[CLAUDE UNAVAILABLE] no window, no shortcut")
+    manual = (
+        f"[CLAUDE UNAVAILABLE] Could not reach Claude Code automatically.\n"
+        f"Open Claude Code manually and paste this:\n\n{full}"
+    )
+    return False, manual
 
 
 # ── Non-interactive subprocess ask ────────────────────────────────────────────

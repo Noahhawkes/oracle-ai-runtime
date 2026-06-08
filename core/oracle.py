@@ -74,6 +74,55 @@ def _classify_terminal_command(cmd: str) -> tuple[bool, str]:
             return False, f"Dangerous pattern '{pat}' detected in command."
     return True, ""
 
+
+# ── Paste / log dump detection ─────────────────────────────────────────────────
+# Indicators that the user pasted terminal output instead of typing a command.
+_LOG_FRAGMENTS = [
+    "██", "╗", "╚", "║", "═",               # ASCII art box drawing
+    "[LOCAL MODE]", "[ORACLE]", "[GOVERNANCE]",
+    "ollama already running", "pull command: ollama",
+    "sovereign operator layer", "mode        local",
+    "vision      ready", "sov1        hands",
+    "memory      connected", "oracle boot cycle",
+    "──────────────────", "last session:",
+    "good morning,", "good afternoon,", "good evening,",
+]
+_LOG_THRESHOLD = 4   # lines that match before we classify as a paste dump
+
+
+def _detect_pasted_log(text: str) -> bool:
+    """Return True if text looks like pasted ORACLE terminal output, not a command."""
+    lines = text.splitlines()
+    if len(lines) < 3:
+        return False
+    lower = text.lower()
+    hits = sum(1 for frag in _LOG_FRAGMENTS if frag.lower() in lower)
+    return hits >= _LOG_THRESHOLD
+
+
+def _summarize_pasted_log(text: str) -> str:
+    """Extract errors and status from a pasted log dump — brief diagnostic."""
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    errors = [l for l in lines if any(
+        k in l.lower() for k in ("error", "fail", "not found", "traceback", "exception", "blocked", "unavailable")
+    )]
+    status_lines = [l for l in lines if any(
+        k in l.lower() for k in ("ollama", "mode", "vision", "sov1", "memory", "pending", "routing", "claude code")
+    )][:6]
+    out = ["[DIAGNOSTIC] Pasted log detected — not routing as commands."]
+    if errors:
+        out.append(f"  Errors found ({len(errors)}):")
+        for e in errors[:5]:
+            out.append(f"    • {e[:100]}")
+    if status_lines:
+        out.append(f"  Status lines:")
+        for s in status_lines[:4]:
+            out.append(f"    {s[:100]}")
+    if not errors and not status_lines:
+        out.append(f"  {len(lines)} lines captured. No errors detected.")
+    out.append("  Type a command or question to continue.")
+    return "\n".join(out)
+
 LOCAL_TOOL_DEFINITIONS = [
     t for t in TOOL_DEFINITIONS
     if t["name"] in _LOCAL_SAFE_TOOL_NAMES
@@ -833,7 +882,8 @@ def main():
     _ctx = get_live_context()
     _ctx.set_task("Interactive session")
 
-    _last_pending_ids: list = []   # populated by /pending, consumed by approve/reject
+    _last_pending_ids: list = []           # populated by /pending, consumed by approve/reject
+    _last_pending_secret_flags: list[bool] = []  # parallel list — True = secret-blocked
 
     banner(identity)
     log("SESSION_START", f"Session {session_id} started")
@@ -874,6 +924,17 @@ def main():
             break
 
         if not user_input:
+            continue
+
+        # ── Paste / log-dump detection — must be first intercept ─────────────
+        # If Noah pastes ORACLE terminal output, don't route each line as a command.
+        if _detect_pasted_log(user_input):
+            summary = _summarize_pasted_log(user_input)
+            print(f"\n  {C['byellow']}[DIAGNOSTIC]{C['reset']}")
+            for line in summary.splitlines():
+                print(f"  {line}")
+            print()
+            log("PASTE_DETECT", f"pasted log detected ({len(user_input)} chars)")
             continue
 
         # ── Session State Controller — intercept BEFORE any LLM or tool call ──
@@ -989,8 +1050,13 @@ def main():
 
         if user_input.lower() in ("/pending", "/pending-candidates"):
             from approval_center import list_pending as ac_list_pending
+            try:
+                from claude_code_bridge import contains_secret
+            except Exception:
+                contains_secret = lambda t: False
             candidates = ac_list_pending()
             _last_pending_ids.clear()
+            _last_pending_secret_flags: list[bool] = []
             if not candidates:
                 print("\n  No pending candidates.\n")
             else:
@@ -1002,12 +1068,19 @@ def main():
                     value    = str(c.get("value", c.get("rendered_value", "")))[:80]
                     conf     = str(c.get("confidence", "?")).upper()
                     cid      = c.get("id", "?")
-                    flag     = " [SENSITIVE]" if c.get("sensitive_flag") else ""
+                    title_text = c.get("title", "") + " " + value
+                    is_secret = c.get("sensitive_flag") or contains_secret(title_text)
+                    if is_secret:
+                        flag = f" {C['bred']}[⚠ SECRET — BLOCKED]{C['reset']}"
+                    else:
+                        flag = ""
                     print(f"  [{i+1}] [{conf}] {source} | {category}/{key}{flag}")
                     print(f"    Value  : {value}")
                     print(f"    ID     : {cid}")
                     _last_pending_ids.append(cid)
+                    _last_pending_secret_flags.append(is_secret)
                 print(f"\n  approve / reject / approve 2 / reject 2 …\n")
+                print(f"  {C['grey']}Secret-flagged items cannot be approved. Reject them.{C['reset']}\n")
             continue
 
         # ── Natural language approve / reject pending items ────────────────────
@@ -1033,6 +1106,20 @@ def main():
             idx = max(0, min(idx, len(_last_pending_ids) - 1))
             target_id = _last_pending_ids[idx]
 
+            # ── Secret hard block — cannot approve sensitive items ────────────
+            is_secret = (
+                idx < len(_last_pending_secret_flags)
+                and _last_pending_secret_flags[idx]
+            )
+            if _approve_match and is_secret:
+                print(
+                    f"\n  {C['bred']}[BLOCKED]{C['reset']} This item contains a secret pattern "
+                    f"(sk-, api_key, token, password).\n"
+                    f"  It cannot be approved. Type {C['bold']}reject {idx+1}{C['reset']} to discard it.\n"
+                )
+                log("SECRET_APPROVE_BLOCKED", f"blocked approve of secret item {target_id[:8]}")
+                continue
+
             try:
                 from approval_center import approve as ac_approve, reject as ac_reject
                 if _approve_match:
@@ -1040,11 +1127,15 @@ def main():
                     print(f"\n  {C['bgreen']}Approved{C['reset']} — {target_id[:8]}\n")
                     speak("Approved.")
                     _last_pending_ids.pop(idx)
+                    if idx < len(_last_pending_secret_flags):
+                        _last_pending_secret_flags.pop(idx)
                 else:
                     ac_reject(target_id, reason="Noah rejected via REPL")
                     print(f"\n  {C['yellow']}Rejected{C['reset']} — {target_id[:8]}\n")
                     speak("Rejected.")
                     _last_pending_ids.pop(idx)
+                    if idx < len(_last_pending_secret_flags):
+                        _last_pending_secret_flags.pop(idx)
             except Exception as e:
                 print(f"\n  [approval error: {e}]\n")
             continue
@@ -1444,10 +1535,25 @@ Hands tools (SOV1 — operates the screen):
                 log("ROUTING", f"code task → Claude Code: {user_input[:80]}")
                 ok, detail = type_into_claude(user_input, open_if_missing=True)
                 if ok:
-                    print(f"  {C['bgreen']}[CLAUDE CODE]{C['reset']} Message delivered — check the Claude Code window for the response.\n")
-                    speak("Sent to Claude Code.")
+                    # Tier 1: window injection — [CLAUDE DESKTOP]
+                    # Tier 2: launched app — also [CLAUDE DESKTOP]
+                    if "[CLAUDE DESKTOP]" in detail:
+                        print(f"  {C['bgreen']}[CLAUDE DESKTOP]{C['reset']} {detail.replace('[CLAUDE DESKTOP] ', '')}\n")
+                        speak("Sent to Claude.")
+                    else:
+                        print(f"  {C['bgreen']}[CLAUDE CODE]{C['reset']} {detail}\n")
+                        speak("Sent to Claude Code.")
                 else:
-                    print(f"  {C['bred']}[CLAUDE CODE ERROR]{C['reset']} {detail}\n")
+                    # Tier 3: unavailable — show [CLAUDE UNAVAILABLE] with manual paste text
+                    if "[CLAUDE UNAVAILABLE]" in detail:
+                        lines = detail.splitlines()
+                        print(f"  {C['bred']}[CLAUDE UNAVAILABLE]{C['reset']} Claude Code not reachable.\n")
+                        for line in lines[1:]:
+                            if line.strip():
+                                print(f"  {C['dim']}{line}{C['reset']}")
+                        print()
+                    else:
+                        print(f"  {C['bred']}[CLAUDE CODE ERROR]{C['reset']} {detail}\n")
                 continue
         except Exception as _bridge_err:
             print(f"  {C['yellow']}[GOVERNANCE]{C['reset']} Claude Code routing error: {_bridge_err} — falling back to local model\n")
@@ -1478,10 +1584,11 @@ Hands tools (SOV1 — operates the screen):
                     from claude_code_bridge import type_into_claude
                     ok2, detail2 = type_into_claude(user_input, open_if_missing=True)
                     if ok2:
-                        print(f"  {C['bgreen']}[CLAUDE CODE]{C['reset']} Message delivered — check the Claude Code window.\n")
-                        speak("Sent to Claude Code.")
+                        lbl = "[CLAUDE DESKTOP]" if "[CLAUDE DESKTOP]" in detail2 else "[CLAUDE CODE]"
+                        print(f"  {C['bgreen']}{lbl}{C['reset']} {detail2.replace('[CLAUDE DESKTOP] ','')}\n")
+                        speak("Sent to Claude.")
                     else:
-                        print(f"  {C['bred']}[CLAUDE CODE ERROR]{C['reset']} {detail2}\n")
+                        print(f"  {C['bred']}[CLAUDE UNAVAILABLE]{C['reset']} {detail2[:120]}\n")
                     continue
                 except Exception as _guard_err:
                     print(f"  {C['yellow']}[GOVERNANCE]{C['reset']} Re-route failed: {_guard_err} — showing local reply anyway\n")
