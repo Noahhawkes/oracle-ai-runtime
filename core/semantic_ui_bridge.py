@@ -524,33 +524,9 @@ def inject_via_keyboard(
         _has_pyperclip = False
 
     try:
-        # 1. Focus window
-        if window_ref._raw:
-            try:
-                window_ref._raw.set_focus()
-                time.sleep(0.35)
-            except Exception as _fe:
-                result.unknowns.append(f"set_focus failed: {_fe} — continuing anyway")
+        raw = window_ref._raw  # pywinauto wrapper
 
-        # 2. Click bottom-center of window to land on the input
-        rect = None
-        try:
-            if window_ref._raw:
-                r = window_ref._raw.rectangle()
-                rect = (r.left, r.top, r.right, r.bottom)
-        except Exception:
-            pass
-
-        if rect:
-            cx = (rect[0] + rect[2]) // 2
-            # 12 % from the bottom — typical input bar position
-            cy = rect[3] - int((rect[3] - rect[1]) * 0.12)
-            pyautogui.click(cx, cy)
-            time.sleep(0.3)
-        else:
-            result.unknowns.append("Window rect unavailable — could not click input area")
-
-        # 3. Paste via clipboard
+        # ── 1. Set clipboard BEFORE touching the window ───────────────────────
         old_clip = ""
         if _has_pyperclip:
             try:
@@ -558,32 +534,105 @@ def inject_via_keyboard(
             except Exception:
                 pass
             pyperclip.copy(text)
-            time.sleep(0.1)
-            pyautogui.hotkey("ctrl", "v")
-        else:
-            # No pyperclip — type characters directly (slower, less reliable)
-            pyautogui.typewrite(text, interval=0.02)
-            result.unknowns.append("pyperclip not installed — used typewrite fallback (may miss special chars)")
+            time.sleep(0.2)   # let clipboard settle before paste
+        # else: fall through to type_keys path below
 
-        time.sleep(0.25)
-
-        # 4. Restore clipboard
-        if _has_pyperclip and old_clip:
+        # ── 2. Focus window ───────────────────────────────────────────────────
+        if raw:
             try:
-                pyperclip.copy(old_clip)
+                raw.set_focus()
+                time.sleep(0.4)
+            except Exception as _fe:
+                result.unknowns.append(f"set_focus failed: {_fe}")
+
+        # ── 3. Click bottom-center to land on input area ──────────────────────
+        rect = None
+        if raw:
+            try:
+                r = raw.rectangle()
+                rect = (r.left, r.top, r.right, r.bottom)
             except Exception:
                 pass
 
-        # 5. Enter
+        if rect:
+            cx = (rect[0] + rect[2]) // 2
+            # 10 % from the bottom — typical chat-input bar
+            cy = rect[3] - int((rect[3] - rect[1]) * 0.10)
+            pyautogui.click(cx, cy)
+            time.sleep(0.4)
+        else:
+            result.unknowns.append("Window rect unavailable — skipped input-area click")
+
+        # ── 4. Paste: prefer pywinauto type_keys (targets window handle
+        #       directly, not foreground) over pyautogui hotkey ─────────────
+        _paste_method = "none"
+        if _has_pyperclip:
+            # Primary: pywinauto sends ^v directly to the window — survives
+            # temporary focus loss that breaks pyautogui.hotkey
+            _pasted = False
+            if raw:
+                try:
+                    raw.type_keys("^v", pause=0.05)
+                    _pasted = True
+                    _paste_method = "pywinauto ^v"
+                except Exception as _pwe:
+                    result.unknowns.append(f"pywinauto type_keys ^v failed: {_pwe}")
+
+            if not _pasted:
+                # Fallback: pyautogui Ctrl+V (requires foreground focus)
+                pyautogui.hotkey("ctrl", "v")
+                _paste_method = "pyautogui ctrl+v"
+
+            time.sleep(0.3)
+
+            # Restore clipboard
+            if old_clip:
+                try:
+                    pyperclip.copy(old_clip)
+                except Exception:
+                    pass
+        else:
+            # No pyperclip — use pywinauto type_keys with explicit space handling
+            if raw:
+                try:
+                    # type_keys handles spaces correctly; escape braces for pywinauto
+                    safe_text = (
+                        text.replace("{", "{{").replace("}", "}}")
+                            .replace("(", "(").replace(")", ")")
+                            .replace("+", "{+}").replace("^", "{^}")
+                            .replace("%", "{%}").replace("~", "{~}")
+                    )
+                    raw.type_keys(safe_text, with_spaces=True, pause=0.02)
+                    _paste_method = "pywinauto type_keys"
+                except Exception as _tke:
+                    # Last resort: pyautogui write (handles spaces)
+                    pyautogui.write(text, interval=0.03)
+                    _paste_method = "pyautogui write"
+            else:
+                pyautogui.write(text, interval=0.03)
+                _paste_method = "pyautogui write (no window handle)"
+            result.unknowns.append(
+                "pyperclip not installed — used keyboard typing fallback. "
+                "Install: pip install pyperclip"
+            )
+
+        # ── 5. Press Enter if approved ────────────────────────────────────────
         if press_enter:
-            pyautogui.press("enter")
+            if raw:
+                try:
+                    raw.type_keys("{ENTER}", pause=0.05)
+                except Exception:
+                    pyautogui.press("enter")
+            else:
+                pyautogui.press("enter")
             time.sleep(0.2)
 
         result.success = True
         result.verified = False
         result.unknowns.append(
-            "Keyboard clipboard fallback used (Electron/webview window). "
-            "Text pasted via Ctrl+V. Read-back verification not available for webview controls."
+            f"Keyboard clipboard fallback used (Electron/webview). "
+            f"Method: {_paste_method}. "
+            "Read-back verification not available for webview controls."
         )
 
     except Exception as e:
