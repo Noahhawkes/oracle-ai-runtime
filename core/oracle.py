@@ -1508,9 +1508,14 @@ def main():
                 print("\n  Usage: /actuate <window_hint> | <text to type>\n"
                       "  Example: /actuate ChatGPT | Hello from ORACLE\n")
                 continue
-            win_hint, text = [p.strip() for p in raw.split("|", 1)]
+            # Optional --no-enter flag: /actuate Claude | text --no-enter
+            _no_enter = text.endswith("--no-enter")
+            if _no_enter:
+                text = text[: -len("--no-enter")].strip()
+            win_hint, text = win_hint, text
             print(f"\n[actuate] Target window: {win_hint!r}")
             print(f"          Text to inject: {text!r}")
+            print(f"          Press Enter  : {'no (--no-enter)' if _no_enter else 'YES — will submit'}")
             print("  Noah approval required. Type 'yes' to proceed or anything else to cancel.")
             try:
                 confirm = input("  Approve? ").strip().lower()
@@ -1519,12 +1524,14 @@ def main():
             if confirm in ("yes", "y", "approve"):
                 try:
                     from actuation_engine import type_into_window
-                    result = type_into_window(win_hint, text, approved=True)
+                    result = type_into_window(
+                        win_hint, text,
+                        approved=True,
+                        press_enter=(not _no_enter),
+                    )
                     print(result.explain())
-                    if result.success and result.verified:
-                        speak(f"Text injected and verified in {win_hint}.")
-                    elif result.success:
-                        speak(f"Text injected but not verified. Check window.")
+                    if result.success:
+                        speak(f"Sent to {win_hint}.")
                     else:
                         speak(f"Actuation failed: {result.failure_stage}")
                 except Exception as e:
@@ -1546,6 +1553,68 @@ def main():
                 print(result.explain())
             except Exception as e:
                 print(f"\n[actuate-dry error: {e}]\n")
+            continue
+
+        # ── /ask-claude <task> — send a task to Claude Code, wait for response ──
+        if user_input.lower().startswith("/ask-claude "):
+            task = user_input[len("/ask-claude "):].strip()
+            if not task:
+                print("\n  Usage: /ask-claude <task or question for Claude Code>\n")
+                continue
+            try:
+                from oracle_claude_channel import ask_claude, ORACLE_TO_CLAUDE
+                print(f"\n  {C['byellow']}[CHANNEL]{C['reset']} Sending task to Claude Code…")
+                print(f"  {C['dim']}File: {ORACLE_TO_CLAUDE}{C['reset']}")
+                print(f"  {C['dim']}Waiting up to 5 min for response. Type response in Messages/claude_to_oracle.md{C['reset']}\n")
+                log("CHANNEL", f"ask_claude: {task[:80]}")
+                response = ask_claude(task, timeout=300)
+                print(f"\n  {C['bgreen']}[CLAUDE RESPONSE]{C['reset']}")
+                for line in response.splitlines():
+                    print(f"  {line}")
+                print()
+                speak("Claude responded.")
+            except Exception as e:
+                log("ERROR", f"/ask-claude failed: {e}")
+                print(f"\n[channel error: {e}]\n")
+            continue
+
+        # ── /channel — show channel status ────────────────────────────────────
+        if user_input.lower() in ("/channel", "/channel-status"):
+            try:
+                from oracle_claude_channel import (
+                    ORACLE_TO_CLAUDE, CLAUDE_TO_ORACLE, CHANNEL_LOG, pending_task
+                )
+                has_outbox = ORACLE_TO_CLAUDE.exists()
+                has_inbox  = CLAUDE_TO_ORACLE.exists()
+                print(f"\n  {C['cyan']}[CHANNEL STATUS]{C['reset']}")
+                print(f"  Outbox (oracle→claude) : {'PENDING' if has_outbox else 'empty'}  {ORACLE_TO_CLAUDE}")
+                print(f"  Inbox  (claude→oracle) : {'RESPONSE READY' if has_inbox else 'empty'}  {CLAUDE_TO_ORACLE}")
+                if has_inbox:
+                    from oracle_claude_channel import CLAUDE_TO_ORACLE
+                    resp = CLAUDE_TO_ORACLE.read_text(encoding="utf-8")[:300]
+                    print(f"\n  {C['bgreen']}Response preview:{C['reset']}")
+                    for line in resp.splitlines()[:8]:
+                        print(f"    {line}")
+                print()
+            except Exception as e:
+                print(f"\n[channel error: {e}]\n")
+            continue
+
+        # ── /channel-reply — read pending Claude response and act on it ───────
+        if user_input.lower() in ("/channel-reply", "/read-claude"):
+            try:
+                from oracle_claude_channel import CLAUDE_TO_ORACLE
+                if not CLAUDE_TO_ORACLE.exists():
+                    print("\n  No Claude response pending. Use /ask-claude <task> first.\n")
+                else:
+                    response = CLAUDE_TO_ORACLE.read_text(encoding="utf-8").strip()
+                    print(f"\n  {C['bgreen']}[CLAUDE RESPONSE]{C['reset']}")
+                    for line in response.splitlines():
+                        print(f"  {line}")
+                    print()
+                    speak("Claude response loaded.")
+            except Exception as e:
+                print(f"\n[channel-reply error: {e}]\n")
             continue
 
         if user_input.lower().startswith("/video-analyze "):
@@ -1713,8 +1782,11 @@ Commands:
   /window-snapshot                   List currently visible windows on the desktop
   /controls <window>                 Dump all UIA controls discovered in a window (debug actuation)
   /route-task <description>          Route a task to the correct cognitive engine (brain router)
-  /actuate <window> | <text>         Governed desktop injection: find window → find control → inject → verify
+  /actuate <window> | <text>         Governed desktop injection: inject + press Enter (add --no-enter to suppress)
   /actuate-dry <window> | <text>     Dry run actuation — shows what would happen without executing
+  /ask-claude <task>                 Send task to Claude Code via file channel; wait for response
+  /channel                           Show ORACLE-Claude channel status (outbox / inbox)
+  /channel-reply                     Read latest Claude response from the channel
   /video-analyze <path>              Analyze an approved video file — creates pending candidate
   /video-pending                     List pending video observation candidates
   /video-approve <id>                Approve a video candidate for recall

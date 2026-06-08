@@ -614,10 +614,11 @@ def type_into_window(
     control_type: str = "Edit",
     dry_run: bool = False,
     approved: bool = False,
+    press_enter: bool = False,
 ) -> ActuationResult:
     """
-    Find window → find Edit control → inject text → verify.
-    This is the replacement for 'qwen, open chrome and type into ChatGPT.'
+    Find window → find Edit control (or keyboard fallback) → inject text → optionally Enter.
+    press_enter=True sends the message after injection (requires approved=True).
     """
     return execute(ActuationRequest(
         action_type=ACTION_INJECT_TEXT,
@@ -626,6 +627,7 @@ def type_into_window(
         text_to_inject=text,
         dry_run=dry_run,
         approved_by_noah=approved,
+        press_enter_after=press_enter,
     ))
 
 
