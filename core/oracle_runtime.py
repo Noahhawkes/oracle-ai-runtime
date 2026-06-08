@@ -534,13 +534,17 @@ def _invoke_module(
         except Exception:
             pass
 
-    # Write cycle result back to project state
+    # Write cycle result back to project state — only for build-step recommendations,
+    # not transient cycle actions like "Use /pending to review…"
     try:
         from project_state import load_state, save_state
         ps = load_state("ORACLE.AI")
         if ps and result.next_recommended_step:
-            ps.next_recommended_step = result.next_recommended_step
-            save_state(ps)
+            ns = result.next_recommended_step
+            _build_kw = ("step ", "build ", "voice hooks", "implement", "feat(", "core/")
+            if any(kw in ns.lower() for kw in _build_kw):
+                ps.next_recommended_step = ns
+                save_state(ps)
     except Exception:
         pass
 

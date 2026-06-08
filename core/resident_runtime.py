@@ -425,8 +425,11 @@ def _update_project_state(cycle_result: dict) -> None:
         next_step = cycle_result.get("next_step", "")
         error = cycle_result.get("error")
 
-        # Surface next_step from oracle_runtime into project state
-        if next_step and next_step != ps.next_recommended_step:
+        # Only surface next_step if it looks like a build step (not a transient cycle action).
+        # Cycle actions like "Use /pending to review…" should NOT overwrite the build plan.
+        build_keywords = ("step ", "build ", "voice hooks", "implement", "feat(", "core/")
+        is_build_step = next_step and any(kw in next_step.lower() for kw in build_keywords)
+        if is_build_step and next_step != ps.next_recommended_step:
             ps.next_recommended_step = next_step
 
         # Record error as a blocker candidate (don't overwrite an existing human-set blocker)

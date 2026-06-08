@@ -674,6 +674,8 @@ def main():
     _ctx = get_live_context()
     _ctx.set_task("Interactive session")
 
+    _last_pending_ids: list = []   # populated by /pending, consumed by approve/reject
+
     banner(identity)
     log("SESSION_START", f"Session {session_id} started")
 
@@ -830,18 +832,60 @@ def main():
             from integration_gate import ApprovalGate
             gate = ApprovalGate()
             candidates = gate.list_pending()
+            _last_pending_ids.clear()
             if not candidates:
                 print("\n  No pending candidates.\n")
             else:
                 print(f"\n--- Pending Approval ({len(candidates)}) ---")
-                for c in candidates:
+                for i, c in enumerate(candidates):
                     flag = " [SENSITIVE - blocked]" if c.get("sensitive_flag") else ""
-                    print(f"  [{c['confidence'].upper()}] {c['source']} | "
+                    idx = i + 1
+                    print(f"  [{idx}] [{c['confidence'].upper()}] {c['source']} | "
                           f"{c['rendered_category']}/{c['rendered_key']}{flag}")
                     print(f"    Value  : {c['rendered_value'][:80]}")
                     print(f"    Excerpt: {c['raw_excerpt'][:60]}...")
                     print(f"    ID     : {c['id']}")
-                print()
+                    _last_pending_ids.append(c["id"])
+                print(f"\n  approve / reject / approve 2 / reject 2 …\n")
+            continue
+
+        # ── Natural language approve / reject pending items ────────────────────
+        _uil_pending = user_input.lower().strip().rstrip(".")
+        _approve_match = (
+            _uil_pending in ("approve", "approved", "yes", "confirm", "ok", "looks good")
+            or _uil_pending.startswith("approve ")
+        )
+        _reject_match = (
+            _uil_pending in ("reject", "rejected", "no", "dismiss", "skip", "discard", "bad", "delete it")
+            or _uil_pending.startswith("reject ")
+            or _uil_pending.startswith("dismiss ")
+        )
+        if (_approve_match or _reject_match) and _last_pending_ids:
+            # Parse optional index — "approve 2" targets item 2
+            parts = user_input.strip().split()
+            idx = 0
+            if len(parts) == 2:
+                try:
+                    idx = int(parts[1]) - 1
+                except ValueError:
+                    idx = 0
+            idx = max(0, min(idx, len(_last_pending_ids) - 1))
+            target_id = _last_pending_ids[idx]
+
+            try:
+                from approval_center import approve as ac_approve, reject as ac_reject
+                if _approve_match:
+                    result = ac_approve(target_id, approved_by="noah")
+                    print(f"\n  {C['bgreen']}Approved{C['reset']} — {target_id[:8]}  status: {result.get('status','?')}\n")
+                    speak("Approved.")
+                    _last_pending_ids.pop(idx)
+                else:
+                    result = ac_reject(target_id, reason="Noah rejected via REPL")
+                    print(f"\n  {C['yellow']}Rejected{C['reset']} — {target_id[:8]}  status: {result.get('status','?')}\n")
+                    speak("Rejected.")
+                    _last_pending_ids.pop(idx)
+            except Exception as e:
+                print(f"\n  [approval error: {e}]\n")
             continue
 
         if user_input.lower() in ("/voice on", "/voice"):
