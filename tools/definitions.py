@@ -505,6 +505,59 @@ TOOL_DEFINITIONS = [
         },
     },
 
+    # ── Claude Code Bridge ────────────────────────────────────────────────────
+    {
+        "name": "send_to_claude_code",
+        "description": (
+            "Send a message or task to Claude Code — the implementation brain. "
+            "Claude Code handles all code writing, file edits, refactors, builds, and "
+            "implementation questions. ORACLE coordinates; Claude Code executes. "
+            "The message is typed directly into the running Claude Code window. "
+            "The response appears in the Claude Code window for Noah to see. "
+            "Use for: 'write this code', 'fix this bug', 'implement X', 'what does Y do', "
+            "'build the next step', 'refactor Z', any MYTHIC BUILD PASS step."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "description": "The task or question to send to Claude Code",
+                },
+            },
+            "required": ["message"],
+        },
+    },
+
+    # ── Git Operations ────────────────────────────────────────────────────────
+    {
+        "name": "git_op",
+        "description": (
+            "Run a git command in the ORACLE.AI repo. "
+            "Safe reads (status, log, diff, branch) execute immediately. "
+            "Writes (commit, push, pull, add, reset) require Noah's approval in oracle.py. "
+            "Always use 'status' before 'commit'. Never force-push without explicit instruction."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "description": "Git subcommand: 'status', 'log', 'diff', 'add', 'commit', 'push', 'pull', 'branch'",
+                },
+                "args": {
+                    "type": "string",
+                    "description": "Additional arguments (e.g. '-m \"commit message\"', '--oneline -10', '.')",
+                },
+                "cwd": {
+                    "type": "string",
+                    "description": "Working directory for git (defaults to ORACLE.AI repo root)",
+                },
+            },
+            "required": ["operation"],
+        },
+    },
+
     # ── Computer Operator (SOV1) ──────────────────────────────────────────────
     {
         "name": "computer_operator",

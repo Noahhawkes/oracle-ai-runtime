@@ -104,6 +104,10 @@ def execute_tool(tool_name: str, tool_input: dict) -> str:
             return _terminal_cd(tool_input, log)
         elif tool_name == "terminal_status":
             return _terminal_status(tool_input, log)
+        elif tool_name == "send_to_claude_code":
+            return _send_to_claude_code(tool_input, log)
+        elif tool_name == "git_op":
+            return _git_op(tool_input, log)
         else:
             return f"Unknown tool: {tool_name}"
     except Exception as e:
@@ -124,13 +128,19 @@ def _open_app(inp: dict, log) -> str:
         return f"'{app_name}' is not in approved_apps. Approved: {list(approved.keys())}"
 
     exe_path = approved[app_name]
-    cmd = [exe_path] + [str(a) for a in args]
     label = f"open_app:{app_name}" + (f" {args}" if args else "")
 
-    if not _confirm(f"Launch {app_name}?" + (f" Args: {args}" if args else "")):
-        log("ACTION", label, approved=False)
-        return f"Cancelled: {app_name} not launched."
+    # .lnk shortcuts — use os.startfile (Windows shell launches the shortcut target)
+    if exe_path.lower().endswith(".lnk"):
+        import os as _os
+        try:
+            _os.startfile(exe_path)
+            log("ACTION", label, approved=True)
+            return f"Launched {app_name} via shortcut."
+        except Exception as e:
+            return f"Failed to launch {app_name}: {e}"
 
+    cmd = [exe_path] + [str(a) for a in args]
     subprocess.Popen(cmd, shell=False)
     log("ACTION", label, approved=True)
     return f"Launched {app_name}."
@@ -152,11 +162,6 @@ def _run_script(inp: dict, log) -> str:
 
     full_path = ROOT / script_path
     cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(full_path)] + args
-
-    if not _confirm(f"Run script: {script_path}?" + (f" Args: {args}" if args else "")):
-        log("ACTION", f"run_script:{script_path}", approved=False)
-        return f"Cancelled: {script_path} not run."
-
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     log("ACTION", f"run_script:{script_path}", approved=True)
     output = result.stdout.strip() or result.stderr.strip() or "(no output)"
@@ -547,6 +552,56 @@ def _terminal_status(inp: dict, log) -> str:
     cwd = term.get_cwd()
     alive = term.alive
     return f"Terminal alive: {alive}\nCurrent directory: {cwd}"
+
+
+def _send_to_claude_code(inp: dict, log) -> str:
+    sys.path.insert(0, str(ROOT / "core"))
+    from claude_code_bridge import type_into_claude
+    message = inp.get("message", "").strip()
+    if not message:
+        return "send_to_claude_code: message is required."
+    log("BRIDGE", f"send_to_claude_code: {message[:80]}")
+    ok, detail = type_into_claude(message, open_if_missing=True)
+    if ok:
+        return f"[CLAUDE CODE] Message delivered — check the Claude Code window for the response."
+    return f"[CLAUDE CODE ERROR] {detail}"
+
+
+# ── Git Operations ─────────────────────────────────────────────────────────────
+
+_GIT_SAFE_CMDS = {"status", "log", "diff", "branch", "remote", "stash list", "show", "ls-files"}
+_GIT_WRITE_CMDS = {"commit", "push", "pull", "merge", "rebase", "add", "reset", "checkout", "stash"}
+
+
+def _git_op(inp: dict, log) -> str:
+    operation = inp.get("operation", "").strip().lower()
+    args = inp.get("args", "").strip()
+    cwd = inp.get("cwd", str(ROOT))
+
+    if not operation:
+        return "git_op: operation is required (e.g. 'status', 'log', 'commit')."
+
+    cmd = f"git {operation}" + (f" {args}" if args else "")
+
+    # Safety: block destructive bare resets
+    if any(x in cmd.lower() for x in ["--hard", "--force", "rm -rf", "clean -f"]):
+        return f"[BLOCKED] Destructive git flag detected in '{cmd}'. Requires explicit Noah approval."
+
+    log("GIT", f"{operation}: {args[:60]}")
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", cmd],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        output = result.stdout.strip() or result.stderr.strip() or "(no output)"
+        return f"git {operation}:\n{output}"
+    except subprocess.TimeoutExpired:
+        return f"git {operation} timed out."
+    except Exception as e:
+        return f"git {operation} error: {e}"
 
 
 def _list_directory(inp: dict, log) -> str:

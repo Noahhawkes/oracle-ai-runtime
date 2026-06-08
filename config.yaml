@@ -25,6 +25,8 @@ approved_apps:
   vscode: "C:\\Users\\noahh\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe"
   notepad: "C:\\Windows\\System32\\notepad.exe"
   explorer: "C:\\Windows\\explorer.exe"
+  claude_code: "C:\\Users\\noahh\\Desktop\\Claude.lnk"
+  claude: "C:\\Users\\noahh\\Desktop\\Claude.lnk"
 
 # Scripts Oracle is allowed to run (approval required each time)
 approved_scripts:

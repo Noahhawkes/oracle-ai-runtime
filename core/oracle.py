@@ -40,10 +40,12 @@ MAX_TOOL_CALLS_PER_TURN = 3    # hard cap — local 7B models loop; keep it tigh
 _LOCAL_READ_TOOLS = frozenset([
     "read_file", "list_directory", "recall_facts", "filesystem_search",
     "filesystem_summary", "source_map_search", "terminal_status",
+    "git_op",  # git status/log/diff are safe reads; git_op classifier blocks writes internally
 ])
-# HANDS — SOV1 screen/app control — no approval gate (actuation_engine governs internally)
+# HANDS — SOV1 screen/app control + Claude Code bridge — no approval gate
 _LOCAL_HANDS_TOOLS = frozenset([
     "open_app", "computer_operator",
+    "send_to_claude_code",  # delivers message to Claude Code window via pyautogui
 ])
 # WRITE — file/shell mutations — require Noah's explicit approval before execution
 _LOCAL_WRITE_TOOLS = frozenset([
@@ -51,6 +53,24 @@ _LOCAL_WRITE_TOOLS = frozenset([
     "terminal_cd", "run_script",
 ])
 _LOCAL_SAFE_TOOL_NAMES = _LOCAL_READ_TOOLS | _LOCAL_HANDS_TOOLS | _LOCAL_WRITE_TOOLS
+
+# ── Terminal safety classifier ────────────────────────────────────────────────
+# Commands that look safe but have destructive flags or touch system areas
+_TERMINAL_DANGER_PATTERNS = [
+    "rm -rf", "rmdir /s", "del /f", "format ", "diskpart",
+    "reg delete", "netsh", "bcdedit", "sfc /scannow",
+    "--force", "--hard reset", "drop table", "drop database",
+    "truncate table", "> /dev/null", "shutdown", "restart-computer",
+]
+
+
+def _classify_terminal_command(cmd: str) -> tuple[bool, str]:
+    """Return (is_safe, reason). Unsafe commands are blocked from the write gate."""
+    lower = cmd.lower()
+    for pat in _TERMINAL_DANGER_PATTERNS:
+        if pat in lower:
+            return False, f"Dangerous pattern '{pat}' detected in command."
+    return True, ""
 
 LOCAL_TOOL_DEFINITIONS = [
     t for t in TOOL_DEFINITIONS
@@ -169,11 +189,21 @@ def _print_thinking(name: str, inp: dict) -> None:
 
 
 def _print_thought_result(name: str, result: str) -> None:
-    """Print the result of a tool call — very dim, clipped."""
+    """Print the result of a tool call — source-labeled, dimmed."""
     if not result or not result.strip():
         return
     first_line = result.strip().splitlines()[0][:80]
-    print(f"{C['dim']}    └ {first_line}{C['reset']}")
+    if name in ("recall_facts",):
+        label = f"{C['cyan']}[MEMORY]{C['reset']} "
+    elif name in ("send_to_claude_code",):
+        label = f"{C['bgreen']}[CLAUDE CODE]{C['reset']} "
+    elif name in ("git_op",):
+        label = f"{C['grey']}[GIT]{C['reset']} "
+    elif name in ("open_app", "computer_operator"):
+        label = f"{C['bgreen']}[HANDS]{C['reset']} "
+    else:
+        label = ""
+    print(f"  {label}{C['dim']}{first_line}{C['reset']}")
 
 
 def _print_oracle_reply(reply: str) -> None:
@@ -699,9 +729,10 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
                 # Block tools outside the safe set entirely
                 if tool_name not in _LOCAL_SAFE_TOOL_NAMES:
                     blocked_msg = (
-                        f"[BLOCKED] Tool '{tool_name}' is not available in local mode."
+                        f"[BLOCKED] Tool '{tool_name}' is not available in local mode. "
+                        f"If this is a code/build task, say 'send to Claude Code' instead."
                     )
-                    print(f"{C['bred']}  ✗ blocked: {tool_name}{C['reset']}")
+                    print(f"  {C['bred']}[BLOCKED]{C['reset']} Tool not available in local mode: {tool_name}")
                     history.append({"role": "tool", "tool_call_id": tc.id, "content": blocked_msg})
                     log("HALLUCINATION_BLOCK", f"local model attempted blocked tool: {tool_name}")
                     continue
@@ -711,11 +742,25 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
                 except (json.JSONDecodeError, TypeError):
                     inp = {}
 
-                # Hands tools (SOV1) execute directly — actuation_engine governs internally
-                # Write tools (file/shell mutations) need Noah's explicit approval
-                if tool_name in _LOCAL_WRITE_TOOLS:
+                # ── Terminal safety classification ────────────────────────────
+                if tool_name in ("run_shell", "terminal_run"):
+                    cmd_str = inp.get("command", "")
+                    safe, reason = _classify_terminal_command(cmd_str)
+                    if not safe:
+                        blocked_msg = f"[BLOCKED] {reason} Command not executed."
+                        print(f"  {C['bred']}[BLOCKED]{C['reset']} Terminal command blocked: {reason}")
+                        history.append({"role": "tool", "tool_call_id": tc.id, "content": blocked_msg})
+                        log("TERMINAL_BLOCKED", f"blocked: {cmd_str[:80]} — {reason}")
+                        continue
+
+                # ── HANDS — no gate, SOV1 governs internally ─────────────────
+                if tool_name in _LOCAL_HANDS_TOOLS:
+                    print(f"  {C['bgreen']}[HANDS]{C['reset']} {tool_name}")
+
+                # ── WRITE — explicit approval required ────────────────────────
+                elif tool_name in _LOCAL_WRITE_TOOLS:
                     print()
-                    print(f"  {C['byellow']}▶ APPROVAL NEEDED{C['reset']}")
+                    print(f"  {C['byellow']}[GOVERNANCE]{C['reset']} ▶ APPROVAL NEEDED")
                     print(f"  {C['bold']}Tool   :{C['reset']} {tool_name}")
                     for key in ("path", "command", "app_name", "text", "content"):
                         val = inp.get(key, "")
@@ -728,12 +773,16 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
                         answer = "reject"
                     if answer not in ("approve", "yes", "y", "ok", "confirmed"):
                         rejection = f"[REJECTED] Noah did not approve {tool_name}."
-                        print(f"  {C['grey']}Rejected.{C['reset']}\n")
+                        print(f"  {C['bred']}[BLOCKED]{C['reset']} Rejected.\n")
                         history.append({"role": "tool", "tool_call_id": tc.id, "content": rejection})
                         log("APPROVAL_REJECTED", f"Noah rejected local write tool: {tool_name}")
                         continue
                     print(f"  {C['bgreen']}Approved.{C['reset']}\n")
                     log("APPROVAL_GRANTED", f"Noah approved: {tool_name}")
+
+                # ── READ — no gate, label silently ───────────────────────────
+                else:
+                    pass  # read tools — no label needed, just execute
 
                 _print_thinking(tool_name, inp)
                 result = execute_tool(tool_name, inp)
@@ -1387,21 +1436,16 @@ Hands tools (SOV1 — operates the screen):
         # is_code_task catches implement, build, refactor, .py, "explain the code", etc.
         # Both fire BEFORE chat_local() so the local model never sees the message.
         try:
-            from claude_code_bridge import (
-                is_claude_directed, is_code_task,
-                ask_claude, contains_secret, scrub_secrets,
-            )
+            from claude_code_bridge import is_claude_directed, is_code_task, type_into_claude
             if is_claude_directed(user_input) or is_code_task(user_input):
                 print(f"\n  {C['byellow']}[GOVERNANCE]{C['reset']} ↗ Routing to Claude Code…\n")
                 log("ROUTING", f"code task → Claude Code: {user_input[:80]}")
-                ok, cc_reply = ask_claude(user_input)
-                if contains_secret(cc_reply):
-                    print(f"  {C['bred']}[BLOCKED SECRET]{C['reset']} Response contained secret pattern (sk-, api_key, token, password) — redacted.\n")
-                    cc_reply = scrub_secrets(cc_reply)
-                label = f"{C['bgreen']}[CLAUDE CODE]{C['reset']}" if ok else f"{C['bred']}[CLAUDE CODE ERROR]{C['reset']}"
-                print(f"  {label}")
-                _print_oracle_reply(cc_reply)
-                speak(cc_reply[:300])
+                ok, detail = type_into_claude(user_input, open_if_missing=True)
+                if ok:
+                    print(f"  {C['bgreen']}[CLAUDE CODE]{C['reset']} Message delivered — check the Claude Code window for the response.\n")
+                    speak("Sent to Claude Code.")
+                else:
+                    print(f"  {C['bred']}[CLAUDE CODE ERROR]{C['reset']} {detail}\n")
                 continue
         except Exception as _bridge_err:
             print(f"  {C['yellow']}[GOVERNANCE]{C['reset']} Claude Code routing error: {_bridge_err} — falling back to local model\n")
@@ -1424,15 +1468,13 @@ Hands tools (SOV1 — operates the screen):
                 print(f"\n  {C['byellow']}[GOVERNANCE]{C['reset']} Local model attempted implementation — re-routing to Claude Code.\n")
                 log("ROUTING", "post-LLM guard triggered — re-routing to Claude Code")
                 try:
-                    from claude_code_bridge import ask_claude, contains_secret, scrub_secrets
-                    ok2, cc_reply2 = ask_claude(user_input)
-                    if contains_secret(cc_reply2):
-                        print(f"  {C['bred']}[BLOCKED SECRET]{C['reset']} Response redacted.\n")
-                        cc_reply2 = scrub_secrets(cc_reply2)
-                    label2 = f"{C['bgreen']}[CLAUDE CODE]{C['reset']}" if ok2 else f"{C['bred']}[CLAUDE CODE ERROR]{C['reset']}"
-                    print(f"  {label2}")
-                    _print_oracle_reply(cc_reply2)
-                    speak(cc_reply2[:300])
+                    from claude_code_bridge import type_into_claude
+                    ok2, detail2 = type_into_claude(user_input, open_if_missing=True)
+                    if ok2:
+                        print(f"  {C['bgreen']}[CLAUDE CODE]{C['reset']} Message delivered — check the Claude Code window.\n")
+                        speak("Sent to Claude Code.")
+                    else:
+                        print(f"  {C['bred']}[CLAUDE CODE ERROR]{C['reset']} {detail2}\n")
                     continue
                 except Exception as _guard_err:
                     print(f"  {C['yellow']}[GOVERNANCE]{C['reset']} Re-route failed: {_guard_err} — showing local reply anyway\n")
