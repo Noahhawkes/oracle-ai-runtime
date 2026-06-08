@@ -1001,7 +1001,13 @@ def main():
                 print(f"\n[route-task error: {e}]\n")
             continue
 
-        if user_input.lower() in ("/self-build", "/selfbuild"):
+        _uil = user_input.lower().strip()
+        if _uil in (
+            "/self-build", "/selfbuild",
+            "build yourself", "build yourself.", "improve yourself",
+            "self build", "self-build", "self improve",
+            "what should you build", "what should you improve",
+        ):
             print("\n[self-build] Scanning codebase for highest-value improvement...\n")
             try:
                 from self_build import run_self_build

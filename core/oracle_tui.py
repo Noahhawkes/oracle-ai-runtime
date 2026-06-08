@@ -213,6 +213,16 @@ class OracleTUI(App):
             threading.Thread(target=self._run_cycle, daemon=True).start()
             return
 
+        _SELF_BUILD_TRIGGERS = {
+            "/self-build", "/selfbuild", "build yourself", "build yourself.",
+            "improve yourself", "self build", "self-build", "self improve",
+            "what should you build", "what should you improve",
+        }
+        if lower in _SELF_BUILD_TRIGGERS:
+            self.post_think("▶ scanning codebase for highest-value improvement…")
+            threading.Thread(target=self._run_self_build, daemon=True).start()
+            return
+
         if lower == "/clear":
             self.query_one("#convo", RichLog).clear()
             return
@@ -323,6 +333,20 @@ class OracleTUI(App):
                 self.post_convo(f"[bold yellow]◆ ACTION NEEDED:[/bold yellow] [dim]{next_s}[/dim]")
         except Exception as e:
             self.post_think(f"cycle error: {e}")
+
+    def _run_self_build(self) -> None:
+        try:
+            from self_build import run_self_build
+            ss = self._ss
+            result = run_self_build(ss["client"], ss["model"], ss["local"], implement=False)
+            # Split at TITLE for a clean convo-panel summary
+            if "TITLE" in result:
+                title_line = [l for l in result.splitlines() if "TITLE" in l]
+                summary = title_line[0].replace("TITLE", "").replace(":", "").strip() if title_line else ""
+                self.post_convo(f"[bold cyan]◆ SELF-BUILD PROPOSAL:[/bold cyan] [dim]{summary}[/dim]")
+            self.post_think(result)
+        except Exception as e:
+            self.post_think(f"self-build error: {e}")
 
     def action_clear_think(self) -> None:
         self.query_one("#think", RichLog).clear()
