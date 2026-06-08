@@ -35,6 +35,69 @@ from voice import speak, set_voice_enabled, is_voice_enabled
 MAX_TOKENS = 4096
 MAX_TOOL_CALLS_PER_TURN = 12   # hard cap — stops infinite tool spirals
 
+# ── Local model safe tool list ────────────────────────────────────────────────
+# The 7B local model only gets read-only and memory-query tools.
+# Write, execute, browser, create, install, and actuation tools are stripped
+# to prevent hallucinated success on destructive/irreversible actions.
+_LOCAL_SAFE_TOOL_NAMES = frozenset([
+    "read_file",
+    "list_directory",
+    "recall_facts",
+    "remember_fact",        # candidate only — pending Noah approval
+    "filesystem_search",
+    "filesystem_summary",
+    "source_map_search",
+    "terminal_status",      # read-only status check
+    "ask_oracle",           # reads ORACLE state files, never actuates
+])
+
+LOCAL_TOOL_DEFINITIONS = [
+    t for t in TOOL_DEFINITIONS
+    if t["name"] in _LOCAL_SAFE_TOOL_NAMES
+]
+
+# ── Hallucination patterns ────────────────────────────────────────────────────
+# Phrases local models emit when they fabricate success without evidence.
+_HALLUCINATION_PHRASES = [
+    "successfully created",
+    "successfully scaffolded",
+    "has been created",
+    "has been set up",
+    "has been initialized",
+    "project has been",
+    "files have been created",
+    "i have created",
+    "i've created",
+    "i created",
+    "i've set up",
+    "i set up",
+    "was created at",
+    "directory has been",
+    "folder has been",
+]
+
+
+def _detect_hallucination(reply: str, tool_names_called: list[str]) -> str | None:
+    """
+    Return a warning string if the reply claims success for an action that
+    wasn't in the executed tool list, or claims file/project creation when
+    no write tool was called.
+
+    Returns None if reply looks clean.
+    """
+    lower = reply.lower()
+    claimed_creation = any(p in lower for p in _HALLUCINATION_PHRASES)
+    write_tools_called = any(
+        t in tool_names_called
+        for t in ("write_file", "create_project", "build_exe", "run_shell", "terminal_run")
+    )
+    if claimed_creation and not write_tools_called:
+        return (
+            "[ORACLE WARNING] The model claimed to create or set up something "
+            "but no write or create tool was called. This is a hallucinated success. "
+            "Nothing was actually changed on disk."
+        )
+
 
 def _ansi(code: str) -> str:
     """Return ANSI escape string. Safe on Windows 10+ terminals."""
@@ -493,14 +556,21 @@ def chat(client, session_id, system_prompt, history, user_input):
 
 
 def chat_local(client, session_id, system_prompt, history, user_input, model):
-    """OpenAI-compatible agentic loop for local Ollama models."""
+    """OpenAI-compatible agentic loop for local Ollama models.
+
+    Uses LOCAL_TOOL_DEFINITIONS — a restricted read-only subset of tools.
+    Write, create, execute, browser, and actuation tools are not available
+    to the local model. Hallucinated success claims are detected and flagged.
+    """
     import json
 
     history.append({"role": "user", "content": user_input})
     save_message(session_id, "user", user_input)
     log("INPUT", user_input)
 
-    oai_tools = to_openai_tools(TOOL_DEFINITIONS)
+    # Restricted tool set for local model — read-only operations only
+    oai_tools = to_openai_tools(LOCAL_TOOL_DEFINITIONS)
+    _tools_called: list[str] = []
 
     _tool_call_count = 0
     while True:
@@ -517,18 +587,17 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
             max_tokens=MAX_TOKENS,
             messages=messages,
             tools=oai_tools,
-            temperature=0.7,
+            temperature=0.3,        # lower = less hallucination
             extra_body={
-                "num_ctx": 16384,      # large context window
+                "num_ctx": 16384,
                 "num_predict": MAX_TOKENS,
-                "repeat_penalty": 1.1, # reduce repetition
-                "top_p": 0.9,
+                "repeat_penalty": 1.1,
+                "top_p": 0.85,
             },
         )
         msg = response.choices[0].message
         finish = response.choices[0].finish_reason
 
-        # Store assistant turn in history
         assistant_entry = {"role": "assistant", "content": msg.content or ""}
         if msg.tool_calls:
             assistant_entry["tool_calls"] = [
@@ -544,17 +613,36 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
         if finish in ("tool_calls", "tool_use") and msg.tool_calls:
             for tc in msg.tool_calls:
                 _tool_call_count += 1
-                # Dim — background work, not Noah-facing communication
-                print(f"{C['dim']}  [thinking: {tc.function.name}]{C['reset']}")
+                tool_name = tc.function.name
+                # Block tools not in the safe list — local model should never call them
+                if tool_name not in _LOCAL_SAFE_TOOL_NAMES:
+                    blocked_msg = (
+                        f"[BLOCKED] Tool '{tool_name}' is not available in local mode. "
+                        f"Write, create, execute, and browser tools require cloud mode."
+                    )
+                    print(f"{C['bred']}  [blocked: {tool_name}]{C['reset']}")
+                    history.append({"role": "tool", "tool_call_id": tc.id, "content": blocked_msg})
+                    log("HALLUCINATION_BLOCK", f"local model attempted blocked tool: {tool_name}")
+                    continue
+                print(f"{C['dim']}  [thinking: {tool_name}]{C['reset']}")
                 try:
                     inp = json.loads(tc.function.arguments)
                 except (json.JSONDecodeError, TypeError):
                     inp = {}
-                result = execute_tool(tc.function.name, inp)
+                result = execute_tool(tool_name, inp)
+                _tools_called.append(tool_name)
                 history.append({"role": "tool", "tool_call_id": tc.id, "content": result})
             continue
 
         reply = msg.content or ""
+
+        # Hallucination detection — flag fabricated success before showing Noah
+        warning = _detect_hallucination(reply, _tools_called)
+        if warning:
+            print(f"\n{C['bred']}{warning}{C['reset']}\n")
+            log("HALLUCINATION_DETECTED", f"reply: {reply[:120]}")
+            reply = warning + "\n\n" + reply
+
         save_message(session_id, "assistant", reply)
         log("OUTPUT", reply[:200] + ("..." if len(reply) > 200 else ""))
         return reply, history
