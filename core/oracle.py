@@ -932,23 +932,25 @@ def main():
             continue
 
         if user_input.lower() in ("/pending", "/pending-candidates"):
-            from integration_gate import ApprovalGate
-            gate = ApprovalGate()
-            candidates = gate.list_pending()
+            from approval_center import list_pending as ac_list_pending
+            candidates = ac_list_pending()
             _last_pending_ids.clear()
             if not candidates:
                 print("\n  No pending candidates.\n")
             else:
                 print(f"\n--- Pending Approval ({len(candidates)}) ---")
                 for i, c in enumerate(candidates):
-                    flag = " [SENSITIVE - blocked]" if c.get("sensitive_flag") else ""
-                    idx = i + 1
-                    print(f"  [{idx}] [{c['confidence'].upper()}] {c['source']} | "
-                          f"{c['rendered_category']}/{c['rendered_key']}{flag}")
-                    print(f"    Value  : {c['rendered_value'][:80]}")
-                    print(f"    Excerpt: {c['raw_excerpt'][:60]}...")
-                    print(f"    ID     : {c['id']}")
-                    _last_pending_ids.append(c["id"])
+                    source   = c.get("source", "?")
+                    category = c.get("category", c.get("rendered_category", "?"))
+                    key      = c.get("key", c.get("rendered_key", "?"))
+                    value    = str(c.get("value", c.get("rendered_value", "")))[:80]
+                    conf     = str(c.get("confidence", "?")).upper()
+                    cid      = c.get("id", "?")
+                    flag     = " [SENSITIVE]" if c.get("sensitive_flag") else ""
+                    print(f"  [{i+1}] [{conf}] {source} | {category}/{key}{flag}")
+                    print(f"    Value  : {value}")
+                    print(f"    ID     : {cid}")
+                    _last_pending_ids.append(cid)
                 print(f"\n  approve / reject / approve 2 / reject 2 …\n")
             continue
 
@@ -978,13 +980,13 @@ def main():
             try:
                 from approval_center import approve as ac_approve, reject as ac_reject
                 if _approve_match:
-                    result = ac_approve(target_id, approved_by="noah")
-                    print(f"\n  {C['bgreen']}Approved{C['reset']} — {target_id[:8]}  status: {result.get('status','?')}\n")
+                    ac_approve(target_id, approved_by="noah")
+                    print(f"\n  {C['bgreen']}Approved{C['reset']} — {target_id[:8]}\n")
                     speak("Approved.")
                     _last_pending_ids.pop(idx)
                 else:
-                    result = ac_reject(target_id, reason="Noah rejected via REPL")
-                    print(f"\n  {C['yellow']}Rejected{C['reset']} — {target_id[:8]}  status: {result.get('status','?')}\n")
+                    ac_reject(target_id, reason="Noah rejected via REPL")
+                    print(f"\n  {C['yellow']}Rejected{C['reset']} — {target_id[:8]}\n")
                     speak("Rejected.")
                     _last_pending_ids.pop(idx)
             except Exception as e:
