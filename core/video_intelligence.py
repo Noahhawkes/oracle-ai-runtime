@@ -75,7 +75,7 @@ OPENCV_INSTALL = (
 
 # ── Supported formats ─────────────────────────────────────────────────────────
 
-SUPPORTED_EXTENSIONS = {".mov", ".mp4", ".m4v", ".avi"}
+SUPPORTED_EXTENSIONS = {".mov", ".mp4", ".m4v", ".avi", ".mkv"}
 
 # ── Sensitivity levels ────────────────────────────────────────────────────────
 
