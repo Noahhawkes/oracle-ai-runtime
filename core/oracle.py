@@ -1165,7 +1165,9 @@ def main():
                 pass
             continue
 
-        # ── Pending Claude channel response — surface before processing input ──
+        # ── Pending Claude channel response — surface and consume before LLM ──
+        # Display the response but do NOT let qwen process it as a new command.
+        # After showing it, continue so this turn is a display-only turn.
         try:
             from oracle_claude_channel import CLAUDE_TO_ORACLE
             if CLAUDE_TO_ORACLE.exists():
@@ -1177,6 +1179,8 @@ def main():
                     print()
                     CLAUDE_TO_ORACLE.unlink()
                     speak("Claude responded.")
+                    # Skip the rest of this turn — don't feed response text to qwen
+                    continue
         except Exception:
             pass
 
