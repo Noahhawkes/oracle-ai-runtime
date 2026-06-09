@@ -124,6 +124,118 @@ def _summarize_pasted_log(text: str) -> str:
     out.append("  Type a command or question to continue.")
     return "\n".join(out)
 
+# ── Natural language intent parser ───────────────────────────────────────────
+# Converts plain-English commands to (action, payload) without slash syntax.
+# Runs BEFORE the mode classifier and BEFORE qwen sees anything.
+# Returns (action_str, payload_dict) or None if no intent matched.
+
+import re as _re
+
+_NL_SEND_PATTERNS = [
+    # Literal text injection into Claude window
+    # "send X to Claude", "type X into Claude", "paste X into Claude"
+    _re.compile(r"^(?:send|type|paste|inject)\s+(?:['\"])?(.+?)(?:['\"])?\s+(?:to|into)\s+claude\s*$", _re.I),
+    _re.compile(r"^(?:send|give|pass)\s+this\s+to\s+claude[:\s]*(.*)$", _re.I),
+]
+_NL_ASK_PATTERNS = [
+    # "ask Claude to build X", "tell Claude to X", "ask Claude what X", "have Claude X"
+    _re.compile(r"^ask\s+claude\s+(?:to\s+|what\s+|how\s+|about\s+)?(.+)", _re.I),
+    _re.compile(r"^tell\s+claude\s+(?:to\s+)?(.+)", _re.I),
+    _re.compile(r"^(?:have|get)\s+claude\s+(?:to\s+)?(.+)", _re.I),
+]
+_NL_PENDING_PATTERNS = [
+    "what's pending", "whats pending", "what is pending", "show pending",
+    "show me pending", "what needs approval", "what needs approving",
+    "what's waiting", "whats waiting", "show approvals", "pending list",
+    "any pending", "pending items", "review pending",
+]
+_NL_CONTROLS_PATTERNS = [
+    _re.compile(r"^(?:show|dump|list|what)\s+(?:me\s+)?(?:the\s+)?controls?\s+(?:for\s+|in\s+|of\s+)?(.+)", _re.I),
+    _re.compile(r"^(?:debug|inspect)\s+(.+?)\s+(?:window|controls?|ui)", _re.I),
+]
+_NL_SELF_BUILD_PATTERNS = [
+    "build yourself", "improve yourself", "upgrade yourself", "update yourself",
+    "self improve", "self upgrade", "make yourself better", "improve your code",
+    "fix yourself", "enhance yourself",
+]
+_NL_APPROVE_PATTERNS = [
+    "approve it", "approve that", "yes do it", "go ahead", "do it",
+    "yes approve", "confirmed", "looks good", "run it", "execute it",
+    "proceed", "yes", "yep", "yeah", "sure", "ok", "okay",
+]
+_NL_STATUS_PATTERNS = [
+    "what's your status", "whats your status", "system status", "how are you doing",
+    "are you up", "oracle status", "status check", "what's running",
+    "show status", "check status", "what is your status", "what's the status",
+    "whats the status",
+]
+_NL_CHANNEL_PATTERNS = [
+    "any response from claude", "did claude respond", "check claude",
+    "any message from claude", "claude's response", "what did claude say",
+    "read claude", "channel status",
+]
+_NL_MEMORY_PATTERNS = [
+    "show memory", "what do you remember", "show me what you know",
+    "what's in memory", "memory status", "show facts",
+]
+
+
+def _parse_natural_command(text: str):
+    """
+    Parse plain-English input into (action, payload) or return None.
+
+    Actions: 'actuate', 'ask_claude', 'pending', 'controls', 'self_build',
+             'approve', 'status', 'channel', 'memory'
+    """
+    lower = text.strip().lower()
+
+    # Send/type/paste to Claude → actuation
+    for pat in _NL_SEND_PATTERNS:
+        m = pat.match(text.strip())
+        if m:
+            payload = m.group(1).strip()
+            # If "send this to claude" with no payload, use the whole input as payload
+            if not payload or payload.lower() in ("", "claude"):
+                payload = text.strip()
+            return ("actuate", {"window": "Claude", "text": payload, "press_enter": True})
+
+    # Ask Claude → channel (for build tasks) or actuation
+    for pat in _NL_ASK_PATTERNS:
+        m = pat.match(text.strip())
+        if m:
+            payload = m.group(1).strip()
+            return ("ask_claude", {"task": payload})
+
+    # Pending list
+    if any(p in lower for p in _NL_PENDING_PATTERNS):
+        return ("pending", {})
+
+    # Controls dump
+    for pat in _NL_CONTROLS_PATTERNS:
+        m = pat.match(text.strip())
+        if m:
+            win = m.group(1).strip()
+            return ("controls", {"window": win})
+
+    # Self-build
+    if any(p in lower for p in _NL_SELF_BUILD_PATTERNS):
+        return ("self_build", {})
+
+    # Status
+    if any(p in lower for p in _NL_STATUS_PATTERNS):
+        return ("status", {})
+
+    # Channel check
+    if any(p in lower for p in _NL_CHANNEL_PATTERNS):
+        return ("channel", {})
+
+    # Memory
+    if any(p in lower for p in _NL_MEMORY_PATTERNS):
+        return ("memory", {})
+
+    return None
+
+
 # ── Interaction mode classifier ───────────────────────────────────────────────
 # Mode is determined BEFORE governance/routing so ORACLE doesn't over-govern
 # simple conversation or under-route real build tasks.
@@ -1182,6 +1294,110 @@ def main():
                     continue
         except Exception:
             pass
+
+        # ── Natural language intent — plain English commands ─────────────────
+        # Runs before paste detection, mode classifier, and qwen.
+        # Lets Noah say "send X to Claude" instead of /actuate Claude | X
+        _nl = _parse_natural_command(user_input)
+        if _nl:
+            _nl_action, _nl_payload = _nl
+
+            if _nl_action == "actuate":
+                _win  = _nl_payload["window"]
+                _text = _nl_payload["text"]
+                _enter = _nl_payload.get("press_enter", True)
+                print(f"\n  {C['byellow']}[ORACLE]{C['reset']} Sending to {_win}…")
+                try:
+                    from actuation_engine import type_into_window
+                    _res = type_into_window(_win, _text, approved=True, press_enter=_enter)
+                    if _res.success:
+                        print(f"  {C['bgreen']}[SENT]{C['reset']} {_text[:80]!r}\n")
+                        speak(f"Sent to {_win}.")
+                    else:
+                        # Fall back to Claude Code window injection
+                        from claude_code_bridge import type_into_claude
+                        ok, detail = type_into_claude(_text, open_if_missing=True)
+                        if ok:
+                            print(f"  {C['bgreen']}[CLAUDE CODE]{C['reset']} {detail}\n")
+                            speak("Sent to Claude.")
+                        else:
+                            print(f"  {C['bred']}[UNAVAILABLE]{C['reset']} {detail}\n"
+                                  f"  Paste manually: {_text[:120]}\n")
+                except Exception as _ae:
+                    print(f"\n  [actuation error: {_ae}]\n")
+                continue
+
+            elif _nl_action == "ask_claude":
+                _task = _nl_payload["task"]
+                print(f"\n  {C['byellow']}[ORACLE → CLAUDE]{C['reset']} {_task[:80]}")
+                try:
+                    from claude_code_bridge import type_into_claude
+                    ok, detail = type_into_claude(_task, open_if_missing=True)
+                    if ok:
+                        print(f"  {C['bgreen']}[SENT]{C['reset']} Claude Code is on it.\n")
+                        speak("Sent to Claude.")
+                    else:
+                        print(f"  {C['bred']}[UNAVAILABLE]{C['reset']} {detail}\n"
+                              f"  Paste manually: {_task[:120]}\n")
+                except Exception as _ae:
+                    print(f"\n  [channel error: {_ae}]\n")
+                continue
+
+            elif _nl_action == "pending":
+                user_input = "/pending"   # re-use existing handler below
+                # fall through — /pending handler will catch it
+
+            elif _nl_action == "controls":
+                _win = _nl_payload["window"]
+                try:
+                    from semantic_ui_bridge import find_window, dump_controls
+                    w = find_window(title_contains=_win)
+                    if w is None:
+                        print(f"\n  No window found matching: {_win!r}\n")
+                    else:
+                        print(f"\n  Window: {w.title!r}  (pid={w.pid})\n")
+                        print(dump_controls(w))
+                        print()
+                except Exception as e:
+                    print(f"\n[controls error: {e}]\n")
+                continue
+
+            elif _nl_action == "self_build":
+                user_input = "build yourself"   # existing handler below
+                # fall through
+
+            elif _nl_action == "status":
+                st = get_oracle_status()
+                print(f"\n  {C['cyan']}[STATUS]{C['reset']}")
+                print(f"  Mode    : {st['mode']}  model: {st['model']}")
+                print(f"  Claude  : {'CONNECTED (window)' if st['claude_window'] else 'window not found'}")
+                print(f"  Hands   : {'ready' if st['hands_ready'] else 'offline'}")
+                print(f"  Pending : {st['pending']} items\n")
+                continue
+
+            elif _nl_action == "channel":
+                try:
+                    from oracle_claude_channel import CLAUDE_TO_ORACLE
+                    if CLAUDE_TO_ORACLE.exists():
+                        _resp = CLAUDE_TO_ORACLE.read_text(encoding="utf-8").strip()
+                        if _resp:
+                            print(f"\n  {C['bgreen']}[CLAUDE RESPONSE]{C['reset']}")
+                            for _line in _resp.splitlines():
+                                print(f"  {_line}")
+                            print()
+                            CLAUDE_TO_ORACLE.unlink()
+                            speak("Claude responded.")
+                        else:
+                            print("\n  No response from Claude yet.\n")
+                    else:
+                        print("\n  No response from Claude yet.\n")
+                except Exception as _ce:
+                    print(f"\n[channel error: {_ce}]\n")
+                continue
+
+            elif _nl_action == "memory":
+                show_memory(session_id)
+                continue
 
         # ── Paste / log-dump detection — must be first intercept ─────────────
         # If Noah pastes ORACLE terminal output, don't route each line as a command.
