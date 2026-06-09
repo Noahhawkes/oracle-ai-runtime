@@ -167,7 +167,8 @@ _NL_STATUS_PATTERNS = [
     "what's your status", "whats your status", "system status", "how are you doing",
     "are you up", "oracle status", "status check", "what's running",
     "show status", "check status", "what is your status", "what's the status",
-    "whats the status",
+    "whats the status", "show me the status", "show me your status",
+    "show me status",
 ]
 _NL_CHANNEL_PATTERNS = [
     "any response from claude", "did claude respond", "check claude",
@@ -177,6 +178,11 @@ _NL_CHANNEL_PATTERNS = [
 _NL_MEMORY_PATTERNS = [
     "show memory", "what do you remember", "show me what you know",
     "what's in memory", "memory status", "show facts",
+]
+_NL_RELAY_PATTERNS = [
+    "talk to claude", "talk with claude", "communicate with claude",
+    "open claude", "connect to claude", "start claude", "relay to claude",
+    "chat with claude", "speak to claude", "speak with claude",
 ]
 
 
@@ -232,6 +238,10 @@ def _parse_natural_command(text: str):
     # Memory
     if any(p in lower for p in _NL_MEMORY_PATTERNS):
         return ("memory", {})
+
+    # Relay / open Claude
+    if any(p in lower for p in _NL_RELAY_PATTERNS):
+        return ("relay", {})
 
     return None
 
@@ -1397,6 +1407,25 @@ def main():
 
             elif _nl_action == "memory":
                 show_memory(session_id)
+                continue
+
+            elif _nl_action == "relay":
+                _cw = _claude_available_now()
+                if _cw:
+                    msg = (
+                        "Claude is connected and ready.\n"
+                        "Tell me what to send and I'll relay it.\n"
+                        "  Example: tell Claude to review core/oracle.py\n"
+                        "  Example: ask Claude what to build next\n"
+                        "  Example: send 'hello' to Claude"
+                    )
+                else:
+                    msg = (
+                        "Claude window not found. Open Claude Desktop and try again.\n"
+                        "Once it's open: tell Claude to [task]  or  ask Claude [question]"
+                    )
+                _print_oracle_reply(msg)
+                speak("Claude is ready." if _cw else "Claude window not found.")
                 continue
 
         # ── Paste / log-dump detection — must be first intercept ─────────────

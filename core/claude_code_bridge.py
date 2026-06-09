@@ -506,42 +506,26 @@ def open_claude_session(
 # ── Code-task classifier ───────────────────────────────────────────────────────
 
 _CODE_KEYWORDS = {
-    # Implementation verbs
-    "implement", "build", "code", "create", "write", "add", "fix", "refactor",
-    "edit", "update", "change", "modify", "delete", "remove", "rename",
-    "scaffold", "generate", "deploy", "integrate", "wire up", "hook up",
-    # File / code references
-    "core/", ".py", ".ts", ".js", ".json", "file", "function", "class",
-    "module", "import", "endpoint", "route", "schema", "database", "api",
+    # Explicit implementation verbs (must be clearly code-directed)
+    "implement", "refactor", "scaffold", "deploy", "integrate",
+    # File / code references — specific enough not to match conversation
+    "core/", ".py", ".ts", ".js", ".json", "function(", "class ",
+    "module", "endpoint", "schema",
     # Build pass / MYTHIC references
-    "step ", "mythic", "build pass", "handoff", "hand off", "hand-off",
-    "voice_hooks", "voice.py", "oracle.py", "tui", "oracle_tui",
-    # Architecture / design
-    "architecture", "design", "pattern", "structure", "refactor", "plan",
-    # Question patterns about code
-    "does ", "where is", "what file", "how does", "explain the code",
-    "check if", "look at", "read the", "find the", "show me the",
-    "what does", "why does", "how is", "what is the",
-    # Action patterns often directed at code work
-    "paste", "inject", "insert", "send this", "post this",
+    "mythic", "build pass", "handoff", "hand off", "hand-off",
+    "voice_hooks", "voice.py", "oracle.py", "oracle_tui",
+    # Explicit code questions
+    "explain the code", "what file", "which file",
 }
 
-# Phrases that mean the user or ORACLE is directly addressing Claude Code
+# Phrases that mean the user is explicitly directing a task AT Claude Code.
+# Keep this list TIGHT — broad matches like "with claude" send everything to Claude.
 _CLAUDE_DIRECT_PATTERNS = [
-    "into claude", "into the claude", "tell claude", "ask claude",
-    "talk to claude", "talk with claude", "message claude",
-    "paste this into", "paste into", "send to claude", "hand off to claude",
-    "hand to claude", "into this window", "into the new claude",
-    "into the session", "into claude code", "to claude code",
-    "for claude", "give claude", "show claude",
-    "with claude", "using claude", "via claude",
-    "code yourself", "code yourself with", "let claude", "have claude",
-    # Activate SOV1 / hands
-    "use sov1", "activate sov1", "active sov1", "sov1 take", "sov1 open",
-    "launch sov1", "use hands", "use your hands", "take control",
-    # Screen/hands control — local model cannot do these, bridge handles them
-    "take over", "keyboard", "mouse", "screen control",
-    "type into", "click on", "move the mouse", "open claude",
+    "into claude code", "to claude code",
+    "tell claude to", "ask claude to",
+    "send to claude code", "hand off to claude",
+    "paste into claude", "type into claude",
+    "into the claude session",
 ]
 
 
