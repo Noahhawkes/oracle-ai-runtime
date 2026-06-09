@@ -2104,15 +2104,18 @@ def main():
                     ORACLE_TO_CLAUDE, CLAUDE_TO_ORACLE, CHANNEL_LOG, pending_task
                 )
                 from oracle_codex_channel import ORACLE_TO_CODEX, CODEX_TO_ORACLE
+                from oracle_codex_watcher import unread_status
                 has_outbox = ORACLE_TO_CLAUDE.exists()
                 has_inbox  = CLAUDE_TO_ORACLE.exists()
                 has_codex_outbox = ORACLE_TO_CODEX.exists()
                 has_codex_inbox = CODEX_TO_ORACLE.exists()
+                codex_unread = unread_status()["unread"]
                 print(f"\n  {C['cyan']}[CHANNEL STATUS]{C['reset']}")
                 print(f"  Outbox (oracle→claude) : {'PENDING' if has_outbox else 'empty'}  {ORACLE_TO_CLAUDE}")
                 print(f"  Inbox  (claude→oracle) : {'RESPONSE READY' if has_inbox else 'empty'}  {CLAUDE_TO_ORACLE}")
                 print(f"  Outbox (oracle->codex)  : {'PENDING' if has_codex_outbox else 'empty'}  {ORACLE_TO_CODEX}")
                 print(f"  Inbox  (codex->oracle)  : {'RESPONSE READY' if has_codex_inbox else 'empty'}  {CODEX_TO_ORACLE}")
+                print(f"  Codex unread reply      : {'YES' if codex_unread else 'no'}")
                 if has_inbox:
                     from oracle_claude_channel import CLAUDE_TO_ORACLE
                     resp = CLAUDE_TO_ORACLE.read_text(encoding="utf-8")[:300]
@@ -2158,6 +2161,11 @@ def main():
                     for line in response.splitlines():
                         print(f"  {line}")
                     print()
+                    try:
+                        from oracle_codex_watcher import mark_read
+                        mark_read()
+                    except Exception:
+                        pass
                     speak("Codex response loaded.")
             except Exception as e:
                 print(f"\n[codex-reply error: {e}]\n")
