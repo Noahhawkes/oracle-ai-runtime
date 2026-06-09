@@ -275,7 +275,7 @@ def _parse_natural_command(text: str):
 
 _CHAT_TRIGGERS = [
     "just talk", "talk normally", "talk to me", "just chat", "don't route",
-    "be normal", "have a conversation", "i'm frustrated", "i'm excited",
+    "be normal", "i'm frustrated", "i'm excited",
     "i'm tired", "i feel ", "tell me about yourself", "what do you think about",
     "how are you", "i need to vent", "i want to talk", "can we talk",
     "let's just talk", "stop routing", "just respond",
@@ -2216,7 +2216,18 @@ def main():
         #   WORK    → local model first; skip auto-routing unless tools are needed
         #   BUILD   → check Claude availability → route or return [CLAUDE UNAVAILABLE]
         #   DIAGNOSTIC → already handled above; shouldn't reach here
-        _imode = _classify_interaction_mode(user_input)
+        # ── Action-intent check — must fire BEFORE mode classifier ──────────────
+        # Catches "open ChatGPT and have a conversation" even when the mode
+        # classifier would otherwise return CHAT and skip tool routing entirely.
+        try:
+            from oracle_inner import is_action_intent
+            _pre_action, _pre_hint = is_action_intent(user_input)
+            if _pre_action:
+                _imode = "WORK"   # force WORK so tool path runs
+            else:
+                _imode = _classify_interaction_mode(user_input)
+        except Exception:
+            _imode = _classify_interaction_mode(user_input)
 
         # ── "remember this / remember that" — explicit memory storage ───────────
         _uil_mem = user_input.lower().strip()

@@ -220,7 +220,10 @@ def clear_old(older_than_days: int = 7) -> int:
 import re as _re
 
 _ACTION_INTENT_PATTERNS = [
-    _re.compile(r'\b(open|launch|start|run)\b.*\b(app|chrome|notepad|terminal|claude)\b', _re.I),
+    # open/launch/start anything — broad, covers "open ChatGPT", "open Chrome", "start Notepad"
+    _re.compile(r'\b(open|launch|start)\b\s+\S', _re.I),
+    # run commands / scripts
+    _re.compile(r'\brun\b.*\b(command|script|this|it)\b', _re.I),
     _re.compile(r'\b(type|send|paste|write)\b.*\b(claude|window|code|terminal)\b', _re.I),
     _re.compile(r'\b(click|scroll|move|navigate)\b', _re.I),
     _re.compile(r'\b(use sov1|use the hands|actuate|sov1)\b', _re.I),
@@ -229,6 +232,10 @@ _ACTION_INTENT_PATTERNS = [
     _re.compile(r'\b(check|read|look at) (the screen|your screen|what.s on)\b', _re.I),
     _re.compile(r'\btake control\b', _re.I),
     _re.compile(r'\bdo it\b|\bexecute\b|\bgo ahead\b', _re.I),
+    # "have a conversation with X" — open and interact with an app
+    _re.compile(r'\bhave a conversation with\b', _re.I),
+    # "go to X" / "switch to X" / "focus X"
+    _re.compile(r'\b(go to|switch to|focus|bring up)\b\s+\S', _re.I),
 ]
 
 def is_action_intent(text: str) -> tuple[bool, str]:
