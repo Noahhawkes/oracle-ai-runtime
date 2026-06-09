@@ -127,8 +127,38 @@ class OracleProcess:
             if clean.startswith("[STATUS]"):
                 self._parse_status(clean)
                 continue
+            if self._should_hide_runtime_line(clean):
+                continue
             self.output_q.put(clean)
         self.output_q.put("[ORACLE OFFLINE]")
+
+    def _should_hide_runtime_line(self, line: str) -> bool:
+        """Hide legacy REPL chrome that the desktop shell replaces."""
+        text = line.strip()
+        if text in {"You:", "You: "}:
+            return True
+        if not text:
+            return False
+        if all(ch in "-_= ." for ch in text):
+            return True
+        banner_markers = (
+            "████", "╔", "╗", "╚", "╝", "║", "═",
+            "SOVEREIGN OPERATOR LAYER",
+            "MODE        ",
+            "VISION      ",
+            "SOV1        ",
+            "MEMORY      ",
+            "PROJECTS    ",
+            "LAST MILESTONE",
+            "RESUMING",
+            "Last session:",
+            "Good morning,",
+            "Good afternoon,",
+            "Good evening,",
+            "Active constructs:",
+            "◆ /pending",
+        )
+        return any(marker in text for marker in banner_markers)
 
     def _parse_status(self, line: str):
         """Parse: [STATUS] mode=LOCAL claude_window=True pending=3 ..."""
@@ -353,7 +383,7 @@ class OracleDesktopApp:
     # ── Oracle process ────────────────────────────────────────────────────
 
     def _start_oracle(self):
-        self._append_line("  Starting ORACLE runtime…", tag="dim")
+        self._append_line("Starting local runtime...", tag="dim")
         self._append_line("ORACLE Resident Console", tag="oracle")
         self._append_line("Awake on local runtime. Routine in-scope work is delegated; major changes still come back to Noah.", tag="system")
         self._append_line("Try: 'run one resident cycle' or 'show me your status'.", tag="dim")

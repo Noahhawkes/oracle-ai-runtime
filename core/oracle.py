@@ -2174,8 +2174,17 @@ def main():
             "just go", "just do it", "do it", "start", "begin", "continue",
             "what would you do", "decide", "what now", "next", "what's the plan",
             "whats the plan", "what should i do", "what should you do",
+            "run one resident cycle", "wake cycle",
         }
-        if _uil in _ORACLE_DRIVES:
+        _CONFIRM_DRIVES = ("yes", "yep", "yeah", "ok", "okay", "sure")
+        _confirm_drive = (
+            _uil in _ORACLE_DRIVES
+            or (
+                _uil.startswith(_CONFIRM_DRIVES)
+                and any(word in _uil for word in ("proceed", "continue", "go ahead", "keep going"))
+            )
+        )
+        if _confirm_drive:
             try:
                 from oracle_runtime import run_cycle, MODE_MANUAL as ORT_MANUAL
                 from project_state import load_state
