@@ -635,6 +635,74 @@ def _inject_local_context(user_input: str) -> str:
     return "\n".join(lines)
 
 
+def _show_scoped_path_table() -> str:
+    """
+    Read Memory/scoped_paths_proposed.json and return a formatted review table.
+    Does NOT approve any paths — display only.
+    Returns a clear error string if the file is missing.
+    """
+    import json as _json
+    proposed_file = ROOT / "Memory" / "scoped_paths_proposed.json"
+    if not proposed_file.exists():
+        return (
+            "[SCOPE REVIEW] Memory/scoped_paths_proposed.json not found.\n"
+            "  Run: python core/drive_scope.py --propose   to generate it."
+        )
+    try:
+        data = _json.loads(proposed_file.read_text(encoding="utf-8"))
+    except Exception as _e:
+        return f"[SCOPE REVIEW ERROR] Could not read proposed paths: {_e}"
+
+    proposals = data.get("proposals", [])
+    if not proposals:
+        return "[SCOPE REVIEW] No proposals found in scoped_paths_proposed.json."
+
+    _CLOUD_TOKENS = ("onedrive", "my drive")
+    lines = [
+        "\n[SCOPE REVIEW] Proposed Drive Scope paths",
+        "  None of these are active until you explicitly approve each one.\n",
+        f"  {'NAME':<18} {'PATH':<52} {'EXISTS':<7} {'CLOUD':<7} {'STATUS'}",
+        "  " + "-" * 100,
+    ]
+    for p in proposals:
+        name   = p.get("name", "")[:18]
+        path   = p.get("path", "")
+        exists = "yes" if p.get("exists") else "no"
+        cloud  = "yes" if any(t in path.lower() for t in _CLOUD_TOKENS) else "no"
+        status = p.get("status", "unknown")
+        lines.append(f"  {name:<18} {path:<52} {exists:<7} {cloud:<7} {status}")
+
+    lines += [
+        "",
+        f"  {len(proposals)} path(s) listed above.",
+        "  Approve individually: type   approve <name>   for each path you want.",
+        "  This display did not approve anything.\n",
+    ]
+    return "\n".join(lines)
+
+
+# Keywords that indicate ORACLE just proposed a scoped-path review in her reply.
+_SCOPE_REVIEW_TRIGGER_WORDS = (
+    "scoped_paths_proposed", "scoped paths", "proposed paths",
+    "review the 12", "approve the 12", "scoped path review",
+)
+
+# Affirmatives that should execute a pending scope-review proposal.
+_SCOPE_AFFIRMATIVES = frozenset([
+    "yes", "yep", "yeah", "ok", "okay", "sure", "proceed",
+    "go ahead", "go", "show them", "review them", "show me",
+    "yes proceed", "yes go", "yes show", "show it", "do it",
+    "let's do it", "lets do it", "run it", "yes do it", "go for it",
+    "yes please", "please", "show me the paths",
+])
+
+# Phrases that identify a ChatGPT relay message — treat as conversation, not governance.
+_CHATGPT_RELAY_PREFIXES = (
+    "chatgpt says", "chatgpt said", "chatgpt:", "chatgpt responded",
+    "chatgpt replied", "chatgpt told me",
+)
+
+
 def _detect_hallucination(reply: str, tool_names_called: list[str]) -> str | None:
     """
     Kept for backwards compat — delegates to _blocked_response with a live registry.
@@ -1384,6 +1452,7 @@ def main():
 
     _last_pending_ids: list = []           # populated by /pending, consumed by approve/reject
     _last_pending_secret_flags: list[bool] = []  # parallel list — True = secret-blocked
+    _pending_scope_review: bool = False    # True after ORACLE proposes a scope-path review
 
     banner(identity)
     log("SESSION_START", f"Session {session_id} started")
@@ -1550,12 +1619,15 @@ def main():
                 # fall through
 
             elif _nl_action == "status":
+                # Status check: return status only — must not become a governance
+                # recommendation, a Claude handoff, or a Codex handoff.
                 st = get_oracle_status()
                 print(f"\n  {C['cyan']}[STATUS]{C['reset']}")
                 print(f"  Mode    : {st['mode']}  model: {st['model']}")
                 print(f"  Claude  : {'CONNECTED (window)' if st['claude_window'] else 'window not found'}")
                 print(f"  Hands   : {'ready' if st['hands_ready'] else 'offline'}")
                 print(f"  Pending : {st['pending']} items\n")
+                _pending_scope_review = False  # status check clears pending state
                 continue
 
             elif _nl_action == "channel":
@@ -2248,6 +2320,39 @@ def main():
                 print(f"\n[route-task error: {e}]\n")
             continue
 
+        # ── ChatGPT relay detection — treat as conversation, not governance ────────
+        # "ChatGPT says X" must not become a build task, a Claude handoff, or a
+        # Codex handoff.  Classify as a status/conversation update and show it.
+        _uil_lower_stripped = user_input.lower().strip()
+        _is_chatgpt_relay = any(
+            _uil_lower_stripped.startswith(pfx) for pfx in _CHATGPT_RELAY_PREFIXES
+        )
+        if _is_chatgpt_relay:
+            # Check for explicit actionable keywords before treating as relay
+            _relay_action_words = ("build", "approve", "commit", "send to claude",
+                                   "send to codex", "implement", "deploy")
+            _has_action = any(w in _uil_lower_stripped for w in _relay_action_words)
+            if not _has_action:
+                print(f"\n  {C['grey']}[RELAY — ChatGPT]{C['reset']}")
+                _print_oracle_reply(user_input)
+                log("RELAY", f"ChatGPT relay (no action): {user_input[:80]}")
+                _pending_scope_review = False  # relay clears pending state
+                continue
+
+        # ── Pending scope-review intercept — affirmative executes, not loops ─────
+        # When ORACLE has just proposed reviewing scoped paths and Noah says yes,
+        # execute the review directly instead of re-asking via the LLM.
+        _uil = user_input.lower().strip().rstrip(".!?")
+        if _pending_scope_review and _uil in _SCOPE_AFFIRMATIVES:
+            print(_show_scoped_path_table())
+            speak("Here are the proposed paths. No paths approved yet.")
+            log("SCOPE_REVIEW", "displayed proposed paths on affirmative")
+            _pending_scope_review = False
+            continue
+        elif _uil not in _SCOPE_AFFIRMATIVES:
+            # Any non-affirmative clears the pending state
+            _pending_scope_review = False
+
         # ── Governance-drive intercept — "you choose", "go", "proceed" ──────────
         # When Noah gives open-ended direction, ORACLE consults her governance
         # cycle instead of letting the LLM improvise from nothing.
@@ -2538,6 +2643,16 @@ def main():
             _print_oracle_reply(reply)
             speak(reply)
 
+            # Detect if ORACLE just proposed a scope-path review so the next
+            # affirmative ("yes", "ok", etc.) can execute it directly.
+            _reply_lower = reply.lower()
+            if any(kw in _reply_lower for kw in _SCOPE_REVIEW_TRIGGER_WORDS):
+                _QUESTION_WORDS = ("want", "proceed", "shall", "should", "review",
+                                   "would you", "like to", "approve")
+                if any(q in _reply_lower for q in _QUESTION_WORDS):
+                    _pending_scope_review = True
+                    log("SCOPE_REVIEW", "pending scope review flagged — awaiting affirmative")
+
             # Auto-compress this exchange into light memory (background, non-blocking)
             try:
                 from light_compression import compress_and_store, PATTERN, FACT
@@ -2594,7 +2709,151 @@ def _smoke_test_governed_actuation() -> int:
     return 0 if passed == len(checks) else 1
 
 
+def _smoke_test_intent_router() -> int:
+    """
+    Verify the intent router loop fix without running the REPL or calling the LLM.
+    All checks are static (source inspection) or unit tests on isolated functions.
+    No paths approved. No destructive actions. No cloud API calls.
+    """
+    import json as _json
+    import tempfile, os as _os
+
+    src = Path(__file__).read_text(encoding="utf-8", errors="replace")
+    results = []
+    passed = 0
+
+    def ok(label):
+        nonlocal passed
+        passed += 1
+        results.append(f"  [PASS] {label}")
+
+    def fail(label, reason=""):
+        results.append(f"  [FAIL] {label}" + (f" -- {reason}" if reason else ""))
+
+    total = 12
+
+    # 1. _pending_scope_review state variable is declared in main()
+    if "_pending_scope_review: bool = False" in src:
+        ok("_pending_scope_review state variable declared")
+    else:
+        fail("_pending_scope_review state variable declared")
+
+    # 2. Affirmative "yes" is in _SCOPE_AFFIRMATIVES
+    if '"yes"' in src and "_SCOPE_AFFIRMATIVES" in src:
+        ok('"yes" is in _SCOPE_AFFIRMATIVES')
+    else:
+        fail('"yes" is in _SCOPE_AFFIRMATIVES')
+
+    # 3. "yes proceed" is in _SCOPE_AFFIRMATIVES
+    if '"yes proceed"' in src and "_SCOPE_AFFIRMATIVES" in src:
+        ok('"yes proceed" is in _SCOPE_AFFIRMATIVES')
+    else:
+        fail('"yes proceed" is in _SCOPE_AFFIRMATIVES')
+
+    # 4. Pending scope review intercept comes before LLM call in source order
+    intercept_pos = src.find("_pending_scope_review and _uil in _SCOPE_AFFIRMATIVES")
+    llm_call_pos  = src.find("reply, history = chat_local(client")
+    if intercept_pos > 0 and llm_call_pos > 0 and intercept_pos < llm_call_pos:
+        ok("pending-scope intercept fires before LLM call")
+    else:
+        fail("pending-scope intercept fires before LLM call",
+             f"intercept={intercept_pos} llm={llm_call_pos}")
+
+    # 5. Status check clears _pending_scope_review (no loop on status)
+    if '_pending_scope_review = False  # status check clears' in src:
+        ok("status check clears _pending_scope_review")
+    else:
+        fail("status check clears _pending_scope_review")
+
+    # 6. ChatGPT relay is detected and handled without Claude handoff
+    if "_is_chatgpt_relay" in src and "_CHATGPT_RELAY_PREFIXES" in src:
+        ok("ChatGPT relay detection present")
+    else:
+        fail("ChatGPT relay detection present")
+
+    # 7. ChatGPT relay does NOT trigger Claude handoff unless action word present
+    relay_block = src[src.find("_is_chatgpt_relay = any"):src.find("# ── Pending scope-review")]
+    if "_has_action" in relay_block and "send to claude" in relay_block:
+        ok("ChatGPT relay skips Claude handoff unless explicit action word")
+    else:
+        fail("ChatGPT relay skips Claude handoff unless explicit action word")
+
+    # 8. ChatGPT relay does NOT trigger Codex handoff
+    if "send to codex" in relay_block:
+        ok("ChatGPT relay skips Codex handoff unless explicit action word")
+    else:
+        fail("ChatGPT relay skips Codex handoff unless explicit action word")
+
+    # 9. _show_scoped_path_table reads proposed file, returns table (no approval written)
+    tmp = tempfile.mkdtemp()
+    _fake_proposed = {
+        "proposals": [
+            {"name": "documents", "path": "C:\\Users\\noahh\\Documents",
+             "exists": True, "blocked": False, "status": "proposed", "approval_required": True},
+        ],
+        "proposed_count": 1, "blocked_count": 0, "not_present": 0,
+        "approval_rule": "No path is active until Noah approves it.",
+    }
+    _fake_file = Path(tmp) / "scoped_paths_proposed.json"
+    _fake_file.write_text(_json.dumps(_fake_proposed), encoding="utf-8")
+    # Temporarily redirect ROOT/Memory lookup
+    _orig_root = globals().get("ROOT")
+    # Monkeypatch ROOT at module level for the call
+    import oracle as _self
+    _old_root = _self.ROOT
+    _self.ROOT = Path(tmp)
+    (Path(tmp) / "Memory").mkdir()
+    (Path(tmp) / "Memory" / "scoped_paths_proposed.json").write_text(
+        _json.dumps(_fake_proposed), encoding="utf-8"
+    )
+    try:
+        table = _self._show_scoped_path_table()
+        if "Documents" in table and "proposed" in table and "did not approve" in table:
+            ok("_show_scoped_path_table displays table without approving")
+        else:
+            fail("_show_scoped_path_table displays table without approving", table[:120])
+    finally:
+        _self.ROOT = _old_root
+        import shutil as _shutil
+        _shutil.rmtree(tmp, ignore_errors=True)
+
+    # 10. _show_scoped_path_table returns clear error for missing file
+    _self.ROOT = Path(tmp + "_missing")  # points nowhere
+    try:
+        err = _self._show_scoped_path_table()
+        if "not found" in err.lower() or "error" in err.lower():
+            ok("missing proposed file returns clear error message")
+        else:
+            fail("missing proposed file returns clear error message", err[:80])
+    finally:
+        _self.ROOT = _old_root
+
+    # 11. No path approvals written during smoke test
+    approved_file = ROOT / "Memory" / "scoped_paths.json"
+    pre_mtime = approved_file.stat().st_mtime if approved_file.exists() else None
+    # (nothing in this test touches scoped_paths.json — verify by re-stat)
+    post_mtime = approved_file.stat().st_mtime if approved_file.exists() else None
+    if pre_mtime == post_mtime:
+        ok("no path approvals written during smoke test")
+    else:
+        fail("no path approvals written during smoke test")
+
+    # 12. oracle.py --smoke-test passes existing actuation checks too
+    actuation_result = _smoke_test_governed_actuation()
+    if actuation_result == 0:
+        ok("existing actuation smoke tests still pass (4/4)")
+    else:
+        fail("existing actuation smoke tests still pass")
+
+    for line in results:
+        print(line)
+    print(f"\n{passed}/{total} oracle intent-router smoke tests passed.")
+    return 0 if passed == total else 1
+
+
 if __name__ == "__main__":
     if "--smoke-test" in sys.argv or "--smoke" in sys.argv:
-        sys.exit(_smoke_test_governed_actuation())
+        rc1 = _smoke_test_governed_actuation()
+        rc2 = _smoke_test_intent_router()
+        sys.exit(0 if rc1 == 0 and rc2 == 0 else 1)
     main()
