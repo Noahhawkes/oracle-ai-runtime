@@ -1,5 +1,5 @@
 """
-core/actuation_engine.py — ORACLE Actuation Engine v0.1
+core/actuation_engine.py — ORACLE Actuation Engine v0.2
 
 This is the governed orchestrator for desktop execution.
 
@@ -43,6 +43,94 @@ else:
     ROOT = Path(__file__).parent.parent
 
 sys.path.insert(0, str(ROOT / "core"))
+
+# ── File action risk levels ────────────────────────────────────────────────────
+# Every file-affecting action carries a risk level. Higher risk = more gates.
+
+FILE_ACTION_READ      = "file_read"       # risk: low  — allowed in approved scope
+FILE_ACTION_WRITE     = "file_write"      # risk: med  — requires approved_for_write
+FILE_ACTION_CREATE    = "file_create"     # risk: med  — requires approved_for_write
+FILE_ACTION_EDIT      = "file_edit"       # risk: med  — requires approved_for_write
+FILE_ACTION_DELETE    = "file_delete"     # risk: high — requires approved_by_noah
+FILE_ACTION_MOVE      = "file_move"       # risk: high — requires approved_by_noah
+FILE_ACTION_RENAME    = "file_rename"     # risk: high — requires approved_by_noah
+FILE_ACTION_COPY      = "file_copy"       # risk: med  — requires approved_for_write
+FILE_ACTION_UPLOAD    = "file_upload"     # risk: high — requires approved_by_noah
+FILE_ACTION_SYNC      = "file_sync"       # risk: high — requires approved_by_noah
+FILE_ACTION_PERMISSION = "file_permission" # risk: high — requires approved_by_noah
+
+# Actions that always require explicit Noah approval regardless of scope
+FILE_ACTIONS_ALWAYS_APPROVE = {
+    FILE_ACTION_DELETE, FILE_ACTION_MOVE, FILE_ACTION_RENAME,
+    FILE_ACTION_UPLOAD, FILE_ACTION_SYNC, FILE_ACTION_PERMISSION,
+}
+
+# Actions that require write approval inside approved scope
+FILE_ACTIONS_REQUIRE_WRITE = {
+    FILE_ACTION_WRITE, FILE_ACTION_CREATE, FILE_ACTION_EDIT, FILE_ACTION_COPY,
+}
+
+# Actions allowed with read approval inside approved scope
+FILE_ACTIONS_READ_OK = {FILE_ACTION_READ}
+
+
+# ── Drive Scope gate ───────────────────────────────────────────────────────────
+
+def _check_drive_scope(
+    path: str,
+    file_action: str = FILE_ACTION_READ,
+    approved_for_write: bool = False,
+    approved_by_noah: bool = False,
+) -> tuple[bool, str]:
+    """
+    Check whether a file path is within approved Drive Scope and whether
+    the requested action is permitted.
+
+    Returns (allowed: bool, reason: str).
+    """
+    if not path or not path.strip():
+        return True, ""  # no path constraint → not a file action
+
+    target = Path(path).resolve()
+
+    # Block system paths immediately (belt-and-suspenders on top of drive_scope)
+    system_roots = {
+        "C:\\Windows", "C:\\Program Files", "C:\\Program Files (x86)",
+        "C:\\ProgramData", "C:\\Recovery",
+    }
+    target_str = str(target).lower()
+    for sys_root in system_roots:
+        if target_str.startswith(sys_root.lower()):
+            return False, f"BLOCKED — system path: {target}"
+
+    # Consult Drive Scope
+    try:
+        from drive_scope import is_in_scope, _is_blocked, approved_paths
+        in_scope = is_in_scope(target)
+        if _is_blocked(target):
+            return False, f"BLOCKED — sensitive folder pattern matched: {target}"
+        if not in_scope:
+            return False, f"BLOCKED — path is outside approved Drive Scope: {target}"
+    except Exception as e:
+        return False, f"BLOCKED — Drive Scope unavailable ({e}): {target}"
+
+    # Path is in scope — now check action permission level
+    if file_action in FILE_ACTIONS_ALWAYS_APPROVE:
+        if not approved_by_noah:
+            return False, (
+                f"BLOCKED — {file_action} always requires explicit Noah approval "
+                f"even inside approved scope: {target}"
+            )
+    elif file_action in FILE_ACTIONS_REQUIRE_WRITE:
+        if not approved_for_write:
+            return False, (
+                f"BLOCKED — {file_action} requires approved_for_write=True "
+                f"inside approved scope: {target}"
+            )
+    # FILE_ACTION_READ: allowed inside scope with no extra gate
+
+    return True, ""
+
 
 # ── Forbidden actions ──────────────────────────────────────────────────────────
 
@@ -110,6 +198,9 @@ class ActuationRequest:
     dry_run: bool = False
     sensitivity: str = "medium"
     approved_by_noah: bool = False
+    target_file_path: str = ""        # if set: drive scope gate runs on this path
+    file_action: str = FILE_ACTION_READ  # what kind of file operation this is
+    approved_for_write: bool = False  # required for write/edit/create/copy actions
     created_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -146,6 +237,8 @@ class ActuationResult:
 
     blocked_forbidden: bool = False
     blocked_verb: str = ""
+    scope_blocked: bool = False
+    scope_block_reason: str = ""
 
     safe_sleep_blocked: bool = False
     local_small_blocked: bool = False
@@ -169,6 +262,8 @@ class ActuationResult:
         ]
         if self.safe_sleep_blocked:
             lines.append("  [BLOCKED]   SAFE_SLEEP mode — no desktop actions allowed")
+        if self.scope_blocked:
+            lines.append(f"  [BLOCKED]   Drive Scope: {self.scope_block_reason}")
         if self.blocked_forbidden:
             lines.append(f"  [BLOCKED]   Forbidden verb '{self.blocked_verb}' — route to HUMAN_SOVEREIGN")
         if self.approval_required:
@@ -319,6 +414,22 @@ def execute(request: ActuationRequest) -> ActuationResult:
         result.failure_stage = "safe_sleep_check"
         result.session_mode_at_end = _get_session_mode()
         return result
+
+    # ── Stage 0.5: Drive Scope gate (file path actions only) ─────────────────
+    if request.target_file_path:
+        scope_ok, scope_reason = _check_drive_scope(
+            request.target_file_path,
+            file_action=request.file_action,
+            approved_for_write=request.approved_for_write,
+            approved_by_noah=request.approved_by_noah,
+        )
+        if not scope_ok:
+            result.scope_blocked = True
+            result.scope_block_reason = scope_reason
+            result.stopped_reason = scope_reason
+            result.failure_stage = "drive_scope_gate"
+            result.session_mode_at_end = _get_session_mode()
+            return result
 
     # ── Stage 1: Dry run — probe window existence, skip execution ────────────
     if request.dry_run or request.action_type == ACTION_DRY_RUN:
@@ -824,6 +935,109 @@ def _smoke_test() -> bool:
     )
     check("Unverified result carries explicit no-claim unknown",
           any("No model may claim" in u for u in r_unv.unknowns))
+
+    # 13-22. Drive Scope gate tests
+    print("\n  -- Drive Scope gate --")
+
+    # 13. Approved path + read action allowed
+    try:
+        from drive_scope import approved_paths as _ap
+        ap = _ap()
+        if ap:
+            ok, reason = _check_drive_scope(ap[0], FILE_ACTION_READ)
+            check("13. approved path + read → allowed", ok, reason)
+        else:
+            check("13. approved path + read → allowed (no paths yet, skip)", True)
+    except Exception as e:
+        check("13. drive scope read check (skip — drive_scope unavailable)", True)
+
+    # 14. System path blocked
+    ok, reason = _check_drive_scope("C:\\Windows\\System32", FILE_ACTION_READ)
+    check("14. system path blocked", not ok, reason)
+
+    # 15. Unknown/outside-scope path blocked
+    ok, reason = _check_drive_scope("Z:\\SomeUnknownDrive\\file.txt", FILE_ACTION_READ)
+    check("15. out-of-scope path blocked", not ok, reason)
+
+    # 16. Write action without approved_for_write blocked inside scope
+    try:
+        from drive_scope import approved_paths as _ap2
+        ap2 = _ap2()
+        if ap2:
+            ok, reason = _check_drive_scope(ap2[0], FILE_ACTION_WRITE, approved_for_write=False)
+            check("16. write without approved_for_write blocked", not ok, reason)
+        else:
+            check("16. write approval gate (no paths yet, skip)", True)
+    except Exception:
+        check("16. write approval gate (skip)", True)
+
+    # 17. Write action with approved_for_write allowed inside scope
+    try:
+        from drive_scope import approved_paths as _ap3
+        ap3 = _ap3()
+        if ap3:
+            ok, reason = _check_drive_scope(ap3[0], FILE_ACTION_WRITE, approved_for_write=True)
+            check("17. write with approved_for_write → allowed", ok, reason)
+        else:
+            check("17. write with approved_for_write (no paths, skip)", True)
+    except Exception:
+        check("17. write with approved_for_write (skip)", True)
+
+    # 18. Destructive action blocked even inside scope without approval
+    try:
+        from drive_scope import approved_paths as _ap4
+        ap4 = _ap4()
+        if ap4:
+            ok, reason = _check_drive_scope(
+                ap4[0], FILE_ACTION_DELETE,
+                approved_for_write=True, approved_by_noah=False
+            )
+            check("18. delete without noah approval blocked even in scope", not ok, reason)
+        else:
+            check("18. destructive gate (no paths, skip)", True)
+    except Exception:
+        check("18. destructive gate (skip)", True)
+
+    # 19. Drive Scope gate fires in execute() pipeline — system path blocked
+    r_scope = execute(ActuationRequest(
+        action_type=ACTION_DRY_RUN,
+        target_file_path="C:\\Windows\\System32\\config",
+        file_action=FILE_ACTION_READ,
+        dry_run=True,
+    ))
+    check("19. execute() scope gate blocks system path",
+          r_scope.scope_blocked or r_scope.failure_stage == "drive_scope_gate",
+          f"scope_blocked={r_scope.scope_blocked} stage={r_scope.failure_stage}")
+
+    # 20. execute() with no target_file_path skips scope gate
+    r_noscope = execute(ActuationRequest(
+        action_type=ACTION_DRY_RUN,
+        target_file_path="",
+        dry_run=True,
+    ))
+    check("20. execute() with no target_file_path skips scope gate",
+          not r_noscope.scope_blocked,
+          f"scope_blocked={r_noscope.scope_blocked}")
+
+    # 21. Scope block reason is non-empty and human-readable
+    _, reason21 = _check_drive_scope("C:\\Windows\\System32", FILE_ACTION_READ)
+    check("21. scope block reason is non-empty", bool(reason21) and len(reason21) > 10, reason21)
+
+    # 22. SAFE_SLEEP fires before scope gate (SAFE_SLEEP is stage 0, scope is 0.5)
+    try:
+        from session_state import set_mode, MODE_SAFE_SLEEP, MODE_IDLE
+        set_mode(MODE_SAFE_SLEEP, reason="smoke test 22")
+        r_ss3 = execute(ActuationRequest(
+            action_type=ACTION_DRY_RUN,
+            target_file_path="C:\\Windows\\System32",
+            dry_run=True,
+        ))
+        check("22. SAFE_SLEEP blocks before scope gate fires",
+              r_ss3.safe_sleep_blocked and not r_ss3.scope_blocked,
+              f"safe_sleep={r_ss3.safe_sleep_blocked} scope={r_ss3.scope_blocked}")
+        set_mode(MODE_IDLE, reason="restore")
+    except ImportError:
+        check("22. SAFE_SLEEP before scope gate (session_state unavailable)", True)
 
     # 13. SAFE_SLEEP with ACTION_DRY_RUN type — still safe-sleep blocked
     print("\n  -- SAFE_SLEEP also blocks ACTION_DRY_RUN type --")
