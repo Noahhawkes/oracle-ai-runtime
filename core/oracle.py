@@ -555,6 +555,15 @@ def _inject_local_context(user_input: str) -> str:
     except Exception:
         pass
 
+    # Inner monologue — ORACLE's recent reasoning, prevents re-treading failed paths
+    try:
+        from oracle_inner import monologue_block
+        mono = monologue_block(query=user_input, last_n=3, max_chars=400)
+        if mono:
+            lines.append(mono)
+    except Exception:
+        pass
+
     lines.append("")
     lines.append(f"Noah says: {user_input}")
     return "\n".join(lines)
@@ -1100,13 +1109,40 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
     """
     import json
 
+    # Detect action intent — if Noah is asking ORACLE to DO something, force a tool call
+    _action_required = False
+    _tool_hint = ""
+    try:
+        from oracle_inner import is_action_intent, think, tool_force_directive
+        _action_required, _tool_hint = is_action_intent(user_input)
+        if _action_required:
+            # Record the thought before acting
+            think(
+                intent=user_input[:120],
+                tool=_tool_hint,
+                reasoning="User requested action — attempting tool call",
+            )
+    except Exception:
+        pass
+
     # Inject live ORACLE state into user message so 7B model has grounding
     grounded_input = _inject_local_context(user_input)
+
+    # If action required: prepend the tool-force directive to system prompt for this turn
+    _effective_system = system_prompt
+    if _action_required:
+        try:
+            from oracle_inner import tool_force_directive
+            directive = tool_force_directive(_tool_hint)
+            _effective_system = system_prompt + "\n\n" + directive
+        except Exception:
+            pass
+
     history.append({"role": "user", "content": grounded_input})
     save_message(session_id, "user", user_input)  # save original, not injected
     log("INPUT", user_input)
 
-    # Restricted tool set for local model — read-only operations only
+    # Full tool set for local model — includes HANDS (SOV1) tools
     oai_tools = to_openai_tools(LOCAL_TOOL_DEFINITIONS)
     _tools_called: list[str] = []
 
@@ -1119,7 +1155,7 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
             )
             save_message(session_id, "assistant", reply)
             return reply, history
-        messages = [{"role": "system", "content": system_prompt}] + history
+        messages = [{"role": "system", "content": _effective_system}] + history
         response = client.chat.completions.create(
             model=model,
             max_tokens=MAX_TOKENS,
@@ -1183,6 +1219,15 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
                 # ── HANDS — no gate, SOV1 governs internally ─────────────────
                 if tool_name in _LOCAL_HANDS_TOOLS:
                     print(f"  {C['bgreen']}[HANDS]{C['reset']} {tool_name}")
+                    try:
+                        from oracle_inner import think
+                        think(
+                            intent=f"Calling {tool_name}",
+                            tool=tool_name,
+                            reasoning=str(inp)[:120],
+                        )
+                    except Exception:
+                        pass
 
                 # ── WRITE — explicit approval required ────────────────────────
                 elif tool_name in _LOCAL_WRITE_TOOLS:

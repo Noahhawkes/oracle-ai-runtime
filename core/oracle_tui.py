@@ -412,6 +412,33 @@ class OracleTUI(App):
         _app_ref = self
         self.query_one("#input-bar", Input).focus()
         self._run_boot_cycle()
+        # Poll inner monologue file every 2s — surface new thoughts in thinking panel
+        self.set_interval(2.0, self._poll_inner_monologue)
+        self._inner_last_seen: int = 0
+
+    def _poll_inner_monologue(self) -> None:
+        try:
+            from oracle_inner import INNER_JSON
+            if not INNER_JSON.exists():
+                return
+            mtime = int(INNER_JSON.stat().st_mtime)
+            if mtime <= self._inner_last_seen:
+                return
+            self._inner_last_seen = mtime
+            from oracle_inner import last_thoughts
+            thoughts = last_thoughts(3)
+            for t in thoughts:
+                if not t.intent:
+                    continue
+                line = f"[bold #336699]◈ ORACLE THINKS:[/bold #336699] [dim]{t.intent[:80]}"
+                if t.tool:
+                    line += f"  →  {t.tool}"
+                if t.outcome:
+                    line += f"  [{t.outcome[:40]}]"
+                line += "[/dim]"
+                self._write_think(line)
+        except Exception:
+            pass
 
     # ── Thread-safe write helpers ──────────────────────────────────────────────
 
@@ -509,6 +536,10 @@ class OracleTUI(App):
 
         if lower in ("/memory",):
             threading.Thread(target=self._show_memory, daemon=True).start()
+            return
+
+        if lower in ("/think", "/monologue", "/inner"):
+            threading.Thread(target=self._show_inner_monologue, daemon=True).start()
             return
 
         if lower in ("/voice on",):
@@ -722,6 +753,27 @@ class OracleTUI(App):
         except Exception as e:
             self.post_convo(f"[red]memory error: {e}[/red]")
 
+    def _show_inner_monologue(self) -> None:
+        ts = datetime.now().strftime("%H:%M")
+        try:
+            from oracle_inner import last_thoughts
+            thoughts = last_thoughts(10)
+            if not thoughts:
+                self.post_convo(_chip("system", ts, "[dim]No inner monologue yet.[/dim]"))
+                return
+            self.post_convo(_chip("system", ts, f"[bold #336699]ORACLE inner monologue ({len(thoughts)} thoughts):[/bold #336699]"))
+            for t in reversed(thoughts):
+                icon = "✓" if t.outcome and "error" not in t.outcome.lower() else "◈"
+                line = f"  [#336699]{icon}[/#336699] [dim]{t.intent[:70]}"
+                if t.tool:
+                    line += f"  [bold]→ {t.tool}[/bold]"
+                if t.outcome:
+                    line += f"  [{t.outcome[:40]}]"
+                line += "[/dim]"
+                self.post_convo(line)
+        except Exception as e:
+            self.post_convo(f"[red]monologue error: {e}[/red]")
+
     def _show_help(self) -> None:
         self.post_convo("[bold cyan]◆ ORACLE COMMANDS[/bold cyan]")
         cmds = [
@@ -729,6 +781,7 @@ class OracleTUI(App):
             ("/pending         ", "show pending approvals"),
             ("/lessons         ", "show top experience lessons"),
             ("/memory          ", "show compressed memory"),
+            ("/think           ", "show ORACLE's inner monologue"),
             ("/loop            ", "show loop status"),
             ("/loop on|off     ", "start or stop autonomous loop"),
             ("/voice on|off    ", "toggle voice output"),
