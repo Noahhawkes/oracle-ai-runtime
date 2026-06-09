@@ -495,6 +495,42 @@ def _blocked_response(reply: str, tools_called: list[str], registry: dict[str, b
     return "\n".join(lines)
 
 
+def _scope_blocked_to_ask(result: str, tool_name: str, tool_input: dict) -> str | None:
+    """
+    If a tool result is a drive-scope block, convert it to a freedom-to-ask phrase.
+    Returns the ask phrase, or None if the result is not a scope block.
+    """
+    if not result or "BLOCKED" not in result:
+        return None
+    # Only intercept scope-gate blocks — not terminal safety blocks
+    if "BLOCKED —" not in result and "BLOCKED — path" not in result:
+        return None
+    try:
+        from freedom_to_ask import check_and_ask, READ_DISCOVERY, READ_CONTENT, WRITE_ACTIVE, DESTRUCTIVE
+        # Infer the path from the tool input
+        path = (
+            tool_input.get("path") or
+            tool_input.get("target_file_path") or
+            tool_input.get("file_path") or
+            tool_input.get("directory") or
+            ""
+        )
+        if not path:
+            return None
+        # Infer mode from the tool name
+        if tool_name in ("read_file", "filesystem_search", "filesystem_summary", "list_directory"):
+            mode = READ_CONTENT
+        elif tool_name in ("write_file",):
+            mode = WRITE_ACTIVE
+        else:
+            mode = READ_DISCOVERY
+        reason = f"to execute {tool_name} as requested"
+        _, ask = check_and_ask(path_or_capability=path, mode=mode, reason=reason)
+        return ask
+    except Exception:
+        return None
+
+
 def _inject_local_context(user_input: str) -> str:
     """
     Prepend a compact ORACLE state block to user messages for local model calls.
@@ -564,6 +600,23 @@ def _inject_local_context(user_input: str) -> str:
     except Exception:
         pass
 
+    # Freedom to ask — ORACLE's policy when she hits a permission boundary
+    try:
+        from freedom_to_ask import status as _fta_status
+        _fta = _fta_status()
+        if _fta["pending"] > 0:
+            lines.append(f"\n[PENDING ACCESS REQUESTS: {_fta['pending']}]")
+            for r in _fta["pending_requests"][:2]:
+                lines.append(f"  [{r['request_id']}] {r['requested_mode']} → {r['requested_path_or_capability']}")
+    except Exception:
+        pass
+
+    lines.append("")
+    lines.append("[FREEDOM TO ASK POLICY]")
+    lines.append("If you hit a permission boundary, DO NOT freeze or say 'I cannot do that.'")
+    lines.append("Instead say: 'I need access to [scope] because [reason]. I only need [mode]. I will not [blocked actions]. Approve?'")
+    lines.append("Asking is always allowed. Proposing is always allowed. Read-only discovery in approved scope is allowed.")
+    lines.append("Only destructive actions (delete, move, rename, overwrite, upload) require explicit Noah approval.")
     lines.append("")
     lines.append(f"Noah says: {user_input}")
     return "\n".join(lines)
@@ -1071,6 +1124,11 @@ def chat(client, session_id, system_prompt, history, user_input, model="claude-s
                     _tool_call_count += 1
                     _print_thinking(block.name, block.input)
                     result = execute_tool(block.name, block.input)
+                    # Scope block → freedom-to-ask phrase instead of dead stop
+                    _ask = _scope_blocked_to_ask(result, block.name, block.input)
+                    if _ask:
+                        result = _ask
+                        print(f"  {C['byellow']}[ASK]{C['reset']} {_ask[:100]}")
                     _print_thought_result(block.name, result)
                     try:
                         from experience_compression import record_tool_result
@@ -1257,6 +1315,11 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
 
                 _print_thinking(tool_name, inp)
                 result = execute_tool(tool_name, inp)
+                # Scope block → freedom-to-ask phrase instead of dead stop
+                _ask = _scope_blocked_to_ask(result, tool_name, inp)
+                if _ask:
+                    result = _ask
+                    print(f"  {C['byellow']}[ASK]{C['reset']} {_ask[:100]}")
                 _print_thought_result(tool_name, result)
                 _tools_called.append(tool_name)
                 try:
