@@ -546,6 +546,15 @@ def _inject_local_context(user_input: str) -> str:
     except Exception:
         pass
 
+    # Experience lessons — failures first, prevents repeated mistakes
+    try:
+        from experience_compression import lesson_block
+        lessons = lesson_block(query=user_input, max_chars=500)
+        if lessons:
+            lines.append(lessons)
+    except Exception:
+        pass
+
     lines.append("")
     lines.append(f"Noah says: {user_input}")
     return "\n".join(lines)
@@ -1055,6 +1064,14 @@ def chat(client, session_id, system_prompt, history, user_input, model="claude-s
                     _print_thinking(block.name, block.input)
                     result = execute_tool(block.name, block.input)
                     _print_thought_result(block.name, result)
+                    try:
+                        from experience_compression import record_tool_result
+                        _success = not any(e in (result or "").lower() for e in
+                                           ("error", "failed", "not found", "exception", "traceback"))
+                        _inp_sum = str(block.input)[:120]
+                        record_tool_result(block.name, _inp_sum, _success, result or "")
+                    except Exception:
+                        pass
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
@@ -1198,6 +1215,13 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
                 result = execute_tool(tool_name, inp)
                 _print_thought_result(tool_name, result)
                 _tools_called.append(tool_name)
+                try:
+                    from experience_compression import record_tool_result
+                    _success = not any(e in (result or "").lower() for e in
+                                       ("error", "failed", "not found", "exception", "traceback"))
+                    record_tool_result(tool_name, str(inp)[:120], _success, result or "")
+                except Exception:
+                    pass
                 history.append({"role": "tool", "tool_call_id": tc.id, "content": result})
             continue
 
