@@ -138,8 +138,8 @@ _NL_SEND_PATTERNS = [
     _re.compile(r"^(?:send|give|pass)\s+this\s+to\s+claude[:\s]*(.*)$", _re.I),
 ]
 _NL_ASK_PATTERNS = [
-    # "ask Claude to build X", "tell Claude to X", "ask Claude what X", "have Claude X"
-    _re.compile(r"^ask\s+claude\s+(?:to\s+|what\s+|how\s+|about\s+)?(.+)", _re.I),
+    # Capture the full intent after "ask/tell/have Claude" — don't strip words like "what"
+    _re.compile(r"^ask\s+claude\s+(.+)", _re.I),
     _re.compile(r"^tell\s+claude\s+(?:to\s+)?(.+)", _re.I),
     _re.compile(r"^(?:have|get)\s+claude\s+(?:to\s+)?(.+)", _re.I),
 ]
@@ -210,6 +210,10 @@ def _parse_natural_command(text: str):
         m = pat.match(text.strip())
         if m:
             payload = m.group(1).strip()
+            # Strip bare "to " prefix only (e.g. "ask Claude to fix" → "fix")
+            # but keep "what/how/why/about" since they're part of the question
+            if _re.match(r'^to\s+', payload, _re.I) and not _re.match(r'^to\s+(what|how|why|where|when)\b', payload, _re.I):
+                payload = _re.sub(r'^to\s+', '', payload, flags=_re.I)
             return ("ask_claude", {"task": payload})
 
     # Pending list
