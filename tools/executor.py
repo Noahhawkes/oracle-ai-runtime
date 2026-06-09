@@ -42,6 +42,141 @@ def _confirm(prompt: str) -> bool:
         return False
 
 
+# ── Executor Scope Gate ───────────────────────────────────────────────────────
+
+# Tools whose handlers call _scope_gate before executing.
+_FILE_GATED_TOOLS = frozenset([
+    "read_file", "write_file", "list_directory",
+    "filesystem_scan", "source_map_ingest",
+])
+
+# OS paths that are always blocked regardless of scoped_paths.json.
+_SYSTEM_PREFIXES = (
+    "c:\\windows",
+    "c:\\program files",
+    "c:\\program files (x86)",
+    "c:\\programdata",
+    "c:\\$recycle.bin",
+    "c:\\system volume information",
+    "c:\\users\\all users",
+)
+
+# Tools that perform destructive file operations (delete / move / rename).
+_DESTRUCTIVE_TOOLS = frozenset(["delete_file", "delete_folder", "move_file", "rename_file"])
+
+# Cloud-sync path fragments (case-insensitive).
+_CLOUD_SYNC_TOKENS = ("onedrive", "g:\\my drive", "g:/my drive")
+
+
+def _scope_gate(
+    path: str,
+    tool_name: str,
+    approved_for_write: bool = False,
+) -> tuple[bool, str]:
+    """
+    Pre-execution scope gate for file-affecting tools.
+
+    Returns (allowed: bool, message: str).
+    If blocked, message is a Freedom to Ask phrase that includes request_id,
+    smallest scope, and will_not_do list so Noah knows exactly what to approve.
+
+    Fails open (True, '') if governance modules are unavailable — never breaks
+    existing tool behaviour.
+    """
+    try:
+        from freedom_to_ask import (
+            request_access, ask_phrase,
+            READ_DISCOVERY, READ_CONTENT, WRITE_ACTIVE, DESTRUCTIVE,
+        )
+        from drive_scope import is_in_scope
+
+        path_str = str(path).strip()
+        lower = path_str.lower()
+        oracle_home = str(ROOT).lower()
+
+        # Determine access mode from tool name.
+        if tool_name in _DESTRUCTIVE_TOOLS:
+            mode = DESTRUCTIVE
+        elif tool_name in ("list_directory", "filesystem_scan",
+                           "filesystem_search", "filesystem_summary"):
+            mode = READ_DISCOVERY
+        elif tool_name == "write_file":
+            mode = WRITE_ACTIVE
+        else:
+            mode = READ_CONTENT
+
+        # 1. Destructive operations — always blocked; require explicit per-action approval.
+        if mode == DESTRUCTIVE:
+            req = request_access(
+                path_str, DESTRUCTIVE,
+                reason=f"to execute {tool_name} — this is a destructive operation",
+                smallest_scope=path_str,
+                will_not_do=[
+                    "Delete without explicit per-action Noah approval",
+                    "Move or rename files without review",
+                ],
+            )
+            return False, ask_phrase(req)
+
+        # 2. System paths — always blocked.
+        if any(lower.startswith(p) for p in _SYSTEM_PREFIXES):
+            req = request_access(
+                path_str, mode,
+                reason=f"to execute {tool_name} on a system path",
+                smallest_scope=path_str,
+                will_not_do=["Modify system files", "Read OS credentials",
+                             "Change system settings"],
+            )
+            return False, ask_phrase(req)
+
+        # 3. Out-of-scope paths — blocked.
+        if not is_in_scope(path_str):
+            req = request_access(
+                path_str, mode,
+                reason=f"to execute {tool_name}",
+                smallest_scope=path_str,
+                will_not_do=["Access paths outside approved scope",
+                             "Crawl directories recursively"],
+            )
+            return False, ask_phrase(req)
+
+        # 4. Write-specific checks (path is confirmed in scope).
+        if mode == WRITE_ACTIVE:
+            # 4a. ORACLE home — write always allowed (she writes her own Memory/).
+            if lower.startswith(oracle_home):
+                return True, "ORACLE home -- write allowed"
+
+            # 4b. Cloud-sync paths outside ORACLE home require explicit approval.
+            if any(tok in lower for tok in _CLOUD_SYNC_TOKENS):
+                req = request_access(
+                    path_str, WRITE_ACTIVE,
+                    reason=f"to write to a cloud-synced location via {tool_name}",
+                    smallest_scope=path_str,
+                    will_not_do=[
+                        "Upload or sync data without approval",
+                        "Modify shared cloud files",
+                        "Change sync settings",
+                    ],
+                )
+                return False, ask_phrase(req)
+
+            # 4c. Non-cloud in-scope write without explicit write approval.
+            if not approved_for_write:
+                req = request_access(
+                    path_str, WRITE_ACTIVE,
+                    reason=f"to write {Path(path_str).name} via {tool_name}",
+                    smallest_scope=path_str,
+                    will_not_do=["Overwrite without review",
+                                 "Create irreversible changes"],
+                )
+                return False, ask_phrase(req)
+
+        return True, "in approved scope"
+
+    except Exception:
+        return True, ""   # fail-open: governance unavailable, don't break tools
+
+
 def execute_tool(tool_name: str, tool_input: dict) -> str:
     """
     Dispatch a tool call. Returns a string result to feed back to Claude.
@@ -173,6 +308,11 @@ def _read_file(inp: dict, log) -> str:
     max_chars = inp.get("max_chars", 4000)
     path = Path(raw_path) if os.path.isabs(raw_path) else ROOT / raw_path
 
+    ok, msg = _scope_gate(str(path), "read_file")
+    if not ok:
+        log("ACTION", f"read_file:BLOCKED:{path}", approved=False)
+        return msg
+
     if not path.exists():
         return f"File not found: {path}"
     if not path.is_file():
@@ -190,6 +330,12 @@ def _write_file(inp: dict, log) -> str:
     content = inp["content"]
     mode = inp.get("mode", "append")
     path = Path(raw_path) if os.path.isabs(raw_path) else ROOT / raw_path
+
+    # Scope gate — approved_for_write=True because _confirm() below handles approval.
+    ok, msg = _scope_gate(str(path), "write_file", approved_for_write=True)
+    if not ok:
+        log("ACTION", f"write_file:BLOCKED:{path}", approved=False)
+        return msg
 
     exists = path.exists()
     action_label = f"write_file:{path} (mode={mode})"
@@ -490,6 +636,12 @@ def _source_map_ingest(inp: dict, log) -> str:
     path = inp["path"]
     summary = inp["summary"]
     category = inp.get("category", "source_map")
+
+    ok, msg = _scope_gate(path, "source_map_ingest")
+    if not ok:
+        log("ACTION", f"source_map_ingest:BLOCKED:{path}", approved=False)
+        return msg
+
     log("ACTION", f"source_map_ingest:{path}", approved=True)
     ingest_file_to_memory(path, summary, category)
     return f"Ingested into memory [{category}]: {Path(path).name}"
@@ -608,6 +760,11 @@ def _list_directory(inp: dict, log) -> str:
     raw_path = inp["path"]
     path = Path(raw_path) if os.path.isabs(raw_path) else ROOT / raw_path
 
+    ok, msg = _scope_gate(str(path), "list_directory")
+    if not ok:
+        log("ACTION", f"list_directory:BLOCKED:{path}", approved=False)
+        return msg
+
     if not path.exists():
         return f"Path not found: {path}"
     if not path.is_dir():
@@ -621,3 +778,153 @@ def _list_directory(inp: dict, log) -> str:
 
     log("ACTION", f"list_directory:{path}", approved=True)
     return f"{path}\n" + "\n".join(lines) if lines else f"{path}\n  (empty)"
+
+
+# ── Smoke tests ───────────────────────────────────────────────────────────────
+
+def _smoke_test() -> None:
+    """
+    Verify scope gate behavior without reading or writing real files.
+    All tests call _scope_gate() directly; access requests go to a temp file.
+    No destructive or external actions occur.
+    """
+    import json
+    import tempfile
+    sys.path.insert(0, str(ROOT / "core"))
+
+    import freedom_to_ask as _fta
+    tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w")
+    tmp.write("[]")
+    tmp.close()
+    _orig = _fta.REQUESTS_FILE
+    _fta.REQUESTS_FILE = Path(tmp.name)
+
+    passed = 0
+    total = 12
+    results = []
+
+    def ok(name):
+        nonlocal passed
+        passed += 1
+        results.append(f"  [PASS] {name}")
+
+    def fail(name, reason=""):
+        results.append(f"  [FAIL] {name}" + (f" -- {reason}" if reason else ""))
+
+    try:
+        # 1. Approved read path allowed (ORACLE root is always in scope)
+        oracle_readme = str(ROOT / "README.md")
+        allowed, msg = _scope_gate(oracle_readme, "read_file")
+        if allowed:
+            ok("approved read path allowed")
+        else:
+            fail("approved read path allowed", msg[:80])
+
+        # 2. Unknown path blocked with Freedom to Ask phrase
+        unknown = r"C:\RandomXYZ\not_scoped\file.txt"
+        allowed, msg = _scope_gate(unknown, "read_file")
+        if not allowed and msg:
+            ok("unknown read path blocked with ask phrase")
+        else:
+            fail("unknown read path blocked with ask phrase", f"allowed={allowed}")
+
+        # 3. Proposed-only path blocked (AppData not in scoped_paths.json)
+        proposed = r"C:\Users\noahh\AppData\Local\oracle_probe.txt"
+        allowed, msg = _scope_gate(proposed, "read_file")
+        if not allowed:
+            ok("proposed-only path (AppData) blocked")
+        else:
+            fail("proposed-only path (AppData) blocked", "path not in scope was allowed")
+
+        # 4. System path blocked
+        system = r"C:\Windows\System32\drivers\etc\hosts"
+        allowed, msg = _scope_gate(system, "read_file")
+        if not allowed:
+            ok("system path blocked")
+        else:
+            fail("system path blocked", "system path was allowed")
+
+        # 5. Write to in-scope path without write approval blocked
+        docs = r"C:\Users\noahh\Documents\oracle_gate_test.txt"
+        allowed, msg = _scope_gate(docs, "write_file", approved_for_write=False)
+        if not allowed and msg:
+            ok("write without write approval blocked")
+        else:
+            fail("write without write approval blocked", f"allowed={allowed}")
+
+        # 6. Cloud-sync write (OneDrive in scope, but cloud-synced) blocked
+        onedrive = r"C:\Users\noahh\OneDrive\oracle_gate_test.txt"
+        allowed, msg = _scope_gate(onedrive, "write_file", approved_for_write=True)
+        if not allowed:
+            ok("cloud-sync write blocked even with approved_for_write=True")
+        else:
+            fail("cloud-sync write blocked", "cloud-sync path was allowed for write")
+
+        # 7. Destructive operation blocked even inside approved scope (ORACLE home)
+        oracle_mem = str(ROOT / "Memory" / "test_delete_probe.json")
+        allowed, msg = _scope_gate(oracle_mem, "delete_file")
+        if not allowed:
+            ok("destructive action blocked inside approved scope")
+        else:
+            fail("destructive action blocked inside approved scope", "delete was allowed")
+
+        # 8. Non-file tool is not in the gated set (gate never called for it)
+        if "recall_facts" not in _FILE_GATED_TOOLS:
+            ok("non-file tool (recall_facts) not in gated set")
+        else:
+            fail("non-file tool not in gated set", "recall_facts is in _FILE_GATED_TOOLS")
+
+        # 9. Block response includes request_id
+        _, msg9 = _scope_gate(unknown, "read_file")
+        if "request_id" in msg9:
+            ok("blocked response includes request_id")
+        else:
+            fail("blocked response includes request_id", msg9[:120])
+
+        # 10. Block response includes the path (smallest scope context)
+        _, msg10 = _scope_gate(unknown, "read_file")
+        if unknown.replace("\\", "\\\\") in msg10 or unknown in msg10:
+            ok("blocked response includes path (smallest scope)")
+        else:
+            fail("blocked response includes path (smallest scope)", msg10[:120])
+
+        # 11. Block response includes will_not_do constraint
+        _, msg11 = _scope_gate(unknown, "read_file")
+        if "will not" in msg11.lower() or "I will not" in msg11:
+            ok("blocked response includes will_not_do constraint")
+        else:
+            fail("blocked response includes will_not_do constraint", msg11[:160])
+
+        # 12. No destructive or external actions — only PENDING access requests written to temp
+        data = json.loads(Path(tmp.name).read_text())
+        all_pending = all(r.get("status") == "PENDING" for r in data)
+        if all_pending and len(data) > 0:
+            ok(f"no destructive/external actions -- {len(data)} PENDING requests in temp only")
+        else:
+            fail("no destructive/external actions", f"{len(data)} requests, all_pending={all_pending}")
+
+    finally:
+        _fta.REQUESTS_FILE = _orig
+        try:
+            os.unlink(tmp.name)
+        except Exception:
+            pass
+
+    for line in results:
+        print(line)
+    print(f"\n{passed}/{total} smoke tests passed.")
+    if passed < total:
+        sys.exit(1)
+
+
+def main() -> None:
+    cmd = sys.argv[1].lower() if len(sys.argv) > 1 else "--help"
+    if cmd == "--smoke-test":
+        print("Running executor scope gate smoke tests...\n")
+        _smoke_test()
+    else:
+        print("Usage: python tools/executor.py --smoke-test")
+
+
+if __name__ == "__main__":
+    main()
