@@ -54,6 +54,7 @@ _DEFAULTS: dict[str, Any] = {
     "ORACLE_DRY_RUN_DEFAULT": False,             # dry run is not the default on startup
     "ORACLE_MAX_ACTIONS_PER_BATCH": 10,          # max desktop actions per SOV1 batch
     "ORACLE_REQUIRE_VERIFICATION": True,         # actuation must produce verification evidence
+    "ORACLE_DELEGATED_AUTONOMY": True,           # routine in-scope reads/scans/internal drafts may run
 
     # Privacy governance
     "ORACLE_STORE_RAW_SCREENSHOTS": False,       # raw pixel data never stored
@@ -181,6 +182,11 @@ def is_verification_required() -> bool:
     return bool(_resolve("ORACLE_REQUIRE_VERIFICATION"))
 
 
+def is_delegated_autonomy_enabled() -> bool:
+    """True when ORACLE may run routine in-scope work without per-step prompts."""
+    return bool(_resolve("ORACLE_DELEGATED_AUTONOMY"))
+
+
 def is_local_mode_default() -> bool:
     """True if ORACLE defaults to local Ollama (API-independent)."""
     return bool(_resolve("ORACLE_LOCAL_MODE_DEFAULT"))
@@ -202,6 +208,7 @@ def governance_summary() -> dict:
         "sensitive_block":           is_sensitive_block_active(),
         "auto_approve":              is_auto_approve_allowed(),
         "verification_required":     is_verification_required(),
+        "delegated_autonomy":        is_delegated_autonomy_enabled(),
         "local_mode_default":        is_local_mode_default(),
         "store_raw_screenshots":     bool(_resolve("ORACLE_STORE_RAW_SCREENSHOTS")),
         "store_raw_video":           bool(_resolve("ORACLE_STORE_RAW_VIDEO")),
@@ -241,6 +248,7 @@ def run_smoke_tests() -> int:
     check("sensitive_block default=True",  is_sensitive_block_active())
     check("auto_approve default=False",    not is_auto_approve_allowed())
     check("verification_required=True",    is_verification_required())
+    check("delegated_autonomy=True",       is_delegated_autonomy_enabled())
     check("local_mode_default=True",       is_local_mode_default())
     check("store_raw_screenshots=False",   not _resolve("ORACLE_STORE_RAW_SCREENSHOTS"))
     check("store_raw_video=False",         not _resolve("ORACLE_STORE_RAW_VIDEO"))

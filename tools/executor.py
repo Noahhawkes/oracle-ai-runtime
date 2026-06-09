@@ -206,6 +206,31 @@ def _scope_paths(paths, tool_name: str) -> tuple[bool, str]:
     return True, "all supplied paths in approved scope"
 
 
+def _delegated_autonomy_enabled() -> bool:
+    try:
+        from governance import is_delegated_autonomy_enabled
+        return is_delegated_autonomy_enabled()
+    except Exception:
+        return False
+
+
+def _is_internal_runtime_write(path: Path) -> bool:
+    """True for Oracle-owned runtime/proposal artifacts, not source code."""
+    try:
+        p = path.resolve()
+    except Exception:
+        p = path
+    allowed_roots = [
+        ROOT / "Memory",
+        ROOT / "Logs",
+        ROOT / "Messages",
+        ROOT / "Projects" / "daemon_proposals",
+        ROOT / "Projects" / "self_build_proposals",
+        ROOT / "Projects" / "pending_candidates",
+    ]
+    return any(str(p).lower().startswith(str(root.resolve()).lower()) for root in allowed_roots)
+
+
 def execute_tool(tool_name: str, tool_input: dict) -> str:
     """
     Dispatch a tool call. Returns a string result to feed back to Claude.
@@ -368,13 +393,14 @@ def _write_file(inp: dict, log) -> str:
 
     exists = path.exists()
     action_label = f"write_file:{path} (mode={mode})"
+    delegated_internal = _delegated_autonomy_enabled() and _is_internal_runtime_write(path)
 
     if mode == "write" and exists:
         if not _confirm(f"Overwrite existing file: {path}?"):
             log("ACTION", action_label, approved=False)
             return f"Cancelled: file not overwritten."
 
-    if not _confirm(f"{'Write' if mode == 'write' else 'Append to'} file: {path}?"):
+    if not delegated_internal and not _confirm(f"{'Write' if mode == 'write' else 'Append to'} file: {path}?"):
         log("ACTION", action_label, approved=False)
         return f"Cancelled: file not written."
 
@@ -495,7 +521,7 @@ def _filesystem_scan(inp: dict, log) -> str:
     if not ok:
         log("ACTION", f"filesystem_scan:BLOCKED:{paths}", approved=False)
         return msg
-    if not _confirm(f"Scan and index filesystem? {label}\nThis may take a moment."):
+    if not _delegated_autonomy_enabled() and not _confirm(f"Scan and index filesystem? {label}\nThis may take a moment."):
         log("ACTION", label, approved=False)
         return "Cancelled: filesystem scan not run."
     log("ACTION", label, approved=True)
