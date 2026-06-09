@@ -537,6 +537,15 @@ def _inject_local_context(user_input: str) -> str:
     except Exception:
         pass
 
+    # Light-compressed memory — most relevant items for this query
+    try:
+        from light_compression import recall_for_prompt
+        mem_block = recall_for_prompt(query=user_input, max_chars=600)
+        if mem_block:
+            lines.append(mem_block)
+    except Exception:
+        pass
+
     lines.append("")
     lines.append(f"Noah says: {user_input}")
     return "\n".join(lines)
@@ -1429,7 +1438,18 @@ def main():
                 continue
 
             elif _nl_action == "memory":
+                # Show both SQLite facts AND light-compressed memories
                 show_memory(session_id)
+                try:
+                    from light_compression import list_memories, ALL_TYPES
+                    lmems = list_memories(limit=12)
+                    if lmems:
+                        print(f"\n  {C['cyan']}[COMPRESSED MEMORY]{C['reset']}  ({len(lmems)} items)")
+                        for m in lmems:
+                            print(f"  {C['dim']}[{m.memory_type.upper():12}] score={m.score:.2f}  {m.compressed[:80]}{C['reset']}")
+                        print()
+                except Exception:
+                    pass
                 continue
 
             elif _nl_action == "relay":
@@ -2209,6 +2229,20 @@ Hands tools (SOV1 — operates the screen):
         #   DIAGNOSTIC → already handled above; shouldn't reach here
         _imode = _classify_interaction_mode(user_input)
 
+        # ── "remember this / remember that" — explicit memory storage ───────────
+        _uil_mem = user_input.lower().strip()
+        _remember_prefixes = ("remember this:", "remember that:", "remember:", "store this:", "remember this —", "remember —")
+        if any(_uil_mem.startswith(p) for p in _remember_prefixes):
+            _raw_mem = user_input.split(":", 1)[-1].strip() if ":" in user_input else user_input
+            try:
+                from light_compression import remember, FACT
+                m = remember(_raw_mem, memory_type=FACT, source="noah_direct")
+                print(f"\n  {C['bgreen']}[MEMORY]{C['reset']} Stored: {m.compressed[:80]}\n")
+                speak("Remembered.")
+            except Exception as _me:
+                print(f"\n[memory error: {_me}]\n")
+            continue
+
         # ── /approve-rule — confirm pending identity/governance rule ─────────────
         if user_input.lower().strip().rstrip(".") in (
             "/approve-rule", "approve-rule", "approve rule", "/approve rule",
@@ -2331,6 +2365,14 @@ Hands tools (SOV1 — operates the screen):
             print(f"  {C['grey']}[{_mode_lbl}]{C['reset']}")
             _print_oracle_reply(reply)
             speak(reply)
+
+            # Auto-compress this exchange into light memory (background, non-blocking)
+            try:
+                from light_compression import compress_and_store, PATTERN, FACT
+                _signal = f"Noah: {user_input[:120]}\nOracle: {reply[:200]}"
+                compress_and_store(_signal, memory_type=FACT, source="conversation")
+            except Exception:
+                pass
         except Exception as e:
             msg = str(e)
             log("ERROR", msg)
