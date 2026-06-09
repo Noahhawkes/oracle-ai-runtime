@@ -529,6 +529,27 @@ TOOL_DEFINITIONS = [
         },
     },
 
+    # ── Codex Channel Bridge ──────────────────────────────────────────────────
+    {
+        "name": "send_to_codex",
+        "description": (
+            "Send a message or task to Codex through ORACLE's local file-backed channel. "
+            "Use this when ORACLE needs help from Codex on the desktop without relying on "
+            "fragile window typing. Codex reads Messages/oracle_to_codex.md and replies in "
+            "Messages/codex_to_oracle.md."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "description": "The task or question to send to Codex",
+                },
+            },
+            "required": ["message"],
+        },
+    },
+
     # ── Git Operations ────────────────────────────────────────────────────────
     {
         "name": "git_op",

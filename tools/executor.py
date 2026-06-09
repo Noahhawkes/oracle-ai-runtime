@@ -295,6 +295,8 @@ def execute_tool(tool_name: str, tool_input: dict) -> str:
             return _terminal_status(tool_input, log)
         elif tool_name == "send_to_claude_code":
             return _send_to_claude_code(tool_input, log)
+        elif tool_name == "send_to_codex":
+            return _send_to_codex(tool_input, log)
         elif tool_name == "git_op":
             return _git_op(tool_input, log)
         else:
@@ -791,10 +793,24 @@ def _send_to_claude_code(inp: dict, log) -> str:
     ok, detail = type_into_claude(message, open_if_missing=True)
     if ok:
         return f"[CLAUDE CODE] Message delivered — check the Claude Code window for the response."
+    if "[CLAUDE HANDOFF]" in detail:
+        return detail
     return f"[CLAUDE CODE ERROR] {detail}"
 
 
 # ── Git Operations ─────────────────────────────────────────────────────────────
+
+def _send_to_codex(inp: dict, log) -> str:
+    sys.path.insert(0, str(ROOT / "core"))
+    from oracle_codex_channel import ORACLE_TO_CODEX, send_to_codex
+    message = inp.get("message", "").strip()
+    if not message:
+        return "send_to_codex: message is required."
+    log("BRIDGE", f"send_to_codex: {message[:80]}")
+    if send_to_codex(message):
+        return f"[CODEX CHANNEL] Message written to {ORACLE_TO_CODEX}. Codex should reply in Messages/codex_to_oracle.md."
+    return "[CODEX CHANNEL ERROR] Could not write message to Codex channel."
+
 
 _GIT_SAFE_CMDS = {"status", "log", "diff", "branch", "remote", "stash list", "show", "ls-files"}
 _GIT_WRITE_CMDS = {"commit", "push", "pull", "merge", "rebase", "add", "reset", "checkout", "stash"}

@@ -375,10 +375,10 @@ def type_into_claude(
             try:
                 _os.startfile(_CLAUDE_DESKTOP_SHORTCUT)
                 _audit("type_into_claude", "[CLAUDE DESKTOP] launched via shortcut")
-                msg = "[CLAUDE DESKTOP] Claude Code opened."
+                msg = "[CLAUDE HANDOFF] Claude Code opened, but the message was not typed."
                 if handoff_saved:
                     msg += f" Handoff saved to Memory/_claude_handoff.txt — paste it when Claude loads."
-                return True, msg
+                return False, msg
             except Exception as e:
                 pass
 

@@ -143,6 +143,11 @@ _NL_ASK_PATTERNS = [
     _re.compile(r"^tell\s+claude\s+(?:to\s+)?(.+)", _re.I),
     _re.compile(r"^(?:have|get)\s+claude\s+(?:to\s+)?(.+)", _re.I),
 ]
+_NL_ASK_CODEX_PATTERNS = [
+    _re.compile(r"^ask\s+codex\s+(.+)", _re.I),
+    _re.compile(r"^tell\s+codex\s+(?:to\s+)?(.+)", _re.I),
+    _re.compile(r"^(?:have|get)\s+codex\s+(?:to\s+)?(.+)", _re.I),
+]
 _NL_PENDING_PATTERNS = [
     "what's pending", "whats pending", "what is pending", "show pending",
     "show me pending", "what needs approval", "what needs approving",
@@ -228,6 +233,14 @@ def _parse_natural_command(text: str):
             if _re.match(r'^to\s+', payload, _re.I) and not _re.match(r'^to\s+(what|how|why|where|when)\b', payload, _re.I):
                 payload = _re.sub(r'^to\s+', '', payload, flags=_re.I)
             return ("ask_claude", {"task": payload})
+
+    for pat in _NL_ASK_CODEX_PATTERNS:
+        m = pat.match(text.strip())
+        if m:
+            payload = m.group(1).strip()
+            if _re.match(r'^to\s+', payload, _re.I) and not _re.match(r'^to\s+(what|how|why|where|when)\b', payload, _re.I):
+                payload = _re.sub(r'^to\s+', '', payload, flags=_re.I)
+            return ("ask_codex", {"task": payload})
 
     # Pending list
     if any(p in lower for p in _NL_PENDING_PATTERNS):
@@ -1498,6 +1511,21 @@ def main():
                     print(f"\n  [channel error: {_ae}]\n")
                 continue
 
+            elif _nl_action == "ask_codex":
+                _task = _nl_payload["task"]
+                print(f"\n  {C['byellow']}[ORACLE -> CODEX]{C['reset']} {_task[:80]}")
+                try:
+                    from oracle_codex_channel import send_to_codex, ORACLE_TO_CODEX
+                    ok = send_to_codex(_task)
+                    if ok:
+                        print(f"  {C['bgreen']}[CODEX CHANNEL]{C['reset']} Task written to {ORACLE_TO_CODEX}\n")
+                        speak("Sent to Codex.")
+                    else:
+                        print(f"  {C['bred']}[CODEX CHANNEL ERROR]{C['reset']} Could not write Codex task.\n")
+                except Exception as _ae:
+                    print(f"\n  [codex-channel error: {_ae}]\n")
+                continue
+
             elif _nl_action == "pending":
                 user_input = "/pending"   # re-use existing handler below
                 # fall through — /pending handler will catch it
@@ -2047,21 +2075,54 @@ def main():
                 print(f"\n[channel error: {e}]\n")
             continue
 
+        if user_input.lower().startswith("/ask-codex "):
+            task = user_input[len("/ask-codex "):].strip()
+            if not task:
+                print("\n  Usage: /ask-codex <task or question for Codex>\n")
+                continue
+            try:
+                from oracle_codex_channel import ask_codex, ORACLE_TO_CODEX
+                print(f"\n  {C['byellow']}[CODEX CHANNEL]{C['reset']} Sending task to Codex...")
+                print(f"  {C['dim']}File: {ORACLE_TO_CODEX}{C['reset']}")
+                print(f"  {C['dim']}Waiting up to 5 min for response. Codex replies in Messages/codex_to_oracle.md{C['reset']}\n")
+                log("CHANNEL", f"ask_codex: {task[:80]}")
+                response = ask_codex(task, timeout=300)
+                print(f"\n  {C['bgreen']}[CODEX RESPONSE]{C['reset']}")
+                for line in response.splitlines():
+                    print(f"  {line}")
+                print()
+                speak("Codex responded.")
+            except Exception as e:
+                log("ERROR", f"/ask-codex failed: {e}")
+                print(f"\n[codex-channel error: {e}]\n")
+            continue
+
         # ── /channel — show channel status ────────────────────────────────────
         if user_input.lower() in ("/channel", "/channel-status"):
             try:
                 from oracle_claude_channel import (
                     ORACLE_TO_CLAUDE, CLAUDE_TO_ORACLE, CHANNEL_LOG, pending_task
                 )
+                from oracle_codex_channel import ORACLE_TO_CODEX, CODEX_TO_ORACLE
                 has_outbox = ORACLE_TO_CLAUDE.exists()
                 has_inbox  = CLAUDE_TO_ORACLE.exists()
+                has_codex_outbox = ORACLE_TO_CODEX.exists()
+                has_codex_inbox = CODEX_TO_ORACLE.exists()
                 print(f"\n  {C['cyan']}[CHANNEL STATUS]{C['reset']}")
                 print(f"  Outbox (oracle→claude) : {'PENDING' if has_outbox else 'empty'}  {ORACLE_TO_CLAUDE}")
                 print(f"  Inbox  (claude→oracle) : {'RESPONSE READY' if has_inbox else 'empty'}  {CLAUDE_TO_ORACLE}")
+                print(f"  Outbox (oracle->codex)  : {'PENDING' if has_codex_outbox else 'empty'}  {ORACLE_TO_CODEX}")
+                print(f"  Inbox  (codex->oracle)  : {'RESPONSE READY' if has_codex_inbox else 'empty'}  {CODEX_TO_ORACLE}")
                 if has_inbox:
                     from oracle_claude_channel import CLAUDE_TO_ORACLE
                     resp = CLAUDE_TO_ORACLE.read_text(encoding="utf-8")[:300]
                     print(f"\n  {C['bgreen']}Response preview:{C['reset']}")
+                    for line in resp.splitlines()[:8]:
+                        print(f"    {line}")
+                if has_codex_inbox:
+                    from oracle_codex_channel import CODEX_TO_ORACLE
+                    resp = CODEX_TO_ORACLE.read_text(encoding="utf-8")[:300]
+                    print(f"\n  {C['bgreen']}Codex response preview:{C['reset']}")
                     for line in resp.splitlines()[:8]:
                         print(f"    {line}")
                 print()
@@ -2084,6 +2145,22 @@ def main():
                     speak("Claude response loaded.")
             except Exception as e:
                 print(f"\n[channel-reply error: {e}]\n")
+            continue
+
+        if user_input.lower() in ("/read-codex", "/codex-reply"):
+            try:
+                from oracle_codex_channel import CODEX_TO_ORACLE
+                if not CODEX_TO_ORACLE.exists():
+                    print("\n  No Codex response pending. Use /ask-codex <task> first.\n")
+                else:
+                    response = CODEX_TO_ORACLE.read_text(encoding="utf-8").strip()
+                    print(f"\n  {C['bgreen']}[CODEX RESPONSE]{C['reset']}")
+                    for line in response.splitlines():
+                        print(f"  {line}")
+                    print()
+                    speak("Codex response loaded.")
+            except Exception as e:
+                print(f"\n[codex-reply error: {e}]\n")
             continue
 
         if user_input.lower().startswith("/video-analyze "):
@@ -2386,7 +2463,10 @@ def main():
                         print(f"  {C['bgreen']}[CLAUDE CODE]{C['reset']} {detail}\n")
                         speak("Sent to Claude Code.")
                 else:
-                    if "[CLAUDE UNAVAILABLE]" in detail:
+                    if "[CLAUDE HANDOFF]" in detail:
+                        print(f"  {C['byellow']}[CLAUDE HANDOFF]{C['reset']} {detail.replace('[CLAUDE HANDOFF] ', '')}\n")
+                        speak("Claude handoff saved.")
+                    elif "[CLAUDE UNAVAILABLE]" in detail:
                         lines = detail.splitlines()
                         print(f"  {C['bred']}[CLAUDE UNAVAILABLE]{C['reset']} Claude Code not reachable.\n")
                         for line in lines[1:]:
@@ -2436,7 +2516,11 @@ def main():
                         print(f"  {C['bgreen']}{lbl}{C['reset']} {detail2.replace('[CLAUDE DESKTOP] ','')}\n")
                         speak("Sent to Claude.")
                     else:
-                        print(f"  {C['bred']}[CLAUDE UNAVAILABLE]{C['reset']} {detail2[:120]}\n")
+                        if "[CLAUDE HANDOFF]" in detail2:
+                            print(f"  {C['byellow']}[CLAUDE HANDOFF]{C['reset']} {detail2.replace('[CLAUDE HANDOFF] ','')}\n")
+                            speak("Claude handoff saved.")
+                        else:
+                            print(f"  {C['bred']}[CLAUDE UNAVAILABLE]{C['reset']} {detail2[:120]}\n")
                     continue
                 except Exception as _guard_err:
                     print(f"  {C['yellow']}[GOVERNANCE]{C['reset']} Re-route failed: {_guard_err} — showing local reply anyway\n")
