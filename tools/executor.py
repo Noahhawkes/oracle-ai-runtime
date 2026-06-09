@@ -47,7 +47,8 @@ def _confirm(prompt: str) -> bool:
 # Tools whose handlers call _scope_gate before executing.
 _FILE_GATED_TOOLS = frozenset([
     "read_file", "write_file", "list_directory",
-    "filesystem_scan", "source_map_ingest",
+    "filesystem_scan", "filesystem_search", "filesystem_summary",
+    "source_map_scan", "source_map_ingest",
 ])
 
 # OS paths that are always blocked regardless of scoped_paths.json.
@@ -91,6 +92,8 @@ def _scope_gate(
         from drive_scope import is_in_scope
 
         path_str = str(path).strip()
+        if not path_str:
+            return False, f"[BLOCKED] Governance scope check failed for {tool_name}: no path supplied."
         lower = path_str.lower()
         oracle_home = str(ROOT).lower()
 
@@ -130,7 +133,8 @@ def _scope_gate(
             return False, ask_phrase(req)
 
         # 3. Out-of-scope paths — blocked.
-        if not is_in_scope(path_str):
+        in_scope = is_in_scope(path_str)
+        if in_scope is not True:
             req = request_access(
                 path_str, mode,
                 reason=f"to execute {tool_name}",
@@ -173,8 +177,33 @@ def _scope_gate(
 
         return True, "in approved scope"
 
-    except Exception:
-        return True, ""   # fail-open: governance unavailable, don't break tools
+    except Exception as e:
+        path_str = str(path).strip() or "<unknown>"
+        return (
+            False,
+            f"[BLOCKED] Governance unavailable while checking {tool_name} on `{path_str}`: {e}. "
+            "Action not executed."
+        )
+
+
+def _scope_paths(paths, tool_name: str) -> tuple[bool, str]:
+    """Validate every supplied path for scan/search/summary style tools."""
+    if paths is None:
+        paths = [str(ROOT)]
+    elif isinstance(paths, (str, os.PathLike)):
+        paths = [str(paths)]
+    else:
+        paths = [str(p) for p in paths]
+
+    if not paths:
+        return False, f"[BLOCKED] Governance scope check failed for {tool_name}: no paths supplied."
+
+    for raw_path in paths:
+        path = Path(raw_path) if os.path.isabs(raw_path) else ROOT / raw_path
+        ok, msg = _scope_gate(str(path), tool_name)
+        if not ok:
+            return False, msg
+    return True, "all supplied paths in approved scope"
 
 
 def execute_tool(tool_name: str, tool_input: dict) -> str:
@@ -462,6 +491,10 @@ def _filesystem_scan(inp: dict, log) -> str:
     from filesystem_mapper import build_index, save_index, get_summary
     paths = inp.get("paths")
     label = f"filesystem_scan paths={paths or 'default (ORACLE.AI repo + Projects/)'}"
+    ok, msg = _scope_paths(paths, "filesystem_scan")
+    if not ok:
+        log("ACTION", f"filesystem_scan:BLOCKED:{paths}", approved=False)
+        return msg
     if not _confirm(f"Scan and index filesystem? {label}\nThis may take a moment."):
         log("ACTION", label, approved=False)
         return "Cancelled: filesystem scan not run."
@@ -473,6 +506,12 @@ def _filesystem_scan(inp: dict, log) -> str:
 
 def _filesystem_search(inp: dict, log) -> str:
     from filesystem_mapper import search_index
+    paths = inp.get("paths", inp.get("path"))
+    if paths is not None:
+        ok, msg = _scope_paths(paths, "filesystem_search")
+        if not ok:
+            log("ACTION", f"filesystem_search:BLOCKED:{paths}", approved=False)
+            return msg
     log("ACTION", f"filesystem_search:{inp['query']}", approved=True)
     results = search_index(inp["query"])
     if not results:
@@ -483,6 +522,12 @@ def _filesystem_search(inp: dict, log) -> str:
 
 def _filesystem_summary(inp: dict, log) -> str:
     from filesystem_mapper import get_summary
+    paths = inp.get("paths", inp.get("path"))
+    if paths is not None:
+        ok, msg = _scope_paths(paths, "filesystem_summary")
+        if not ok:
+            log("ACTION", f"filesystem_summary:BLOCKED:{paths}", approved=False)
+            return msg
     log("ACTION", "filesystem_summary", approved=True)
     return get_summary()
 
@@ -605,8 +650,12 @@ def _daemon_cycle(inp: dict, log) -> str:
 def _source_map_scan(inp: dict, log) -> str:
     sys.path.insert(0, str(ROOT / "core"))
     from source_map import build_index, save_index, get_index_summary
-    log("ACTION", "source_map_scan", approved=True)
     paths = inp.get("paths") or None
+    ok, msg = _scope_paths(paths, "source_map_scan")
+    if not ok:
+        log("ACTION", f"source_map_scan:BLOCKED:{paths}", approved=False)
+        return msg
+    log("ACTION", "source_map_scan", approved=True)
     include_excerpts = inp.get("include_excerpts", True)
     print("[Source Map] Scanning — this may take a minute on first run...")
     index = build_index(scan_paths=paths, include_excerpts=include_excerpts)
@@ -800,7 +849,7 @@ def _smoke_test() -> None:
     _fta.REQUESTS_FILE = Path(tmp.name)
 
     passed = 0
-    total = 12
+    total = 20
     results = []
 
     def ok(name):
@@ -896,6 +945,70 @@ def _smoke_test() -> None:
             fail("blocked response includes will_not_do constraint", msg11[:160])
 
         # 12. No destructive or external actions — only PENDING access requests written to temp
+        # 12-15. Scan/search/summary supplied paths are scoped before work starts.
+        def _noop_log(*args, **kwargs):
+            return None
+
+        scan_msg = _filesystem_scan({"paths": [unknown]}, _noop_log)
+        if "request_id" in scan_msg or scan_msg.startswith("[BLOCKED]"):
+            ok("filesystem_scan unknown path blocked")
+        else:
+            fail("filesystem_scan unknown path blocked", scan_msg[:120])
+
+        search_msg = _filesystem_search({"query": "probe", "paths": [unknown]}, _noop_log)
+        if "request_id" in search_msg or search_msg.startswith("[BLOCKED]"):
+            ok("filesystem_search unknown path blocked")
+        else:
+            fail("filesystem_search unknown path blocked", search_msg[:120])
+
+        summary_msg = _filesystem_summary({"paths": [unknown]}, _noop_log)
+        if "request_id" in summary_msg or summary_msg.startswith("[BLOCKED]"):
+            ok("filesystem_summary unknown path blocked")
+        else:
+            fail("filesystem_summary unknown path blocked", summary_msg[:120])
+
+        smap_msg = _source_map_scan({"paths": [unknown], "include_excerpts": False}, _noop_log)
+        if "request_id" in smap_msg or smap_msg.startswith("[BLOCKED]"):
+            ok("source_map_scan unknown path blocked")
+        else:
+            fail("source_map_scan unknown path blocked", smap_msg[:120])
+
+        # 16-17. Governance failure blocks read/write instead of failing open.
+        import drive_scope as _ds
+        orig_is_in_scope = _ds.is_in_scope
+
+        def _boom(_path):
+            raise RuntimeError("scope unavailable smoke test")
+
+        _ds.is_in_scope = _boom
+        try:
+            allowed_read, fail_read = _scope_gate(oracle_readme, "read_file")
+            if not allowed_read and fail_read.startswith("[BLOCKED]"):
+                ok("governance import/check failure blocks read")
+            else:
+                fail("governance import/check failure blocks read", f"allowed={allowed_read} {fail_read[:80]}")
+
+            allowed_write, fail_write = _scope_gate(oracle_readme, "write_file", approved_for_write=True)
+            if not allowed_write and fail_write.startswith("[BLOCKED]"):
+                ok("governance import/check failure blocks write")
+            else:
+                fail("governance import/check failure blocks write", f"allowed={allowed_write} {fail_write[:80]}")
+        finally:
+            _ds.is_in_scope = orig_is_in_scope
+
+        # 18. Non-file tool is unaffected by the file scope gate.
+        if "recall_facts" not in _FILE_GATED_TOOLS:
+            ok("non-file tool unaffected")
+        else:
+            fail("non-file tool unaffected", "recall_facts unexpectedly gated")
+
+        # 19. Explicit /actuate path is outside executor and unchanged here.
+        if "source_map_scan" in _FILE_GATED_TOOLS and "recall_facts" not in _FILE_GATED_TOOLS:
+            ok("executor gating does not alter /actuate path")
+        else:
+            fail("executor gating does not alter /actuate path")
+
+        # 20. No destructive or external actions - only PENDING access requests written to temp.
         data = json.loads(Path(tmp.name).read_text())
         all_pending = all(r.get("status") == "PENDING" for r in data)
         if all_pending and len(data) > 0:

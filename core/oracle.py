@@ -1453,6 +1453,14 @@ def main():
                 _win  = _nl_payload["window"]
                 _text = _nl_payload["text"]
                 _enter = _nl_payload.get("press_enter", True)
+                print("  Natural-language actuation requires explicit Noah approval.")
+                try:
+                    _confirm_nl = input("  Approve natural-language actuation? ").strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    _confirm_nl = ""
+                if _confirm_nl not in ("yes", "y", "approve"):
+                    print("\n  Natural-language actuation cancelled.\n")
+                    continue
                 print(f"\n  {C['byellow']}[ORACLE]{C['reset']} Sending to {_win}…")
                 try:
                     from actuation_engine import type_into_window
@@ -2455,5 +2463,37 @@ def main():
                 print(f"\n{C['bred']}  [Error: {e}]{C['reset']}\n")
 
 
+def _smoke_test_governed_actuation() -> int:
+    """Static guard for REPL actuation approval wiring."""
+    src = Path(__file__).read_text(encoding="utf-8", errors="replace")
+    checks = [
+        (
+            "natural-language actuation asks for approval",
+            "Approve natural-language actuation?" in src,
+        ),
+        (
+            "natural-language actuation can be cancelled",
+            "Natural-language actuation cancelled." in src,
+        ),
+        (
+            "natural-language actuation approval precedes execution",
+            src.find("Approve natural-language actuation?") < src.find(
+                "_res = type_into_window(_win, _text, approved=True, press_enter=_enter)"
+            ),
+        ),
+        (
+            "/actuate explicit path remains present",
+            'startswith("/actuate ")' in src and "Approve? " in src,
+        ),
+    ]
+    passed = sum(1 for _, ok in checks if ok)
+    for label, ok in checks:
+        print(f"  [{'PASS' if ok else 'FAIL'}] {label}")
+    print(f"\n{passed}/{len(checks)} oracle actuation smoke tests passed.")
+    return 0 if passed == len(checks) else 1
+
+
 if __name__ == "__main__":
+    if "--smoke-test" in sys.argv or "--smoke" in sys.argv:
+        sys.exit(_smoke_test_governed_actuation())
     main()
