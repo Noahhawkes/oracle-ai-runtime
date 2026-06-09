@@ -184,6 +184,19 @@ _NL_RELAY_PATTERNS = [
     "open claude", "connect to claude", "start claude", "relay to claude",
     "chat with claude", "speak to claude", "speak with claude",
 ]
+_NL_LOOP_START_PATTERNS = [
+    "start loop", "loop on", "start the loop", "begin loop",
+    "autonomous mode", "start autonomous", "go autonomous",
+    "work autonomously", "run on your own", "keep working",
+    "keep going", "work continuously", "continuous loop",
+    "start working", "start building", "go build", "start building yourself",
+    "endless loop", "run loop", "activate loop",
+]
+_NL_LOOP_STOP_PATTERNS = [
+    "stop loop", "loop off", "end loop", "halt loop", "pause loop",
+    "stop working", "stop building", "stop autonomous", "manual mode",
+    "stop the loop", "deactivate loop", "kill loop",
+]
 
 
 def _parse_natural_command(text: str):
@@ -246,6 +259,12 @@ def _parse_natural_command(text: str):
     # Relay / open Claude
     if any(p in lower for p in _NL_RELAY_PATTERNS):
         return ("relay", {})
+
+    # Autonomous loop control
+    if any(p in lower for p in _NL_LOOP_START_PATTERNS):
+        return ("loop_start", {})
+    if any(p in lower for p in _NL_LOOP_STOP_PATTERNS):
+        return ("loop_stop", {})
 
     return None
 
@@ -1421,7 +1440,7 @@ def main():
                         "Tell me what to send and I'll relay it.\n"
                         "  Example: tell Claude to review core/oracle.py\n"
                         "  Example: ask Claude what to build next\n"
-                        "  Example: send 'hello' to Claude"
+                        "  Example: say 'start loop' to work autonomously"
                     )
                 else:
                     msg = (
@@ -1430,6 +1449,32 @@ def main():
                     )
                 _print_oracle_reply(msg)
                 speak("Claude is ready." if _cw else "Claude window not found.")
+                continue
+
+            elif _nl_action == "loop_start":
+                try:
+                    from oracle_loop import loop_start, loop_status, set_callbacks, is_running
+                    if is_running():
+                        print(f"\n  {C['bgreen']}[LOOP]{C['reset']} Already running.\n")
+                        print(loop_status())
+                    else:
+                        def _loop_print(msg):
+                            print(msg, flush=True)
+                        set_callbacks(_loop_print, speak)
+                        loop_start()
+                except Exception as _le:
+                    print(f"\n[loop error: {_le}]\n")
+                continue
+
+            elif _nl_action == "loop_stop":
+                try:
+                    from oracle_loop import loop_stop, is_running
+                    if is_running():
+                        loop_stop()
+                    else:
+                        print(f"\n  {C['grey']}[LOOP]{C['reset']} Not running.\n")
+                except Exception as _le:
+                    print(f"\n[loop error: {_le}]\n")
                 continue
 
         # ── Paste / log-dump detection — must be first intercept ─────────────
@@ -1477,6 +1522,16 @@ def main():
         except Exception as _ss_err:
             log("SESSION_WARN", f"session_state error: {_ss_err}")
         # ── End session state intercept ────────────────────────────────────────
+
+        if user_input.lower() in ("/loop", "loop status", "/loop-status"):
+            try:
+                from oracle_loop import loop_status, is_running
+                print(f"\n  {C['bgreen'] if is_running() else C['grey']}[LOOP STATUS]{C['reset']}")
+                print(loop_status())
+                print()
+            except Exception as _le:
+                print(f"\n[loop error: {_le}]\n")
+            continue
 
         if user_input.lower() in ("/quit", "/exit"):
             print("\nOracle offline. Session saved.")
