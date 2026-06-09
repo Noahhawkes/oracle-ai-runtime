@@ -87,6 +87,16 @@ def profile_current_machine() -> dict:
     form_factor = existing.get("form_factor", "UNKNOWN")
     noah_verified = existing.get("noah_verified", False)
 
+    if noah_verified:
+        note = f"Confirmed by Noah: {machine_id} is his {form_factor}."
+        verified_at = existing.get("verified_at", _NOW())
+    else:
+        note = (
+            "form_factor remains UNKNOWN until Noah explicitly confirms "
+            "whether this is his laptop or desktop. ORACLE does not assume."
+        )
+        verified_at = None
+
     profile = {
         "schema_version": "1.0",
         "machine_id": machine_id,
@@ -94,14 +104,13 @@ def profile_current_machine() -> dict:
         "os_version": platform.version(),
         "os_release": platform.release(),
         "python_version": platform.python_version(),
-        "form_factor": form_factor,       # UNKNOWN until Noah confirms "laptop" or "desktop"
+        "form_factor": form_factor,
         "noah_verified": noah_verified,
         "profiled_at": _NOW(),
-        "note": (
-            "form_factor remains UNKNOWN until Noah explicitly confirms "
-            "whether this is his laptop or desktop. ORACLE does not assume."
-        ),
+        "note": note,
     }
+    if verified_at:
+        profile["verified_at"] = verified_at
 
     MACHINE_FILE.write_text(
         json.dumps(profile, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -456,14 +465,15 @@ def _smoke_test() -> None:
         fail("proposing is allowed without approval", str(e))
 
     # 3. Access request is marked pending
+    # Use globals() to swap REQUESTS_FILE in this module's namespace regardless of
+    # whether we are running as __main__ or imported as freedom_to_ask.
+    orig_file = globals()["REQUESTS_FILE"]
+    tmp = None
     try:
-        # Use a temp dir to avoid polluting real state
-        orig_file = REQUESTS_FILE
-        import freedom_to_ask as _self
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w") as f:
             f.write("[]")
             tmp = Path(f.name)
-        _self.REQUESTS_FILE = tmp
+        globals()["REQUESTS_FILE"] = tmp
         req = request_access("C:\\test_path", READ_DISCOVERY, "smoke test")
         reqs = _load_requests()
         pending = [r for r in reqs if r["status"] == "PENDING"]
@@ -471,10 +481,12 @@ def _smoke_test() -> None:
             ok("access request is marked pending")
         else:
             fail("access request is marked pending", "not found in pending list")
-        _self.REQUESTS_FILE = orig_file
-        tmp.unlink(missing_ok=True)
     except Exception as e:
         fail("access request is marked pending", str(e))
+    finally:
+        globals()["REQUESTS_FILE"] = orig_file
+        if tmp:
+            tmp.unlink(missing_ok=True)
 
     # 4. ORACLE cannot approve her own request
     # The status field is only set to PENDING by request_access; no auto-approve path exists
