@@ -1,5 +1,5 @@
 """
-core/drive_scope.py — ORACLE Drive Scope v0.1
+core/drive_scope.py — ORACLE Drive Scope v0.2
 
 Safe read-only discovery of Noah's full Windows computer.
 ORACLE must stop treating G:\\ as the whole world.
@@ -65,9 +65,10 @@ _CANDIDATE_ROOTS = [
     ("pictures",   lambda: Path.home() / "Pictures"),
     ("videos",     lambda: Path.home() / "Videos"),
     ("music",      lambda: Path.home() / "Music"),
-    # OneDrive variants
-    ("onedrive",   lambda: Path.home() / "OneDrive"),
-    ("onedrive_sov1", lambda: Path(os.environ.get("OneDrive", str(Path.home() / "OneDrive - sov1.ai")))),
+    # OneDrive variants — each tenant has its own folder
+    ("onedrive",      lambda: Path.home() / "OneDrive"),
+    ("onedrive_sov1", lambda: Path.home() / "OneDrive - sov1.ai"),
+    ("onedrive_eh3",  lambda: Path.home() / "OneDrive - Eh3 Holdings LLC"),
     # Google Drive typical locations
     ("gdrive_g",   lambda: Path("G:\\My Drive")),
     ("gdrive_h",   lambda: Path("H:\\My Drive")),
@@ -231,6 +232,62 @@ def is_in_scope(path) -> bool:
     return False
 
 
+def propose() -> dict:
+    """
+    Generate scoped path candidates for Noah's review.
+
+    Unlike discover() which marks existing paths as approved, propose() marks
+    every candidate as status=proposed. Noah reviews and approves explicitly.
+    Writes Memory/scoped_paths_proposed.json.
+    """
+    scope = load_scope()
+    candidates = scope.get("candidate_paths", [])
+    proposals = [
+        {
+            "name":    c["name"],
+            "path":    c["path"],
+            "exists":  c.get("exists", False),
+            "blocked": c.get("blocked", False),
+            "status":  "blocked" if c.get("blocked") else (
+                       "proposed" if c.get("exists") else "not_present"),
+            "approval_required": True,
+        }
+        for c in candidates
+    ]
+    out = {
+        "generated_at":    _NOW(),
+        "proposals":       proposals,
+        "proposed_count":  sum(1 for p in proposals if p["status"] == "proposed"),
+        "blocked_count":   sum(1 for p in proposals if p["status"] == "blocked"),
+        "not_present":     sum(1 for p in proposals if p["status"] == "not_present"),
+        "approval_rule":   "No path is active until Noah approves it.",
+    }
+    proposal_file = ROOT / "Memory" / "scoped_paths_proposed.json"
+    proposal_file.parent.mkdir(parents=True, exist_ok=True)
+    proposal_file.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
+    return out
+
+
+def _print_proposal(out: dict) -> None:
+    print()
+    print("=" * 58)
+    print("  ORACLE Drive Scope — Path Proposals (PENDING APPROVAL)")
+    print("=" * 58)
+    print(f"  Generated : {out['generated_at'][:19]}")
+    print(f"  Proposed  : {out['proposed_count']}  (exist, not blocked)")
+    print(f"  Blocked   : {out['blocked_count']}   (blocked by policy)")
+    print(f"  Not found : {out['not_present']}  (path does not exist)")
+    print()
+    for p in out["proposals"]:
+        tag = {"proposed": "PROPOSE", "blocked": "BLOCK  ", "not_present": "MISS   "}.get(p["status"], "???")
+        print(f"  [{tag}] {p['name']:20s}  {p['path']}")
+    print()
+    print(f"  Rule: {out['approval_rule']}")
+    print(f"  Written: Memory/scoped_paths_proposed.json")
+    print("=" * 58)
+    print()
+
+
 def status_report(scope: Optional[dict] = None) -> str:
     if scope is None:
         scope = load_scope()
@@ -336,6 +393,27 @@ def run_smoke_tests() -> int:
         check("status_report: contains Drive Scope", "Drive Scope" in report)
         check("status_report: contains Approved", "Approved" in report)
 
+        # 9. OneDrive tenant paths are distinct in candidate list
+        candidate_names = [c["name"] for c in scope.get("candidate_paths", [])]
+        check("candidates: onedrive present",     "onedrive" in candidate_names)
+        check("candidates: onedrive_sov1 present","onedrive_sov1" in candidate_names)
+        check("candidates: onedrive_eh3 present", "onedrive_eh3" in candidate_names)
+        sov1_path = next((c["path"] for c in scope["candidate_paths"] if c["name"] == "onedrive_sov1"), "")
+        personal_path = next((c["path"] for c in scope["candidate_paths"] if c["name"] == "onedrive"), "")
+        check("onedrive_sov1 path != personal onedrive",
+              sov1_path != personal_path or not Path(personal_path).exists(),
+              f"sov1={sov1_path!r} personal={personal_path!r}")
+
+        # 10. propose() returns expected structure
+        out = _ds.propose()
+        check("propose: returns dict",           isinstance(out, dict))
+        check("propose: has proposals list",     isinstance(out.get("proposals"), list))
+        check("propose: has proposed_count",     isinstance(out.get("proposed_count"), int))
+        check("propose: approval_required flag", all(p["approval_required"] for p in out["proposals"]))
+        check("propose: scoped_paths_proposed.json written",
+              (tmp / "scoped_paths_proposed.json").exists() or
+              (ROOT / "Memory" / "scoped_paths_proposed.json").exists())
+
     finally:
         _ds.DRIVE_SCOPE_FILE  = orig_scope
         _ds.SCOPED_PATHS_FILE = orig_scoped
@@ -345,7 +423,7 @@ def run_smoke_tests() -> int:
         except Exception:
             pass
 
-    total = 20
+    total = 30
     passed = total - failures
     print(f"{'='*55}")
     print(f"Result: {passed}/{total} passed")
@@ -359,6 +437,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ORACLE Drive Scope")
     parser.add_argument("--discover",   action="store_true", help="Discover drives and paths")
     parser.add_argument("--status",     action="store_true", help="Show scope status")
+    parser.add_argument("--propose",    action="store_true", help="List path candidates pending approval")
     parser.add_argument("--smoke-test", action="store_true", help="Run smoke tests")
     args = parser.parse_args()
 
@@ -369,5 +448,8 @@ if __name__ == "__main__":
         print(status_report(scope))
     elif args.status:
         print(status_report())
+    elif args.propose:
+        out = propose()
+        _print_proposal(out)
     else:
         parser.print_help()

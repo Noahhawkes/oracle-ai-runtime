@@ -10,7 +10,7 @@ Drive Scope gives her the map. Workspace Steward gives her manners.
 
 ---
 
-## Drive Scope (`core/drive_scope.py`)
+## Drive Scope (`core/drive_scope.py`) — v0.2
 
 Safe read-only discovery of all drives and approved candidate paths on
 Noah's Windows machine.
@@ -19,11 +19,31 @@ Noah's Windows machine.
 
 | Source | Examples |
 |---|---|
-| Drive letters | C:\\ D:\\ G:\\ H:\\ |
-| User dirs | Desktop, Documents, Downloads, Pictures, Videos |
-| Cloud sync | OneDrive, Google Drive (G:\\My Drive) |
+| Drive letters | C:\\ G:\\ (and any other mounted drives) |
+| User dirs | Desktop, Documents, Downloads, Pictures, Videos, Music |
+| OneDrive tenants | Personal · sov1.ai · Eh3 Holdings LLC (each resolved separately) |
+| Google Drive | G:\\My Drive |
 | Dev roots | C:\\dev, C:\\repos, ~/dev, ~/repos |
-| OBS recordings | ~/Videos/OBS if present |
+| OBS recordings | ~/Videos/OBS or ~/Videos if present |
+| ORACLE root | G:\\My Drive\\HawkesNest LLC\\ORACLE.AI |
+
+**v0.2 fix:** `onedrive_sov1` now correctly resolves to
+`C:\Users\noahh\OneDrive - sov1.ai` instead of the personal OneDrive folder.
+`onedrive_eh3` (`OneDrive - Eh3 Holdings LLC`) added.
+
+### Governance model
+
+Discovery ≠ approval. The two-step model:
+
+1. `--discover` — probes what exists, marks each path with `approved=True/False`
+   based on existence and blocked-pattern check. Writes `Memory/drive_scope.json`
+   and `Memory/scoped_paths.json`.
+2. `--propose` — outputs every existing, non-blocked path as `status=proposed`
+   with `approval_required=true`. Writes `Memory/scoped_paths_proposed.json`.
+   Noah reviews and approves each proposed path explicitly.
+
+`is_in_scope()` consults `scoped_paths.json`. Only paths Noah has approved
+should be in that file.
 
 ### Safety rules (non-negotiable)
 
@@ -40,25 +60,28 @@ Noah's Windows machine.
 
 | File | Contents |
 |---|---|
-| `Memory/drive_scope.json` | Full discovery result including drives, candidate paths, safety config |
-| `Memory/scoped_paths.json` | Flat list of approved paths for other modules to consume |
+| `Memory/drive_scope.json` | Full discovery result — drives, candidate paths, safety config |
+| `Memory/scoped_paths.json` | Flat list of currently approved paths for modules to consume |
+| `Memory/scoped_paths_proposed.json` | Pending candidates — all `approval_required: true` |
 
 ### CLI
 
 ```bash
 python core/drive_scope.py --discover    # run discovery and print status
 python core/drive_scope.py --status      # show last discovery
-python core/drive_scope.py --smoke-test  # 20/20 tests
+python core/drive_scope.py --propose     # list path candidates pending Noah's approval
+python core/drive_scope.py --smoke-test  # 30/30 tests
 ```
 
 ### API
 
 ```python
-from drive_scope import discover, load_scope, approved_paths, is_in_scope
+from drive_scope import discover, load_scope, approved_paths, is_in_scope, propose
 
-scope = discover()              # run and persist
-paths = approved_paths()        # ["G:\\My Drive\\...", "C:\\Users\\..."]
-is_in_scope("C:\\dev\\myapp")  # True/False
+scope  = discover()             # run and persist
+paths  = approved_paths()       # ["G:\\My Drive\\...", "C:\\Users\\..."]
+ok     = is_in_scope("C:\\dev\\myapp")  # True/False
+props  = propose()              # path candidates — status=proposed, approval_required=True
 ```
 
 ---
@@ -110,5 +133,5 @@ Priority order:
 ```bash
 python core/workspace_steward.py --dry-run     # full inspection + report
 python core/workspace_steward.py --status      # show last report summary
-python core/workspace_steward.py --smoke-test  # 29/29 tests
+python core/workspace_steward.py --smoke-test  # smoke tests
 ```
