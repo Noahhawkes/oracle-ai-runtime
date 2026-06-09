@@ -331,10 +331,13 @@ def scan() -> dict:
         "top_candidates": [
             {"id": c.get("candidate_id"), "type": c.get("candidate_type"),
              "title": c.get("title"), "risk": c.get("risk_level")}
-            for c in sorted(all_candidates, key=lambda x: (
-                0 if x.get("risk_level") == "high" else
-                1 if x.get("risk_level") == "medium" else 2
-            ))[:5]
+            for c in sorted(
+                [x for x in all_candidates if x.get("status") == "PENDING"],
+                key=lambda x: (
+                    0 if x.get("risk_level") == "high" else
+                    1 if x.get("risk_level") == "medium" else 2
+                )
+            )[:5]
         ],
     }
     REPORT_FILE.write_text(
