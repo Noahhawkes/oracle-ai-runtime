@@ -241,8 +241,9 @@ _ACTION_CLAIM_PATTERNS = [
     "files have been created", "i have created", "i've created",
     "i created", "i've set up", "i set up", "was created at",
     "directory has been", "folder has been",
-    # The routing hallucination
-    "routing to claude code.",
+    # NOTE: "routing to claude code." is intentionally NOT here.
+    # That phrase is handled by _QWEN_ROUTING_HALLUCINATION in main() which
+    # actually re-routes. Blocking it here prevents the re-route from firing.
 ]
 
 # Map: action verb → which tool capability covers it → how to describe the gap
@@ -1903,6 +1904,14 @@ Hands tools (SOV1 — operates the screen):
         #   BUILD   → check Claude availability → route or return [CLAUDE UNAVAILABLE]
         #   DIAGNOSTIC → already handled above; shouldn't reach here
         _imode = _classify_interaction_mode(user_input)
+
+        # ── /approve-rule — confirm pending identity/governance rule ─────────────
+        if user_input.lower().strip().rstrip(".") in (
+            "/approve-rule", "approve-rule", "approve rule", "/approve rule",
+        ):
+            print(f"\n  {C['bgreen']}[GOVERNANCE]{C['reset']} Rule approved for this session. ORACLE will enforce it.\n")
+            speak("Rule approved.")
+            continue
 
         # ── Governance pre-classification ────────────────────────────────────────
         governance_response = handle_in_repl(user_input)
