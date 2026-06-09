@@ -47,3 +47,6 @@ build/
 # Temporary files
 *.tmp
 *.bak
+
+# Raw thread exports — never commit raw conversation text
+thread_exports/
