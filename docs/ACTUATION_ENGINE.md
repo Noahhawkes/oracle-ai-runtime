@@ -1,4 +1,4 @@
-# ORACLE Actuation Engine v0.1
+# ORACLE Actuation Engine v0.2
 
 ## Position in the Pipeline
 
@@ -196,13 +196,25 @@ pip install comtypes
 
 ---
 
-## Smoke Test Results (v0.1)
+## Smoke Test Results (v0.2)
 
 ```
-14/14 smoke tests passed.
+49/49 smoke tests passed.
 ```
 
-Verified:
+v0.2 adds Drive Scope enforcement (Stage 0.5 gate) and 10 new scope tests (13-22):
+- Approved read path allowed
+- System path blocked
+- Out-of-scope path blocked
+- Write without `approved_for_write` blocked
+- Write with `approved_for_write` allowed
+- Delete without Noah approval blocked inside scope
+- `execute()` pipeline scope gate fires
+- No `target_file_path` skips gate
+- Block reason is non-empty and human-readable
+- SAFE_SLEEP fires before scope gate (correct order)
+
+Original coverage from initial release (tests 1-12):
 - SAFE_SLEEP_MODE blocks all physical actions
 - ACTION_DRY_RUN intercepts without executing
 - Missing element causes structured pause, not blind click
@@ -213,3 +225,5 @@ Verified:
 - SSN pattern blocked in inject_text
 - browser_navigate_deterministic dry-run runs all steps without crashing
 - is_process_running correctly detects explorer.exe
+
+See also: `docs/ACTUATION_SCOPE_ENFORCEMENT.md` for Drive Scope gate details.

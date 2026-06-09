@@ -177,9 +177,12 @@ def _scan_docs_gaps() -> list[ImprovementCandidate]:
         return candidates
     version_re = re.compile(r"v(\d+\.\d+)", re.IGNORECASE)
     for doc_file in docs_dir.glob("*.md"):
-        # Find matching core module by name heuristic
+        # Find matching core module by name heuristic.
+        # Sort py files by stem length descending so specific modules (e.g. continuity_export)
+        # are matched before generic ones (e.g. oracle) that are substrings of many doc names.
         stem = doc_file.stem.upper().replace("_", "").replace("-", "")
-        for py_file in (ROOT / "core").glob("*.py"):
+        py_files_sorted = sorted((ROOT / "core").glob("*.py"), key=lambda p: len(p.stem), reverse=True)
+        for py_file in py_files_sorted:
             py_stem = py_file.stem.upper().replace("_", "")
             if py_stem in stem or stem in py_stem:
                 try:
@@ -312,6 +315,8 @@ def scan() -> dict:
     # Build report
     by_type: dict[str, int] = {}
     for c in all_candidates:
+        if c.get("status") != "PENDING":
+            continue
         t = c.get("candidate_type", "unknown")
         by_type[t] = by_type.get(t, 0) + 1
 
