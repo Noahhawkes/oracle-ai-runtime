@@ -158,18 +158,20 @@ class OracleProcess:
 
 class OracleDesktopApp:
 
-    BG        = "#0d0d14"
-    BG_PANEL  = "#11111d"
-    BG_INPUT  = "#1a1a2e"
-    FG        = "#e0e0e0"
-    FG_DIM    = "#888888"
-    ACCENT    = "#5bc0f8"
-    RED       = "#e05050"
-    GREEN     = "#68d468"
-    YELLOW    = "#f0c040"
+    BG        = "#0f1117"
+    BG_PANEL  = "#151922"
+    BG_INPUT  = "#171d29"
+    BG_CARD   = "#1c2430"
+    FG        = "#eef2f7"
+    FG_DIM    = "#8c98a8"
+    ACCENT    = "#58a6ff"
+    RED       = "#ff6b6b"
+    GREEN     = "#6ee7a8"
+    YELLOW    = "#f0c674"
+    BLUE      = "#7aa2f7"
     FONT_MONO = ("Consolas", 11)
     FONT_UI   = ("Segoe UI", 10)
-    FONT_HEADING = ("Segoe UI", 10, "bold")
+    FONT_HEADING = ("Segoe UI", 11, "bold")
 
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -182,50 +184,63 @@ class OracleDesktopApp:
     # ── UI construction ───────────────────────────────────────────────────
 
     def _build_ui(self):
-        self.root.title("ORACLE Desktop Console")
+        self.root.title("ORACLE Resident Console")
         self.root.configure(bg=self.BG)
-        self.root.geometry("1100x700")
-        self.root.minsize(800, 500)
+        self.root.geometry("1180x760")
+        self.root.minsize(900, 580)
 
         # ── Top bar: mode + source labels ──────────────────────────────
         top = tk.Frame(self.root, bg=self.BG, height=32)
-        top.pack(side=tk.TOP, fill=tk.X, padx=8, pady=(6, 2))
+        top.pack(side=tk.TOP, fill=tk.X, padx=14, pady=(12, 6))
 
         tk.Label(
             top, text="ORACLE", bg=self.BG, fg=self.ACCENT,
-            font=("Segoe UI", 12, "bold")
-        ).pack(side=tk.LEFT, padx=(0, 16))
+            font=("Segoe UI", 17, "bold")
+        ).pack(side=tk.LEFT, padx=(0, 10))
+
+        tk.Label(
+            top, text="Resident Console", bg=self.BG, fg=self.FG_DIM,
+            font=("Segoe UI", 11)
+        ).pack(side=tk.LEFT, padx=(0, 18))
 
         self._lbl_mode = tk.Label(
-            top, text="Mode: LOCAL", bg=self.BG, fg=self.FG_DIM,
-            font=self.FONT_UI
+            top, text="LOCAL", bg=self.BG_CARD, fg=self.YELLOW,
+            font=self.FONT_HEADING, padx=12, pady=4
         )
-        self._lbl_mode.pack(side=tk.LEFT, padx=8)
+        self._lbl_mode.pack(side=tk.LEFT, padx=4)
 
         self._lbl_claude = tk.Label(
             top, text="Claude: ●", bg=self.BG, fg=self.RED,
             font=self.FONT_UI
         )
-        self._lbl_claude.pack(side=tk.LEFT, padx=8)
+        self._lbl_claude.config(bg=self.BG_CARD, font=self.FONT_HEADING, padx=12, pady=4)
+        self._lbl_claude.pack(side=tk.LEFT, padx=4)
+
+        self._lbl_autonomy = tk.Label(
+            top, text="Delegated autonomy", bg=self.BG_CARD, fg=self.GREEN,
+            font=self.FONT_HEADING, padx=12, pady=4
+        )
+        self._lbl_autonomy.pack(side=tk.LEFT, padx=4)
 
         self._lbl_last = tk.Label(
             top, text="", bg=self.BG, fg=self.FG_DIM,
             font=self.FONT_UI
         )
-        self._lbl_last.pack(side=tk.LEFT, padx=8)
+        self._lbl_last.pack(side=tk.RIGHT, padx=8)
 
         # ── Main area: conversation + status panel ──────────────────────
         main = tk.Frame(self.root, bg=self.BG)
-        main.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=4)
+        main.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=14, pady=6)
 
         # Conversation pane
         self._chat = scrolledtext.ScrolledText(
-            main, bg=self.BG, fg=self.FG,
+            main, bg="#0b0f16", fg=self.FG,
             font=self.FONT_MONO,
             relief=tk.FLAT, wrap=tk.WORD,
+            padx=14, pady=12,
             state=tk.DISABLED,
             insertbackground=self.ACCENT,
-            selectbackground="#2a3a4a",
+            selectbackground="#24364a",
         )
         self._chat.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
@@ -234,16 +249,25 @@ class OracleDesktopApp:
             self._chat.tag_configure(label, foreground=color)
         self._chat.tag_configure("dim", foreground=self.FG_DIM)
         self._chat.tag_configure("bold", font=("Consolas", 11, "bold"))
+        self._chat.tag_configure("oracle", foreground=self.ACCENT, font=("Consolas", 11, "bold"))
+        self._chat.tag_configure("system", foreground=self.GREEN)
+        self._chat.tag_configure("warn", foreground=self.YELLOW)
 
         # Status panel
-        panel = tk.Frame(main, bg=self.BG_PANEL, width=220)
-        panel.pack(side=tk.RIGHT, fill=tk.Y, padx=(8, 0))
+        panel = tk.Frame(main, bg=self.BG_PANEL, width=290)
+        panel.pack(side=tk.RIGHT, fill=tk.Y, padx=(10, 0))
         panel.pack_propagate(False)
 
         tk.Label(
-            panel, text="STATUS", bg=self.BG_PANEL, fg=self.ACCENT,
+            panel, text="SYSTEM", bg=self.BG_PANEL, fg=self.FG,
             font=self.FONT_HEADING
-        ).pack(pady=(14, 6))
+        ).pack(pady=(16, 4))
+
+        self._summary = tk.Label(
+            panel, text="Awake, local, governed.", bg=self.BG_PANEL,
+            fg=self.FG_DIM, font=self.FONT_UI, wraplength=250, justify=tk.LEFT
+        )
+        self._summary.pack(fill=tk.X, padx=16, pady=(0, 10))
 
         ttk.Separator(panel, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=4)
 
@@ -251,6 +275,7 @@ class OracleDesktopApp:
         _rows = [
             ("Mode",     "mode"),
             ("Claude",   "claude"),
+            ("Autonomy", "autonomy"),
             ("Hands",    "hands"),
             ("Memory",   "memory"),
             ("Pending",  "pending"),
@@ -258,10 +283,10 @@ class OracleDesktopApp:
         ]
         for label, key in _rows:
             row = tk.Frame(panel, bg=self.BG_PANEL)
-            row.pack(fill=tk.X, padx=12, pady=3)
+            row.pack(fill=tk.X, padx=14, pady=4)
             tk.Label(
                 row, text=f"{label}:", bg=self.BG_PANEL, fg=self.FG_DIM,
-                font=self.FONT_UI, width=8, anchor="w"
+                font=self.FONT_UI, width=9, anchor="w"
             ).pack(side=tk.LEFT)
             var = tk.StringVar(value="—")
             self._status_vars[key] = var
@@ -273,29 +298,36 @@ class OracleDesktopApp:
         ttk.Separator(panel, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12, pady=8)
 
         # Quick-action buttons
-        for label, cmd in [
-            ("/pending", "/pending"),
-            ("/memory",  "/memory"),
-            ("/clear",   "/clear"),
-            ("/cycle",   "/cycle"),
+        tk.Label(
+            panel, text="QUICK ACTIONS", bg=self.BG_PANEL, fg=self.FG_DIM,
+            font=("Segoe UI", 9, "bold")
+        ).pack(anchor="w", padx=14, pady=(2, 6))
+
+        for label, cmd, color in [
+            ("Wake cycle", "run one resident cycle", self.GREEN),
+            ("Pending approvals", "/pending", self.YELLOW),
+            ("Memory", "/memory", self.BLUE),
+            ("Status", "show me your status", self.ACCENT),
+            ("Clear view", "/clear", self.FG_DIM),
         ]:
             b = tk.Button(
                 panel, text=label, command=lambda c=cmd: self._send_command(c),
-                bg="#1e1e30", fg=self.FG_DIM, relief=tk.FLAT,
+                bg=self.BG_CARD, fg=color, relief=tk.FLAT,
                 font=self.FONT_UI, cursor="hand2", activebackground="#2a2a42",
+                anchor="w", padx=10,
             )
-            b.pack(fill=tk.X, padx=12, pady=2)
+            b.pack(fill=tk.X, padx=14, pady=3)
 
         # ── Bottom: input box + send button ────────────────────────────
         bottom = tk.Frame(self.root, bg=self.BG_INPUT, height=48)
-        bottom.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=(4, 8))
+        bottom.pack(side=tk.BOTTOM, fill=tk.X, padx=14, pady=(6, 14))
 
         self._input = tk.Entry(
             bottom, bg=self.BG_INPUT, fg=self.FG,
             font=self.FONT_MONO, relief=tk.FLAT,
             insertbackground=self.ACCENT,
         )
-        self._input.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(12, 4), pady=10)
+        self._input.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(14, 6), pady=12)
         self._input.bind("<Return>", self._on_send)
         self._input.bind("<Up>", self._history_up)
         self._input.bind("<Down>", self._history_down)
@@ -303,12 +335,12 @@ class OracleDesktopApp:
 
         send_btn = tk.Button(
             bottom, text="Send", command=self._on_send,
-            bg=self.ACCENT, fg="#0d0d14", relief=tk.FLAT,
+            bg=self.ACCENT, fg="#09111c", relief=tk.FLAT,
             font=("Segoe UI", 10, "bold"), cursor="hand2",
-            padx=18, pady=6,
+            padx=22, pady=7,
             activebackground="#3ab0e8",
         )
-        send_btn.pack(side=tk.RIGHT, padx=(0, 12), pady=8)
+        send_btn.pack(side=tk.RIGHT, padx=(0, 14), pady=9)
 
         # Input history
         self._input_history: list[str] = []
@@ -322,6 +354,10 @@ class OracleDesktopApp:
 
     def _start_oracle(self):
         self._append_line("  Starting ORACLE runtime…", tag="dim")
+        self._append_line("ORACLE Resident Console", tag="oracle")
+        self._append_line("Awake on local runtime. Routine in-scope work is delegated; major changes still come back to Noah.", tag="system")
+        self._append_line("Try: 'run one resident cycle' or 'show me your status'.", tag="dim")
+        self._append_line("", tag="dim")
         self.oracle.start()
         # Kick off a background status refresh in 3 seconds
         self.root.after(3000, self._do_status_refresh)
@@ -351,7 +387,7 @@ class OracleDesktopApp:
     def _update_status_panel(self, s: dict):
         mode = s.get("mode", "LOCAL")
         self._status_vars["mode"].set(mode)
-        self._lbl_mode.config(text=f"Mode: {mode}")
+        self._lbl_mode.config(text=mode, fg=self.YELLOW if mode == "LOCAL" else self.GREEN)
 
         claude_ok = s.get("claude_window") or s.get("claude_cli")
         claude_txt = "Connected" if claude_ok else "Not connected"
@@ -361,9 +397,15 @@ class OracleDesktopApp:
             fg=self.GREEN if claude_ok else self.RED,
         )
 
+        self._status_vars["autonomy"].set("Delegated")
+        self._lbl_autonomy.config(text="Delegated autonomy", fg=self.GREEN)
         self._status_vars["hands"].set("Ready" if s.get("hands_ready", True) else "Blocked")
         self._status_vars["memory"].set("Connected" if s.get("memory_connected", True) else "—")
-        self._status_vars["pending"].set(str(s.get("pending", 0)))
+        pending = int(s.get("pending", 0) or 0)
+        self._status_vars["pending"].set(str(pending))
+        if hasattr(self, "_summary"):
+            pending_note = "No pending approvals" if pending == 0 else f"{pending} approval item(s) waiting"
+            self._summary.config(text=f"Awake locally. Delegated routine work is enabled. {pending_note}.")
         self._status_vars["model_name"].set(str(s.get("model", "—")))
 
     # ── Chat pane helpers ─────────────────────────────────────────────────
