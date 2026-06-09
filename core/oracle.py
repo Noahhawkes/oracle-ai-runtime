@@ -845,8 +845,7 @@ def banner(identity):
 
     ts = now.strftime("%A, %B ") + str(now.day) + now.strftime("  %H:%M")
     print(f"\n{C['grey']}  {ts}{W}")
-    print(f"\n{C['grey']}  {'─' * 50}{W}")
-    print(f"\n  {C['dim']}Type a message · /help for commands · /quit to exit{W}\n")
+    print(f"\n{C['grey']}  {'─' * 50}{W}\n")
 
 
 def show_memory(session_id):
@@ -1300,10 +1299,7 @@ def main():
     model = get_model(vision=False)
     system_prompt = build_system_prompt(local=local)
 
-    if local:
-        print(f"\n[LOCAL MODE] Using Ollama model: {model}")
-        print("[LOCAL MODE] Make sure Ollama is running and the model is pulled.")
-        print(f"[LOCAL MODE] Pull command: ollama pull {model}\n")
+    pass  # local mode — no diagnostic chatter
 
     # Initialise LiveContext — loads persisted state, stamps last_updated
     from live_context import get_live_context
@@ -1316,24 +1312,8 @@ def main():
     banner(identity)
     log("SESSION_START", f"Session {session_id} started")
 
-    # ── Connectivity status at boot ───────────────────────────────────────────
     _claude_cli_found = shutil.which("claude") is not None
     _claude_win_found = _claude_available_now()
-    _claude_status_str = (
-        f"{C['bgreen']}CONNECTED{C['reset']}"
-        if (_claude_cli_found or _claude_win_found)
-        else f"{C['bred']}NOT CONNECTED{C['reset']}"
-    )
-    _claude_detail = []
-    if _claude_cli_found:
-        _claude_detail.append("CLI")
-    if _claude_win_found:
-        _claude_detail.append("window")
-    if not _claude_detail:
-        _claude_detail.append("open Claude Code to connect")
-    print(f"  Claude : {_claude_status_str}  {C['dim']}({', '.join(_claude_detail)}){C['reset']}")
-    print(f"  Mode   : {C['cyan']}{'LOCAL' if local else 'CLOUD'}{C['reset']}  {C['dim']}model: {model}{C['reset']}")
-    print()
 
     # ── Auto boot cycle — ORACLE starts working immediately, no first prompt needed ──
     try:
@@ -1345,15 +1325,8 @@ def main():
         next_s   = _boot.next_recommended_step or ""
         approval = _boot.approval_required
 
-        print(f"\n{C['grey']}  {'─' * 50}{C['reset']}")
-        print(f"  {C['cyan']}◆ ORACLE BOOT CYCLE{C['reset']}  {C['dim']}{priority}{C['reset']}")
-        if action:
-            print(f"  {C['dim']}{action[:120]}{C['reset']}")
-        if next_s:
-            label = f"{C['byellow']}  ▶ ACTION NEEDED:{C['reset']}" if approval else f"  {C['grey']}Next:{C['reset']}"
-            print(f"{label} {C['dim']}{next_s[:100]}{C['reset']}")
-        print(f"{C['grey']}  {'─' * 50}{C['reset']}\n")
-
+        if approval and next_s:
+            print(f"\n  {C['byellow']}◆{C['reset']} {C['dim']}{next_s[:120]}{C['reset']}\n")
         if approval:
             speak_prompt(f"I'm up. {action[:80]}")
         else:
@@ -2224,70 +2197,17 @@ def main():
             continue
 
         if user_input.lower() == "/help":
-            print("""
-Commands:
-  /memory                            Show stored facts and session info
-  /projects                          List all projects
-  /project add <name>                Add a project
-  /project note <name> <note>        Add a note to a project
-  /project recall <name>             Show project and all notes
-  /person add <name> [role]          Add a person
-  /person note <name> <note>         Add a note about a person
-  /person recall <name>              Show person and all notes
-  /clear                             Clear conversation history
-  /propose-build                     Read build docs and recommend one next task (read-only)
-  /self-build                        Scan own codebase and propose the single best improvement
-  /self-prompt                       Run one governed self-prompt cycle (state, memory, gaps, priority, proposal)
-  /project-state                     Show current project state — what was active, what's blocked, what's next
-  /runtime                           Run one governed runtime cycle (heartbeat — picks priority, invokes module, persists result)
-  /runtime-status                    Show runtime state: SOV1, Ollama, pending queues, next priority
-  /bridge-chatgpt-draft <question>   Draft a governed message to ChatGPT (does not send — dry run)
-  /bridge-chatgpt-status             Show ChatGPT bridge status and pending drafts
-  /window-snapshot                   List currently visible windows on the desktop
-  /controls <window>                 Dump all UIA controls discovered in a window (debug actuation)
-  /route-task <description>          Route a task to the correct cognitive engine (brain router)
-  /actuate <window> | <text>         Governed desktop injection: inject + press Enter (add --no-enter to suppress)
-  /actuate-dry <window> | <text>     Dry run actuation — shows what would happen without executing
-  /ask-claude <task>                 Send task to Claude Code via file channel; wait for response
-  /channel                           Show ORACLE-Claude channel status (outbox / inbox)
-  /channel-reply                     Read latest Claude response from the channel
-  /video-analyze <path>              Analyze an approved video file — creates pending candidate
-  /video-pending                     List pending video observation candidates
-  /video-approve <id>                Approve a video candidate for recall
-  /session                           Show full session state diagnostic (mode, prompt, tool history)
-  ACTION_DIAGNOSTIC                  Real structured diagnostic (not prose) — mode, prompt, tool calls, recovery hint
-  CLEAR_PROMPT                       Clear any active terminal prompt (stop prompt hijacking)
-  RESET_SESSION_STATE                Full session reset to IDLE (preserves tool history)
-  STOP ORACLE                        Halt all action, clear prompts, enter SAFE_SLEEP
-  SET_MODE BUILD_PASS                Force BUILD_PASS mode
-  SET_MODE IDLE                      Force IDLE mode
-  /lootdrop                          Show recent LootDrop momentum recap
-  /lootdrop <tier> <project> <reason>  Award a LootDrop (tiers: common uncommon rare epic legendary mythic)
-  /context                           Show current live operational context state
-  /privacy on | /privacy off         Toggle privacy mode (clears buffer, suspends context)
-  /pause-context                     Pause context updates without full privacy mode
-  /resume-context                    Resume context updates
-  /purge-buffer                      Discard live context buffer without approving candidates
-  /pending                           List external integration candidates pending approval
-  /voice on | /voice off             Toggle voice output (Oracle speaks replies)
-  /quit                              Exit
-
-Brain tools (reasoning, files, web):
-  read_file / write_file / list_directory
-  run_shell       Run a one-off PowerShell command (stateless)
-  terminal_run    Run a command in ORACLE's own persistent terminal (state carries between calls)
-  terminal_cd     Change directory in the persistent terminal
-  terminal_status Check terminal session state
-  browser_navigate / browser_search
-  filesystem_scan / filesystem_search
-  remember_fact / recall_facts
-  scheduler_control
-
-Hands tools (SOV1 — operates the screen):
-  computer_operator   Tell Oracle to do something on screen and it uses SOV1.
-                      Just speak naturally: "open Chrome", "click X", etc.
-                      Abort anytime: slam mouse into a screen corner.
-""")
+            W = C["reset"]
+            print(f"\n  {C['cyan']}ORACLE{W}  —  just talk to me.\n")
+            print(f"  {C['dim']}Tell me what you want done and I'll do it.")
+            print(f"  I can read and write files, run commands, control the screen,")
+            print(f"  send tasks to Claude Code, and remember things you tell me.{W}\n")
+            print(f"  {C['grey']}pending{W}     — show items waiting for your approval")
+            print(f"  {C['grey']}loop on/off{W} — start / stop the autonomous build loop")
+            print(f"  {C['grey']}voice on/off{W}— toggle voice")
+            print(f"  {C['grey']}build yourself{W} — generate a self-improvement proposal")
+            print(f"  {C['grey']}remember X{W} — store a fact")
+            print(f"  {C['grey']}quit{W}        — exit\n")
             continue
 
         # ── Interaction mode — CHAT / WORK / BUILD / DIAGNOSTIC ──────────────────
