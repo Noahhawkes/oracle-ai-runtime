@@ -147,6 +147,8 @@ _NL_ASK_CODEX_PATTERNS = [
     _re.compile(r"^ask\s+codex\s+(.+)", _re.I),
     _re.compile(r"^tell\s+codex\s+(?:to\s+)?(.+)", _re.I),
     _re.compile(r"^(?:have|get)\s+codex\s+(?:to\s+)?(.+)", _re.I),
+    _re.compile(r"^use\s+codex\s+(?:to\s+)?(.+)", _re.I),       # "use codex to inspect the repo"
+    _re.compile(r"^send\s+(?:this\s+)?to\s+codex[:\s]*(.*)$", _re.I),  # "send this to codex"
 ]
 _NL_PENDING_PATTERNS = [
     "what's pending", "whats pending", "what is pending", "show pending",
@@ -2416,6 +2418,14 @@ def main():
                 print(f"\n[session error: {e}]\n")
             continue
 
+        if user_input.lower() in ("/doctor", "/audit-runtime", "/check-tools", "/health"):
+            try:
+                from oracle_doctor import run_doctor
+                print(run_doctor())
+            except Exception as e:
+                print(f"\n[doctor error: {e}]\n")
+            continue
+
         if user_input.lower().startswith("/route-task") or user_input.lower().startswith("/route "):
             raw = user_input.split(" ", 1)[1].strip() if " " in user_input else ""
             if not raw:
@@ -2600,12 +2610,22 @@ def main():
             print(f"  {C['dim']}Tell me what you want done and I'll do it.")
             print(f"  I can read and write files, run commands, control the screen,")
             print(f"  send tasks to Claude Code, and remember things you tell me.{W}\n")
-            print(f"  {C['grey']}pending{W}     — show items waiting for your approval")
-            print(f"  {C['grey']}loop on/off{W} — start / stop the autonomous build loop")
-            print(f"  {C['grey']}voice on/off{W}— toggle voice")
-            print(f"  {C['grey']}build yourself{W} — generate a self-improvement proposal")
-            print(f"  {C['grey']}remember X{W} — store a fact")
-            print(f"  {C['grey']}quit{W}        — exit\n")
+            print(f"  {C['grey']}/doctor{W}              — live probe: what actually works right now")
+            print(f"  {C['grey']}/capabilities{W}        — list registered capabilities")
+            print(f"  {C['grey']}/missing-capabilities{W}— list degraded/unavailable capabilities")
+            print(f"  {C['grey']}/pending{W}             — show items waiting for your approval")
+            print(f"  {C['grey']}/channel{W}             — Claude + Codex channel status")
+            print(f"  {C['grey']}/ask-codex <task>{W}   — send task to Codex file bridge")
+            print(f"  {C['grey']}/ask-claude <task>{W}  — send task to Claude channel")
+            print(f"  {C['grey']}/project-state{W}       — show current build phase + next step")
+            print(f"  {C['grey']}/cycle{W}               — run one governed runtime cycle")
+            print(f"  {C['grey']}loop on/off{W}          — start / stop the autonomous build loop")
+            print(f"  {C['grey']}voice on/off{W}         — toggle TTS voice")
+            print(f"  {C['grey']}build yourself{W}       — generate a self-improvement proposal")
+            print(f"  {C['grey']}remember this: <X>{W}  — store a fact")
+            print(f"  {C['grey']}ask codex to <task>{W} — natural language Codex routing")
+            print(f"  {C['grey']}ask claude to <task>{W}— natural language Claude routing")
+            print(f"  {C['grey']}quit{W}                 — exit\n")
             continue
 
         # ── Interaction mode — CHAT / WORK / BUILD / DIAGNOSTIC ──────────────────

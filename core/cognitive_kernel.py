@@ -54,6 +54,47 @@ _CHATGPT_RELAY_PREFIXES = (
 )
 _RELAY_ACTION_WORDS = ("build", "approve", "send", "commit", "run", "hand off", "handoff")
 
+# Question starters: inputs that begin with these are conversational queries,
+# not action intents.  They should never trigger hard-approval even if they
+# contain policy-blocked words like "commit", "pull", "cloud", "governance".
+_QUESTION_STARTERS = (
+    "what ", "how ", "why ", "when ", "where ", "who ", "which ",
+    "explain ", "describe ", "tell me ", "can you ", "could you ",
+    "does ", "is ", "are ", "was ", "were ", "will ", "would ", "should ",
+    "what's ", "what is ", "how do ", "how does ", "how can ", "how would ",
+    "whats ", "what are ", "what was ", "what were ",
+)
+# Even question-starters should not bypass if a destructive action verb
+# is present (e.g. "what happens if we delete" still needs approval for the
+# delete itself, but that's handled downstream by the executor gate).
+# The bypass only prevents the LLM from being blocked before it even sees
+# a purely informational question.
+_QUESTION_ACTION_OVERRIDES = (
+    " delete ", " erase ", " destroy ", " wipe ", " remove file ",
+    " upload to ", " deploy to ", " push to ", " commit to ",
+)
+
+
+def _is_pure_question(lower: str) -> bool:
+    """
+    Return True if the input is a conversational question that should not be
+    gated by milestone policy.
+
+    A pure question:
+    - starts with a question word or descriptive opener
+    - does NOT contain a clear destructive/outbound action phrase
+
+    Examples blocked from bypass (still require approval):
+      "what should I do to delete this file" — contains " delete "
+    Examples that bypass (go to LLM as conversation):
+      "what should we commit next" — asking about the concept, not executing it
+      "explain the governance model" — informational
+      "what is the cloud architecture" — architectural question
+    """
+    if not any(lower.startswith(q) for q in _QUESTION_STARTERS):
+        return False
+    return not any(av in lower for av in _QUESTION_ACTION_OVERRIDES)
+
 
 @dataclass(frozen=True)
 class KernelDecision:
@@ -161,6 +202,24 @@ def classify_input(
 
     if (pending_intent or has_pending_items) and any(phrase in lower for phrase in _SHOW_PENDING_PHRASES):
         return KernelDecision(INTENT_SHOW_PENDING, KERNEL_REPORT, "pending item display requested")
+
+    # Pure conversational questions bypass hard-approval entirely.
+    # They may contain policy words (commit/pull/cloud/governance) as topics
+    # but are not action intents.  The LLM receives them and answers normally.
+    if _is_pure_question(lower):
+        need = detect_need(text)
+        return KernelDecision(
+            INTENT_CONVERSATION,
+            KERNEL_DEFER,
+            "pure question — policy bypass",
+            False,
+            None,
+            "",
+            need.target,
+            "",
+            "",
+            need.safest_next_step,
+        )
 
     policy = evaluate_action(text, in_approved_scope=in_approved_scope)
     if policy.decision == "approval_required":
