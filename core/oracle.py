@@ -949,7 +949,8 @@ def banner(identity):
 
     # ── Project state resumption ──────────────────────────────────────────────
     try:
-        from project_state import load_state
+        from project_state import load_state, reconcile_next_step
+        reconcile_next_step("ORACLE.AI")   # fix stale next_recommended_step at boot
         ps = load_state("ORACLE.AI")
         if ps and ps.next_recommended_step:
             print(f"\n{C['grey']}  {'─' * 50}{W}")

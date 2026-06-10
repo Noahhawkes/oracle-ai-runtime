@@ -316,6 +316,110 @@ def resume_prompt(project_name: str) -> str:
     return summarize_state(project_name)
 
 
+# ── Step reconciliation ───────────────────────────────────────────────────────
+
+# Markers that indicate the stored next_recommended_step is the stale
+# "review scoped_paths_proposed.json" recommendation from Step 10.
+_STALE_SCOPE_STEP_MARKERS = (
+    "scoped_paths_proposed",
+    "approve the 12 proposed paths",
+    "review memory/scoped_paths_proposed",
+    "approve the 12",
+)
+
+
+def _scoped_paths_still_pending() -> bool:
+    """Return True if any proposed paths still have approval_required=True."""
+    proposed_file = ROOT / "Memory" / "scoped_paths_proposed.json"
+    if not proposed_file.exists():
+        return False
+    try:
+        data = json.loads(proposed_file.read_text(encoding="utf-8"))
+        proposals = data.get("proposals", [])
+        return any(
+            p.get("status") == "proposed" and p.get("approval_required")
+            for p in proposals
+        )
+    except Exception:
+        return False
+
+
+def _pending_approval_count() -> int:
+    """Return count of items in approval queue, or 0 if unavailable."""
+    try:
+        import importlib
+        ac = importlib.import_module("approval_center")
+        return len(ac.list_pending())
+    except Exception:
+        return 0
+
+
+def reconcile_next_step(project_name: str) -> Optional["ProjectState"]:
+    """
+    Detect and fix a stale next_recommended_step.
+
+    Rules (in order):
+    1. If next_recommended_step references scoped_paths_proposed:
+       - Paths still pending  → reframe to /pending (avoids the intent-router loop)
+       - Paths all approved   → advance past scope-review to next milestone
+    2. If pending approvals exist and step doesn't mention /pending → point to /pending
+    3. Otherwise leave as-is.
+
+    Invariants:
+    - Never fakes completion.
+    - Never self-approves anything.
+    - Approval gate is unchanged.
+    - Only writes when a genuine change is made.
+    """
+    state = load_state(project_name)
+    if state is None:
+        return None
+
+    current_lower = state.next_recommended_step.lower()
+    changed = False
+
+    # Rule 1 — stale scope-review step
+    is_stale_scope = any(m in current_lower for m in _STALE_SCOPE_STEP_MARKERS)
+    if is_stale_scope:
+        if _scoped_paths_still_pending():
+            state.next_recommended_step = (
+                "Run /pending in ORACLE console to review the 12 proposed scope paths. "
+                "Paths remain PENDING until Noah explicitly approves them via the approval queue."
+            )
+            state.next_step_reason = (
+                "Scoped path approval is still outstanding. "
+                "Step reframed from stale 'Review scoped_paths_proposed.json' reference "
+                "to direct /pending command to prevent the intent-router loop."
+            )
+        else:
+            # All paths approved or file absent — advance
+            state.next_recommended_step = (
+                "Confirm actuation engine is reachable from oracle.py REPL via /actuate "
+                "or action_batch path. Then proceed to next MYTHIC BUILD PASS milestone."
+            )
+            state.next_step_reason = (
+                "Scoped path approval step is no longer pending. "
+                "Advancing to actuation end-to-end integration test."
+            )
+        changed = True
+
+    # Rule 2 — pending approval queue items
+    if not changed:
+        pending_n = _pending_approval_count()
+        if pending_n > 0 and "/pending" not in current_lower:
+            state.next_recommended_step = (
+                f"Run /pending in ORACLE console — {pending_n} item(s) awaiting Noah approval."
+            )
+            state.next_step_reason = (
+                "Pending approval queue has items that require Noah's review before proceeding."
+            )
+            changed = True
+
+    if changed:
+        return save_state(state)
+    return state
+
+
 # ── Seed current ORACLE.AI state ───────────────────────────────────────────────
 
 def _seed_oracle_ai_state():
@@ -520,6 +624,32 @@ def _smoke_test() -> bool:
         check("summary() one-liner builds", bool(sm))
         check("summary() contains project name", "TestProject" in sm)
 
+        # 16. reconcile_next_step — stale scope marker is replaced
+        set_next_step("TestProject", "Review Memory/scoped_paths_proposed.json and approve the 12 proposed paths.")
+        reconciled = reconcile_next_step("TestProject")
+        check("reconcile_next_step returns state", reconciled is not None)
+        check(
+            "stale scope step is replaced",
+            "scoped_paths_proposed" not in (reconciled.next_recommended_step.lower() if reconciled else ""),
+        )
+        check(
+            "reconciled step mentions /pending or actuation",
+            reconciled is not None and (
+                "/pending" in reconciled.next_recommended_step.lower()
+                or "actuation" in reconciled.next_recommended_step.lower()
+            ),
+        )
+
+        # 17. reconcile_next_step — non-stale step is left unchanged
+        set_next_step("TestProject", "Build core/semantic_ui_bridge.py")
+        before = load_state("TestProject").next_recommended_step
+        reconcile_next_step("TestProject")
+        after = load_state("TestProject").next_recommended_step
+        check("non-stale step is unchanged by reconcile", before == after)
+
+        # 18. reconcile_next_step on missing project returns None
+        check("reconcile on missing project returns None", reconcile_next_step("__no_such_project__") is None)
+
     finally:
         STATES_FILE = original_file
         try:
@@ -573,11 +703,32 @@ def main():
                 print(f"\n{state.summary()}")
         sys.exit(0)
 
+    if "--reconcile" in args:
+        name = "ORACLE.AI"
+        for i, a in enumerate(args):
+            if a == "--project" and i + 1 < len(args):
+                name = args[i + 1]
+        before = load_state(name)
+        before_step = before.next_recommended_step if before else "(none)"
+        result = reconcile_next_step(name)
+        if result is None:
+            print(f"No state found for '{name}'.")
+        elif result.next_recommended_step != before_step:
+            print(f"Reconciled '{name}':")
+            print(f"  BEFORE: {before_step}")
+            print(f"  AFTER : {result.next_recommended_step}")
+            print(f"  REASON: {result.next_step_reason}")
+        else:
+            print(f"'{name}' next_recommended_step is already current — no change.")
+            print(f"  Step: {result.next_recommended_step}")
+        sys.exit(0)
+
     print("Usage:")
     print("  python core/project_state.py --smoke         Run smoke tests")
     print("  python core/project_state.py --seed          Seed ORACLE.AI current state")
     print("  python core/project_state.py --resume        Print ORACLE.AI resume prompt")
     print("  python core/project_state.py --status        List all project states")
+    print("  python core/project_state.py --reconcile     Fix stale next_recommended_step")
     sys.exit(0)
 
 
