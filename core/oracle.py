@@ -2426,6 +2426,42 @@ def main():
                 print(f"\n[doctor error: {e}]\n")
             continue
 
+        # ── /autonomy — show the green/yellow/red zone table ─────────────────
+        if user_input.lower() in ("/autonomy", "/zones", "/green-zone", "/policy"):
+            try:
+                from autonomy_policy import format_autonomy_table
+                print(format_autonomy_table())
+            except Exception as e:
+                print(f"\n[autonomy error: {e}]\n")
+            continue
+
+        # ── /why-blocked — explain the most recent blocked/deferred action ────
+        if user_input.lower().startswith("/why-blocked") or user_input.lower() in ("/why", "/why-blocked"):
+            _wb_input = user_input[len("/why-blocked"):].strip() if user_input.lower().startswith("/why-blocked") else ""
+            try:
+                from autonomy_policy import last_blocked_explanation, classify_autonomy
+                from cognitive_kernel import load_kernel_state
+                _ks = load_kernel_state()
+                _last_inp = _wb_input or _ks.get("last_input", "")
+                _last_intent = _ks.get("last_intent", "")
+                _missing_cap = _ks.get("missing_capability", "")
+                _needed_cap  = _ks.get("needed_capability", "")
+                _az = classify_autonomy(_last_inp) if _last_inp else None
+                _exp = last_blocked_explanation(
+                    input_text=_last_inp,
+                    decision=_az,
+                    governance_category=_ks.get("policy_category", ""),
+                    missing_capability=_missing_cap,
+                    exact_request=_needed_cap,
+                )
+                print(_exp)
+                if _last_intent:
+                    print(f"  Last intent recorded : {_last_intent}")
+                print()
+            except Exception as e:
+                print(f"\n[why-blocked error: {e}]\n")
+            continue
+
         # ── /desktop-ai — list desktop AI targets ────────────────────────────
         if user_input.lower() in ("/desktop-ai", "/desktop-targets", "/ai-tools"):
             try:
@@ -2725,6 +2761,8 @@ def main():
             print(f"  send tasks to Claude Code, and remember things you tell me.{W}\n")
             print(f"  {C['cyan']}── Status & Diagnostics ──{W}")
             print(f"  {C['grey']}/doctor{W}              — live probe: what actually works right now")
+            print(f"  {C['grey']}/autonomy{W}            — GREEN/YELLOW/RED zone table: what I can do without approval")
+            print(f"  {C['grey']}/why-blocked [input]{W} — explain why the last action was blocked or deferred")
             print(f"  {C['grey']}/desktop-doctor{W}      — live desktop actuation probe")
             print(f"  {C['grey']}/capabilities{W}        — list registered capabilities")
             print(f"  {C['grey']}/missing-capabilities{W}— list degraded/unavailable capabilities")

@@ -17,6 +17,14 @@ from typing import Any
 from milestone_policy import evaluate_action, policy_summary, requires_hard_approval
 from capability_registry import detect_need
 
+# Autonomy policy — imported lazily inside classify_input to avoid circular refs
+_AUTONOMY_AVAILABLE = False
+try:
+    from autonomy_policy import classify_autonomy as _classify_autonomy, ZONE_GREEN, ZONE_YELLOW, ZONE_RED
+    _AUTONOMY_AVAILABLE = True
+except Exception:
+    pass
+
 ROOT = Path(__file__).parent.parent
 STATE_FILE = ROOT / "Memory" / "cognitive_kernel_state.json"
 
@@ -221,6 +229,29 @@ def classify_input(
             need.safest_next_step,
         )
 
+    # Autonomy policy check — GREEN actions proceed immediately;
+    # RED actions are escalated to hard-approval (same outcome as milestone_policy
+    # below, but with richer reason strings for /why-blocked);
+    # YELLOW actions fall through to the normal confirmation flow.
+    if _AUTONOMY_AVAILABLE:
+        _az = _classify_autonomy(text)
+        if _az.zone == ZONE_GREEN and _az.safe_to_proceed:
+            need = detect_need(text)
+            return KernelDecision(
+                INTENT_ROUTINE_LOCAL,
+                KERNEL_ACT,
+                f"autonomy:GREEN — {_az.reason}",
+                False,
+                None,
+                "",
+                need.target,
+                "",
+                "",
+                need.safest_next_step or "proceed",
+            )
+        # RED — let milestone_policy confirm below (belt-and-suspenders)
+        # YELLOW — fall through to normal evaluate_action / approval flow
+
     policy = evaluate_action(text, in_approved_scope=in_approved_scope)
     if policy.decision == "approval_required":
         need = detect_need(text)
@@ -397,6 +428,10 @@ def run_smoke_tests() -> int:
         check("destructive action requires approval", decide_next("delete that file").decision == KERNEL_ASK)
         check("world model updates last intent", load_kernel_state().get("last_intent") == INTENT_APPROVAL_REQUIRED)
         check("resident wake report has mode", "current_mode" in resident_wake_report())
+        # Autonomy policy integration
+        check("GREEN action gets KERNEL_ACT", decide_next("check git status").decision == KERNEL_ACT)
+        check("GREEN question does not require approval", not decide_next("what can you do without approval").hard_approval_required)
+        check("RED action still requires approval", decide_next("commit the changes").decision == KERNEL_ASK)
     finally:
         if saved is None:
             if STATE_FILE.exists():
