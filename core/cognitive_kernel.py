@@ -1,0 +1,353 @@
+"""
+core/cognitive_kernel.py - ORACLE Cognitive Kernel v0.1.
+
+Small central reasoning layer above the router. It does not introduce new
+tools. It classifies input, resolves pending intent before stale recommended
+steps, updates a tiny world model, and decides act/ask/defer/report.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from milestone_policy import evaluate_action, policy_summary, requires_hard_approval
+from capability_registry import detect_need
+
+ROOT = Path(__file__).parent.parent
+STATE_FILE = ROOT / "Memory" / "cognitive_kernel_state.json"
+
+INTENT_STATUS = "status request"
+INTENT_PROCEED_PENDING = "proceed/yes to pending step"
+INTENT_SHOW_PENDING = "show pending item"
+INTENT_ROUTINE_LOCAL = "routine local action"
+INTENT_APPROVAL_REQUIRED = "approval required action"
+INTENT_CONVERSATION = "conversation only"
+
+KERNEL_ACT = "act"
+KERNEL_ASK = "ask"
+KERNEL_DEFER = "defer"
+KERNEL_REPORT = "report"
+
+_STATUS_PHRASES = (
+    "status", "show status", "system status", "how are you doing",
+    "what's running", "whats running", "show me your status",
+)
+_PROCEED_PHRASES = (
+    "yes", "yep", "yeah", "ok", "okay", "sure", "proceed", "do it",
+    "go ahead", "yes please", "yes proceed", "run it", "execute it",
+)
+_SHOW_PENDING_PHRASES = (
+    "pending", "show pending", "show me pending", "show me", "what's pending",
+    "whats pending", "what needs approval", "show approvals",
+)
+_ROUTINE_PHRASES = (
+    "run one resident cycle", "wake cycle", "check channels", "check codex",
+    "check claude", "show channel", "channel status", "read codex", "read claude",
+)
+_CHATGPT_RELAY_PREFIXES = (
+    "chatgpt says", "chatgpt said", "chatgpt:", "chatgpt responded",
+    "chatgpt replied", "chatgpt told me",
+)
+_RELAY_ACTION_WORDS = ("build", "approve", "send", "commit", "run", "hand off", "handoff")
+
+
+@dataclass(frozen=True)
+class KernelDecision:
+    intent: str
+    decision: str
+    reason: str
+    hard_approval_required: bool = False
+    pending_intent: dict | None = None
+    policy_category: str = ""
+    needed_capability: str = ""
+    missing_capability: str = ""
+    exact_request: str = ""
+    safest_next_step: str = "wait"
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _default_state() -> dict[str, Any]:
+    return {
+        "version": "0.1",
+        "updated_at": _now(),
+        "mode": "LOCAL",
+        "active_project": "ORACLE.AI",
+        "pending_intent": None,
+        "last_input": "",
+        "last_intent": "",
+        "last_decision": "",
+        "blockers": [],
+        "next_safe_action": "wait",
+        "counters": {
+            "inputs_classified": 0,
+            "approvals_required": 0,
+            "pending_resolved": 0,
+        },
+    }
+
+
+def load_kernel_state() -> dict[str, Any]:
+    if not STATE_FILE.exists():
+        state = _default_state()
+        save_kernel_state(state)
+        return state
+    try:
+        state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        base = _default_state()
+        base.update(state if isinstance(state, dict) else {})
+        if not isinstance(base.get("counters"), dict):
+            base["counters"] = _default_state()["counters"]
+        return base
+    except Exception:
+        state = _default_state()
+        state["blockers"] = ["cognitive kernel state unreadable; reset to safe defaults"]
+        save_kernel_state(state)
+        return state
+
+
+def save_kernel_state(state: dict[str, Any]) -> None:
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    state["updated_at"] = _now()
+    STATE_FILE.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def is_chatgpt_relay_conversation(text: str) -> bool:
+    lower = text.strip().lower()
+    if not any(lower.startswith(prefix) for prefix in _CHATGPT_RELAY_PREFIXES):
+        return False
+    return not any(word in lower for word in _RELAY_ACTION_WORDS)
+
+
+def classify_input(
+    text: str,
+    *,
+    pending_intent: dict | None = None,
+    has_pending_items: bool = False,
+    in_approved_scope: bool = True,
+) -> KernelDecision:
+    lower = text.strip().lower().rstrip(".!?")
+    if not lower:
+        return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "empty input")
+
+    if is_chatgpt_relay_conversation(text):
+        return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "ChatGPT relay without explicit action")
+
+    if lower in _STATUS_PHRASES or lower.startswith("show status"):
+        return KernelDecision(INTENT_STATUS, KERNEL_REPORT, "status phrase")
+
+    if pending_intent and (
+        lower in _PROCEED_PHRASES
+        or (lower.startswith(("yes", "ok", "okay", "sure")) and any(w in lower for w in ("proceed", "continue", "do it")))
+    ):
+        step_text = str(pending_intent.get("text", ""))
+        policy = evaluate_action(step_text, in_approved_scope=in_approved_scope)
+        if pending_intent.get("approval_required") or policy.decision == "approval_required":
+            return KernelDecision(
+                INTENT_APPROVAL_REQUIRED,
+                KERNEL_ASK,
+                "pending intent crosses hard-approval boundary",
+                True,
+                pending_intent,
+                getattr(policy, "category", ""),
+            )
+        return KernelDecision(INTENT_PROCEED_PENDING, KERNEL_ACT, "confirmation resolves pending intent", False, pending_intent)
+
+    if (pending_intent or has_pending_items) and any(phrase in lower for phrase in _SHOW_PENDING_PHRASES):
+        return KernelDecision(INTENT_SHOW_PENDING, KERNEL_REPORT, "pending item display requested")
+
+    policy = evaluate_action(text, in_approved_scope=in_approved_scope)
+    if policy.decision == "approval_required":
+        need = detect_need(text)
+        return KernelDecision(
+            INTENT_APPROVAL_REQUIRED,
+            KERNEL_ASK,
+            policy.reason,
+            True,
+            None,
+            policy.category,
+            need.target,
+            need.missing_capability,
+            need.exact_request,
+            need.safest_next_step,
+        )
+
+    if any(phrase in lower for phrase in _ROUTINE_PHRASES):
+        need = detect_need(text)
+        return KernelDecision(INTENT_ROUTINE_LOCAL, KERNEL_ACT, "routine local action", safest_next_step=need.safest_next_step)
+
+    need = detect_need(text)
+    if need.blocked:
+        return KernelDecision(
+            INTENT_APPROVAL_REQUIRED,
+            KERNEL_ASK,
+            need.reason,
+            True,
+            None,
+            need.missing_capability,
+            need.target,
+            need.missing_capability,
+            need.exact_request,
+            need.safest_next_step,
+        )
+    return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "conversation only", needed_capability=need.target, safest_next_step=need.safest_next_step)
+
+
+def update_world_model(state: dict[str, Any], text: str, decision: KernelDecision) -> dict[str, Any]:
+    counters = state.setdefault("counters", {})
+    counters["inputs_classified"] = int(counters.get("inputs_classified", 0)) + 1
+    if decision.hard_approval_required:
+        counters["approvals_required"] = int(counters.get("approvals_required", 0)) + 1
+    if decision.intent == INTENT_PROCEED_PENDING:
+        counters["pending_resolved"] = int(counters.get("pending_resolved", 0)) + 1
+        state["pending_intent"] = None
+    elif decision.pending_intent:
+        state["pending_intent"] = {
+            "text": str(decision.pending_intent.get("text", ""))[:240],
+            "approval_required": bool(decision.pending_intent.get("approval_required")),
+            "source": str(decision.pending_intent.get("source", ""))[:80],
+        }
+    state["last_input"] = text[:240]
+    state["last_intent"] = decision.intent
+    state["last_decision"] = decision.decision
+    state["needed_capability"] = decision.needed_capability
+    state["missing_capability"] = decision.missing_capability
+    state["next_safe_action"] = decision.safest_next_step or ("wait" if decision.decision in (KERNEL_DEFER, KERNEL_ASK) else decision.decision)
+    save_kernel_state(state)
+    return state
+
+
+def decide_next(
+    text: str,
+    *,
+    pending_intent: dict | None = None,
+    has_pending_items: bool = False,
+    in_approved_scope: bool = True,
+) -> KernelDecision:
+    state = load_kernel_state()
+    if pending_intent is None:
+        pending_intent = state.get("pending_intent")
+    decision = classify_input(
+        text,
+        pending_intent=pending_intent,
+        has_pending_items=has_pending_items,
+        in_approved_scope=in_approved_scope,
+    )
+    update_world_model(state, text, decision)
+    return decision
+
+
+def remember_pending_intent(pending_intent: dict | None) -> None:
+    state = load_kernel_state()
+    state["pending_intent"] = pending_intent
+    save_kernel_state(state)
+
+
+def load_oracle_state() -> dict[str, Any]:
+    state = load_kernel_state()
+    try:
+        from approval_center import list_pending
+        state["pending_approvals"] = len(list_pending())
+    except Exception as exc:
+        state.setdefault("blockers", []).append(f"approval_center: {exc}")
+    try:
+        from oracle_codex_watcher import unread_status
+        state["codex_unread"] = bool(unread_status().get("unread"))
+    except Exception as exc:
+        state.setdefault("blockers", []).append(f"codex_watcher: {exc}")
+    try:
+        from oracle_claude_channel import CLAUDE_TO_ORACLE
+        state["claude_response_ready"] = Path(CLAUDE_TO_ORACLE).exists()
+    except Exception as exc:
+        state.setdefault("blockers", []).append(f"claude_channel: {exc}")
+    try:
+        from project_state import load_state
+        ps = load_state("ORACLE.AI")
+        if ps:
+            state["active_project"] = "ORACLE.AI"
+            state["project_phase"] = getattr(ps, "current_phase", "") or ""
+            state["next_recommended_step"] = getattr(ps, "next_recommended_step", "") or ""
+    except Exception as exc:
+        state.setdefault("blockers", []).append(f"project_state: {exc}")
+    return state
+
+
+def resident_wake_report() -> dict[str, Any]:
+    state = load_oracle_state()
+    pending = state.get("pending_intent")
+    blockers = state.get("blockers") or []
+    if pending:
+        next_safe_action = "show pending intent or wait for explicit approval"
+    elif state.get("pending_approvals"):
+        next_safe_action = "show pending approvals"
+    elif state.get("codex_unread"):
+        next_safe_action = "read Codex reply"
+    else:
+        next_safe_action = "wait"
+    state["next_safe_action"] = next_safe_action
+    save_kernel_state(state)
+    return {
+        "current_mode": state.get("mode", "LOCAL"),
+        "active_project": state.get("active_project", "ORACLE.AI"),
+        "pending_intent": pending,
+        "pending_approvals": state.get("pending_approvals", 0),
+        "codex_unread": bool(state.get("codex_unread")),
+        "blockers": blockers,
+        "next_safe_action": next_safe_action,
+    }
+
+
+def milestone_policy_summary() -> str:
+    return policy_summary()
+
+
+def run_smoke_tests() -> int:
+    saved = STATE_FILE.read_bytes() if STATE_FILE.exists() else None
+    checks = 0
+    passed = 0
+
+    def check(name: str, cond: bool) -> None:
+        nonlocal checks, passed
+        checks += 1
+        if cond:
+            passed += 1
+            print(f"  [PASS] {name}")
+        else:
+            print(f"  [FAIL] {name}")
+
+    try:
+        if STATE_FILE.exists():
+            STATE_FILE.unlink()
+        pending = {"text": "run one resident cycle", "approval_required": False, "source": "test"}
+        destructive_pending = {"text": "delete file", "approval_required": False, "source": "test"}
+
+        check("state file created", load_kernel_state().get("version") == "0.1" and STATE_FILE.exists())
+        check("status returns report", decide_next("status").decision == KERNEL_REPORT)
+        check("yes proceeds pending intent", decide_next("yes", pending_intent=pending).decision == KERNEL_ACT)
+        check("show me shows pending item", decide_next("show me", pending_intent=pending, has_pending_items=True).intent == INTENT_SHOW_PENDING)
+        check(
+            "stale next_recommended_step does not override direct yes",
+            decide_next("yes", pending_intent=pending).pending_intent == pending,
+        )
+        check("destructive action requires approval", decide_next("delete that file").decision == KERNEL_ASK)
+        check("world model updates last intent", load_kernel_state().get("last_intent") == INTENT_APPROVAL_REQUIRED)
+        check("resident wake report has mode", "current_mode" in resident_wake_report())
+    finally:
+        if saved is None:
+            if STATE_FILE.exists():
+                STATE_FILE.unlink()
+        else:
+            STATE_FILE.write_bytes(saved)
+
+    print(f"\n{passed}/{checks} cognitive kernel smoke tests passed.")
+    return 0 if passed == checks else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(run_smoke_tests())

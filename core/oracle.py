@@ -1453,6 +1453,7 @@ def main():
     _last_pending_ids: list = []           # populated by /pending, consumed by approve/reject
     _last_pending_secret_flags: list[bool] = []  # parallel list — True = secret-blocked
     _pending_scope_review: bool = False    # True after ORACLE proposes a scope-path review
+    _pending_runtime_step: dict | None = None
 
     banner(identity)
     log("SESSION_START", f"Session {session_id} started")
@@ -1460,25 +1461,28 @@ def main():
     _claude_cli_found = shutil.which("claude") is not None
     _claude_win_found = _claude_available_now()
 
-    # ── Auto boot cycle — ORACLE starts working immediately, no first prompt needed ──
+    # Resident wake: read-only continuity snapshot, then wait.
     try:
-        from oracle_runtime import run_cycle, MODE_DAEMON_SAFE
+        from cognitive_kernel import resident_wake_report
         from voice import speak_prompt
-        _boot = run_cycle(mode=MODE_DAEMON_SAFE)
-        priority = _boot.selected_priority or "maintenance"
-        action   = _boot.action_taken or ""
-        next_s   = _boot.next_recommended_step or ""
-        approval = _boot.approval_required
+        _wake = resident_wake_report()
+        _pending_n = int(_wake.get("pending_approvals", 0) or 0)
+        _codex_unread = bool(_wake.get("codex_unread"))
+        _pending_intent = _wake.get("pending_intent")
+        _blockers = _wake.get("blockers") or []
 
-        if approval and next_s:
-            print(f"\n  {C['byellow']}◆{C['reset']} {C['dim']}{next_s[:120]}{C['reset']}\n")
-        if approval:
-            speak_prompt(f"I'm up. {action[:80]}")
-        else:
-            speak_prompt("I'm up.")
+        print(f"\n  {C['cyan']}* ORACLE AWAKE{C['reset']} local governed continuity loaded")
+        print(f"  Current mode   : {_wake.get('current_mode', 'LOCAL')}")
+        print(f"  Active project : {_wake.get('active_project', 'ORACLE.AI')}")
+        print(f"  Pending intent : {str(_pending_intent.get('text', ''))[:100] if isinstance(_pending_intent, dict) else 'none'}")
+        print(f"  Blockers       : {', '.join(_blockers[:2]) if _blockers else 'none'}")
+        print(f"  Next safe      : {_wake.get('next_safe_action', 'wait')}")
+        print(f"  Pending approvals : {_pending_n}")
+        print(f"  Codex unread      : {'YES' if _codex_unread else 'no'}\n")
+        speak_prompt("I'm up.")
     except Exception:
         pass
-    # ── End auto boot cycle ────────────────────────────────────────────────────
+    # End resident wake.
 
     while True:
         try:
@@ -1508,6 +1512,30 @@ def main():
         # ── Pending Claude channel response — surface and consume before LLM ──
         # Display the response but do NOT let qwen process it as a new command.
         # After showing it, continue so this turn is a display-only turn.
+        _cap_query = user_input.lower().strip().rstrip("?!.")
+        if _cap_query in (
+            "what tools do you have", "what tools do you have available",
+            "show capabilities", "capabilities", "/capabilities",
+            "capability status", "/capability-status",
+        ):
+            try:
+                from capability_registry import format_registry_status
+                print("\n" + format_registry_status() + "\n")
+            except Exception as e:
+                print(f"\n[capability error: {e}]\n")
+            continue
+        if _cap_query in (
+            "what are you missing", "what tools are missing",
+            "missing capabilities", "/missing-capabilities",
+            "what is blocked", "current blockers",
+        ):
+            try:
+                from capability_registry import format_missing_status
+                print("\n" + format_missing_status() + "\n")
+            except Exception as e:
+                print(f"\n[capability error: {e}]\n")
+            continue
+
         try:
             from oracle_claude_channel import CLAUDE_TO_ORACLE
             if CLAUDE_TO_ORACLE.exists():
@@ -1527,6 +1555,83 @@ def main():
         # ── Natural language intent — plain English commands ─────────────────
         # Runs before paste detection, mode classifier, and qwen.
         # Lets Noah say "send X to Claude" instead of /actuate Claude | X
+        try:
+            from cognitive_kernel import (
+                INTENT_APPROVAL_REQUIRED,
+                INTENT_PROCEED_PENDING,
+                INTENT_SHOW_PENDING,
+                KERNEL_ACT,
+                KERNEL_ASK,
+                KERNEL_DEFER,
+                decide_next,
+                milestone_policy_summary,
+                requires_hard_approval,
+            )
+            _has_pending_items = bool(_last_pending_ids)
+            if not _has_pending_items:
+                try:
+                    from approval_center import list_pending as _ac_pending_for_loop
+                    _has_pending_items = len(_ac_pending_for_loop()) > 0
+                except Exception:
+                    _has_pending_items = False
+            _cog = decide_next(
+                user_input,
+                pending_intent=_pending_runtime_step,
+                has_pending_items=_has_pending_items,
+            )
+            if _cog.intent == INTENT_SHOW_PENDING:
+                if _pending_runtime_step:
+                    print(f"\n  {C['cyan']}[PENDING STEP]{C['reset']}")
+                    print(f"  {_pending_runtime_step.get('text', '')[:160]}")
+                    print(f"  Approval required: {'yes' if _pending_runtime_step.get('approval_required') else 'no'}\n")
+                    continue
+                user_input = "/pending"
+            elif _cog.intent == INTENT_PROCEED_PENDING and _pending_runtime_step:
+                _step_text = str(_pending_runtime_step.get("text", ""))
+                if _cog.decision == KERNEL_ASK or _pending_runtime_step.get("approval_required") or requires_hard_approval(_step_text):
+                    print(f"\n  {C['byellow']}[APPROVAL REQUIRED]{C['reset']} {_step_text[:160]}")
+                    print(f"  {milestone_policy_summary()}")
+                    print("  I will not execute this from a bare confirmation.\n")
+                    continue
+                try:
+                    from oracle_runtime import MODE_MANUAL, run_cycle
+                    result = run_cycle(mode=MODE_MANUAL)
+                    _pending_runtime_step = None
+                    print(f"\n  {C['bgreen']}[ADVANCED]{C['reset']} {result.action_taken[:160]}\n")
+                    speak("Advanced the pending step.")
+                except Exception as e:
+                    print(f"\n[cognitive-loop error: {e}]\n")
+                continue
+            elif _cog.intent == INTENT_APPROVAL_REQUIRED:
+                print(f"\n  {C['byellow']}[APPROVAL REQUIRED]{C['reset']} {user_input[:160]}")
+                print(f"  {milestone_policy_summary()}")
+                if getattr(_cog, "needed_capability", ""):
+                    print(f"  Needed       : {_cog.needed_capability}")
+                if getattr(_cog, "missing_capability", ""):
+                    print(f"  Missing/block: {_cog.missing_capability}")
+                if getattr(_cog, "exact_request", ""):
+                    print(f"  Ask Noah     : {_cog.exact_request}")
+                print(f"  Safest next  : {getattr(_cog, 'safest_next_step', 'hold')}\n")
+                continue
+            elif (
+                _cog.decision == KERNEL_DEFER
+                and getattr(_cog, "needed_capability", "") == "Codex local file backed bridge"
+            ):
+                try:
+                    from oracle_codex_channel import ORACLE_TO_CODEX, send_to_codex
+                    if send_to_codex(user_input):
+                        print(f"\n  {C['bgreen']}[CODEX CHANNEL]{C['reset']} Repo work needs Codex.")
+                        print(f"  Tried        : {user_input[:160]}")
+                        print(f"  Needed       : Codex local file backed bridge")
+                        print(f"  File         : {ORACLE_TO_CODEX}")
+                        print("  Safest next  : wait for Codex reply, then /read-codex\n")
+                        continue
+                except Exception as e:
+                    print(f"\n[codex-channel error: {e}]\n")
+                    continue
+        except Exception:
+            pass
+
         _nl = _parse_natural_command(user_input)
         if _nl:
             _nl_action, _nl_payload = _nl
@@ -1968,6 +2073,17 @@ def main():
                 next_s   = result.next_recommended_step or ""
                 approval = result.approval_required
                 conf     = int(result.confidence * 100)
+                _pending_runtime_step = {
+                    "text": next_s,
+                    "approval_required": bool(approval),
+                    "action": action,
+                    "source": "oracle_runtime",
+                } if next_s else None
+                try:
+                    from cognitive_kernel import remember_pending_intent
+                    remember_pending_intent(_pending_runtime_step)
+                except Exception:
+                    pass
 
                 print(f"\n{C['grey']}  {'─'*50}{C['reset']}")
                 print(f"  {C['cyan']}◆ CYCLE{C['reset']}  {C['dim']}{priority}  {conf}%{C['reset']}")
@@ -2393,6 +2509,17 @@ def main():
                 action = r.action_taken or ""
                 next_s = r.next_recommended_step or ""
                 conf   = int(r.confidence * 100)
+                _pending_runtime_step = {
+                    "text": next_s,
+                    "approval_required": bool(r.approval_required),
+                    "action": action,
+                    "source": "oracle_runtime",
+                } if next_s else None
+                try:
+                    from cognitive_kernel import remember_pending_intent
+                    remember_pending_intent(_pending_runtime_step)
+                except Exception:
+                    pass
                 print(f"\n  {C['bold']}Right now  :{C['reset']} {C['dim']}{r.selected_priority}  {conf}%{C['reset']}")
                 if action:
                     print(f"  {action[:120]}")

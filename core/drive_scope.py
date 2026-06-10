@@ -225,9 +225,10 @@ def approved_paths() -> list[str]:
 
 def is_in_scope(path) -> bool:
     """True if path is within an approved scoped path."""
-    p = str(Path(path).resolve()).lower()
+    p = os.path.normcase(str(Path(path).resolve()))
     for ap in approved_paths():
-        if p.startswith(ap.lower()):
+        ap_norm = os.path.normcase(str(Path(ap).resolve()))
+        if p == ap_norm or p.startswith(ap_norm.rstrip("\\/") + os.sep):
             return True
     return False
 
