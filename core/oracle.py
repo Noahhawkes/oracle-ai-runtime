@@ -2426,6 +2426,119 @@ def main():
                 print(f"\n[doctor error: {e}]\n")
             continue
 
+        # ── /desktop-ai — list desktop AI targets ────────────────────────────
+        if user_input.lower() in ("/desktop-ai", "/desktop-targets", "/ai-tools"):
+            try:
+                from desktop_ai_bridge import format_target_list
+                print(format_target_list())
+            except Exception as e:
+                print(f"\n[desktop-ai error: {e}]\n")
+            continue
+
+        # ── /desktop-doctor — live desktop probe ─────────────────────────────
+        if user_input.lower() in ("/desktop-doctor", "/desktop-probe", "/desktop-health"):
+            try:
+                from desktop_ai_bridge import desktop_doctor
+                print(desktop_doctor())
+            except Exception as e:
+                print(f"\n[desktop-doctor error: {e}]\n")
+            continue
+
+        # ── /ask-chatgpt <prompt> — stage a prompt for ChatGPT ───────────────
+        if user_input.lower().startswith("/ask-chatgpt "):
+            prompt_text = user_input[len("/ask-chatgpt "):].strip()
+            if not prompt_text:
+                print("\n  Usage: /ask-chatgpt <your prompt for ChatGPT>\n")
+                continue
+            try:
+                from desktop_ai_bridge import stage_prompt, StagingError
+                sp = stage_prompt("chatgpt", prompt_text, source="user")
+                print(f"\n  {C['bgreen']}[STAGED]{C['reset']} Prompt staged for ChatGPT")
+                print(f"  Target  : ChatGPT")
+                print(f"  Preview : {sp.prompt[:120]}{'...' if len(sp.prompt) > 120 else ''}")
+                print(f"  Action  : Type /send-staged to send (Noah confirmation required)\n")
+            except Exception as e:
+                print(f"\n  {C['bred']}[BLOCKED]{C['reset']} {e}\n")
+            continue
+
+        # ── /ask-sov1 <prompt> — stage a prompt for SOV1 ────────────────────
+        if user_input.lower().startswith("/ask-sov1 "):
+            prompt_text = user_input[len("/ask-sov1 "):].strip()
+            if not prompt_text:
+                print("\n  Usage: /ask-sov1 <task for SOV1 computer-use>\n")
+                continue
+            try:
+                from desktop_ai_bridge import stage_prompt, StagingError
+                sp = stage_prompt("sov1", prompt_text, source="user")
+                print(f"\n  {C['bgreen']}[STAGED]{C['reset']} Task staged for SOV1")
+                print(f"  Target  : SOV1 Computer Use")
+                print(f"  Preview : {sp.prompt[:120]}{'...' if len(sp.prompt) > 120 else ''}")
+                print(f"  Action  : Type /send-staged (then 'yes') to run via SOV1\n")
+            except Exception as e:
+                print(f"\n  {C['bred']}[BLOCKED]{C['reset']} {e}\n")
+            continue
+
+        # ── /send-staged — send the staged prompt after Noah confirmation ────
+        if user_input.lower() in ("/send-staged", "/send-prompt", "/dispatch-staged"):
+            try:
+                from desktop_ai_bridge import load_staged, send_staged, SendError, TARGETS
+                sp = load_staged()
+                if sp is None or sp.sent:
+                    print("\n  No staged prompt waiting. Use /ask-chatgpt, /ask-claude, or /ask-codex first.\n")
+                    continue
+                target_name = TARGETS.get(sp.target, type("T", (), {"name": sp.target})()).name
+                print(f"\n  {C['byellow']}[STAGED PROMPT — PENDING CONFIRMATION]{C['reset']}")
+                print(f"  Target  : {target_name}")
+                print(f"  Prompt  : {sp.prompt[:200]}{'...' if len(sp.prompt) > 200 else ''}")
+                print(f"  Risk    : {sp.risk}")
+                print()
+                print("  This will copy the prompt to clipboard and attempt to focus the target window.")
+                print("  Press Enter to submit is a SEPARATE confirmation after paste.")
+                print()
+                try:
+                    _confirm_send = input("  Approve send? (yes / no): ").strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    _confirm_send = ""
+                if _confirm_send not in ("yes", "y", "approve"):
+                    print("\n  Send cancelled. Prompt remains staged.\n")
+                    continue
+                result = send_staged(confirmed=True)
+                if result.get("success"):
+                    print(f"\n  {C['bgreen']}[SENT]{C['reset']} {result.get('detail','')}")
+                    if result.get("next_action"):
+                        print(f"  Next    : {result['next_action']}")
+                    speak("Staged prompt dispatched.")
+                else:
+                    print(f"\n  {C['bred']}[FAILED]{C['reset']} {result.get('detail','')}")
+                    if result.get("next_action"):
+                        print(f"  Fix     : {result['next_action']}")
+                print()
+            except SendError as e:
+                print(f"\n  {C['bred']}[SEND BLOCKED]{C['reset']} {e}\n")
+            except Exception as e:
+                print(f"\n[send-staged error: {e}]\n")
+            continue
+
+        # ── /capture-response — read back a response ─────────────────────────
+        if user_input.lower() in ("/capture-response", "/capture", "/read-response"):
+            try:
+                from desktop_ai_bridge import capture_response, load_staged
+                sp = load_staged()
+                target_key = sp.target if sp else ""
+                result = capture_response(target_key)
+                if result.get("success"):
+                    print(f"\n  {C['bgreen']}[RESPONSE CAPTURED]{C['reset']}")
+                    print(f"  Source  : {result.get('source','')}")
+                    print()
+                    for line in result.get("content", "").splitlines()[:40]:
+                        print(f"  {line}")
+                    print()
+                else:
+                    print(f"\n  {C['byellow']}[CAPTURE]{C['reset']} {result.get('detail','')}\n")
+            except Exception as e:
+                print(f"\n[capture-response error: {e}]\n")
+            continue
+
         if user_input.lower().startswith("/route-task") or user_input.lower().startswith("/route "):
             raw = user_input.split(" ", 1)[1].strip() if " " in user_input else ""
             if not raw:
@@ -2610,16 +2723,28 @@ def main():
             print(f"  {C['dim']}Tell me what you want done and I'll do it.")
             print(f"  I can read and write files, run commands, control the screen,")
             print(f"  send tasks to Claude Code, and remember things you tell me.{W}\n")
+            print(f"  {C['cyan']}── Status & Diagnostics ──{W}")
             print(f"  {C['grey']}/doctor{W}              — live probe: what actually works right now")
+            print(f"  {C['grey']}/desktop-doctor{W}      — live desktop actuation probe")
             print(f"  {C['grey']}/capabilities{W}        — list registered capabilities")
             print(f"  {C['grey']}/missing-capabilities{W}— list degraded/unavailable capabilities")
-            print(f"  {C['grey']}/pending{W}             — show items waiting for your approval")
+            print(f"  {C['grey']}/project-state{W} /ps   — show current build phase + next step")
+            print(f"  {C['grey']}/session{W}             — session state diagnostic")
+            print()
+            print(f"  {C['cyan']}── Desktop AI Bridge ──{W}")
+            print(f"  {C['grey']}/desktop-ai{W}          — list AI targets and their live status")
+            print(f"  {C['grey']}/ask-chatgpt <p>{W}     — stage prompt for ChatGPT")
+            print(f"  {C['grey']}/ask-claude <p>{W}      — send task to Claude channel (or stage)")
+            print(f"  {C['grey']}/ask-codex <p>{W}       — send task to Codex file bridge")
+            print(f"  {C['grey']}/ask-sov1 <p>{W}        — stage task for SOV1 computer-use")
+            print(f"  {C['grey']}/send-staged{W}         — confirm and send staged prompt")
+            print(f"  {C['grey']}/capture-response{W}    — read back AI tool response")
+            print()
+            print(f"  {C['cyan']}── Actions ──{W}")
+            print(f"  {C['grey']}/pending{W}             — items waiting for your approval")
             print(f"  {C['grey']}/channel{W}             — Claude + Codex channel status")
-            print(f"  {C['grey']}/ask-codex <task>{W}   — send task to Codex file bridge")
-            print(f"  {C['grey']}/ask-claude <task>{W}  — send task to Claude channel")
-            print(f"  {C['grey']}/project-state{W}       — show current build phase + next step")
             print(f"  {C['grey']}/cycle{W}               — run one governed runtime cycle")
-            print(f"  {C['grey']}loop on/off{W}          — start / stop the autonomous build loop")
+            print(f"  {C['grey']}loop on/off{W}          — start / stop autonomous build loop")
             print(f"  {C['grey']}voice on/off{W}         — toggle TTS voice")
             print(f"  {C['grey']}build yourself{W}       — generate a self-improvement proposal")
             print(f"  {C['grey']}remember this: <X>{W}  — store a fact")

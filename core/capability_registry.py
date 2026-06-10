@@ -220,6 +220,27 @@ def build_registry(*, simulate_claude_unavailable: bool = False, simulate_codex_
             ["new path", "write", "delete"],
             fallback_option="Drive Scope request",
         ),
+        "desktop_ai_bridge": _cap(
+            "Desktop AI Bridge",
+            STATUS_AVAILABLE if _exists(core / "desktop_ai_bridge.py") else STATUS_UNAVAILABLE,
+            "supervised prompt staging and delivery to ChatGPT/Claude/Codex/SOV1/Browser",
+            [
+                "stage prompts for ChatGPT/Claude/Codex/SOV1",
+                "copy staged prompt to clipboard",
+                "focus target window if actuation available",
+                "capture response via file inbox",
+                "run /desktop-doctor live probe",
+            ],
+            [
+                "send without Noah confirmation",
+                "include credentials in prompts",
+                "auto-approve scope or memory",
+                "press Enter/Submit without second confirmation",
+            ],
+            ["send to external tool", "window focus", "clipboard paste"],
+            fallback_option="manual copy-paste into target window",
+            blocker="" if _exists(core / "desktop_ai_bridge.py") else "desktop_ai_bridge.py missing",
+        ),
     }
     return registry
 
