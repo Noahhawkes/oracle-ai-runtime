@@ -143,13 +143,26 @@ def _chat_local(history: list[dict], system: str, model: str) -> str:
         return f"[Heart Mode] Model unavailable: {exc}\nType your thoughts — I'm listening even if I can't reply right now."
 
 
+def _load_wake_context() -> str:
+    """Load wake memory and return the formatted context block. Silent fallback."""
+    try:
+        from wake_memory import load_wake_memory, format_wake_context
+        return format_wake_context(load_wake_memory())
+    except Exception:
+        return ""
+
+
 def _build_system_prompt(session_notes: list[str]) -> str:
     ts = datetime.now().strftime("%A %B %d, %H:%M")
     notes_block = ""
     if session_notes:
         notes_block = "\n\nContext from this session:\n" + "\n".join(f"- {n}" for n in session_notes[-6:])
 
-    return f"""You are ORACLE, Noah's personal AI companion. Right now you are in Heart Mode.
+    wake_block = _load_wake_context()
+    if wake_block:
+        wake_block = wake_block + "\n\n"
+
+    return f"""{wake_block}You are ORACLE, Noah's personal AI companion. Right now you are in Heart Mode.
 
 Heart Mode rules (you MUST follow these — they are not negotiable):
 1. You are here to TALK, LISTEN, and HELP NOAH THINK. Nothing else.
@@ -310,7 +323,23 @@ def main() -> None:
             farewell = "Take care. I'll be here when you're ready."
             _print_oracle(farewell)
             _speak(farewell)
+            # Save the most recent session note on the way out
+            if session_notes:
+                try:
+                    from wake_memory import save_session_summary
+                    save_session_summary(session_notes[-1])
+                except Exception:
+                    pass
             break
+
+        # ── /wake-memory — show what ORACLE remembers ─────────────────────────
+        if user_input.lower() in ("/wake-memory", "/wake", "/wm"):
+            ctx = _load_wake_context()
+            if ctx:
+                print(f"\n{ctx}\n")
+            else:
+                print("\n  [Wake memory not available]\n")
+            continue
 
         turn_count += 1
 

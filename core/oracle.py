@@ -1446,6 +1446,17 @@ def main():
     model = get_model(vision=False)
     system_prompt = build_system_prompt(local=local)
 
+    # ── Wake Memory — inject persistent identity/story context ───────────────
+    # Runs before banner so ORACLE knows who we are before the first word.
+    try:
+        from wake_memory import load_wake_memory, format_wake_context
+        _wake = load_wake_memory()
+        _wake_ctx = format_wake_context(_wake)
+        system_prompt = _wake_ctx + "\n\n" + system_prompt
+    except Exception as _wm_err:
+        log("WAKE_MEMORY_WARN", f"wake memory load failed: {_wm_err}")
+    # ── End wake memory injection ─────────────────────────────────────────────
+
     pass  # local mode — no diagnostic chatter
 
     # Initialise LiveContext — loads persisted state, stamps last_updated
@@ -2426,6 +2437,47 @@ def main():
                 print(f"\n[doctor error: {e}]\n")
             continue
 
+        # ── /wake-memory — show the current wake memory context ─────────────
+        if user_input.lower() in ("/wake-memory", "/wake", "/wm"):
+            try:
+                from wake_memory import load_wake_memory, format_wake_context
+                _wm = load_wake_memory()
+                print("\n" + format_wake_context(_wm))
+                print(f"  {C['grey']}Updated: {_wm.get('updated_at', 'never')}{C['reset']}\n")
+            except Exception as e:
+                print(f"\n[wake-memory error: {e}]\n")
+            continue
+
+        # ── /update-wake-memory <summary> — update the session summary ────────
+        if user_input.lower().startswith("/update-wake-memory") or user_input.lower().startswith("/update-wake "):
+            _sep = "/update-wake-memory" if "/update-wake-memory" in user_input.lower() else "/update-wake "
+            _wm_summary = user_input[len(_sep):].strip()
+            if not _wm_summary:
+                print("\n  Usage: /update-wake-memory <short summary of what just happened>\n")
+                continue
+            try:
+                from wake_memory import update_wake_memory
+                update_wake_memory(last_session_summary=_wm_summary)
+                print(f"\n  {C['bgreen']}Wake memory updated.{C['reset']}\n")
+            except Exception as e:
+                print(f"\n[wake-memory error: {e}]\n")
+            continue
+
+        # ── /save-session-summary <summary> — shorthand for above ────────────
+        if user_input.lower().startswith("/save-session-summary ") or user_input.lower().startswith("/save-session "):
+            _sep2 = "/save-session-summary " if "/save-session-summary " in user_input.lower() else "/save-session "
+            _ss_summary = user_input[len(_sep2):].strip()
+            if not _ss_summary:
+                print("\n  Usage: /save-session-summary <short summary>\n")
+                continue
+            try:
+                from wake_memory import save_session_summary
+                save_session_summary(_ss_summary)
+                print(f"\n  {C['bgreen']}Session summary saved to wake memory.{C['reset']}\n")
+            except Exception as e:
+                print(f"\n[wake-memory error: {e}]\n")
+            continue
+
         # ── /autonomy — show the green/yellow/red zone table ─────────────────
         if user_input.lower() in ("/autonomy", "/zones", "/green-zone", "/policy"):
             try:
@@ -2760,6 +2812,9 @@ def main():
             print(f"  I can read and write files, run commands, control the screen,")
             print(f"  send tasks to Claude Code, and remember things you tell me.{W}\n")
             print(f"  {C['cyan']}── Status & Diagnostics ──{W}")
+            print(f"  {C['grey']}/wake-memory{W}         — show persistent identity/story context")
+            print(f"  {C['grey']}/update-wake-memory <s>{W}— update the session summary in wake memory")
+            print(f"  {C['grey']}/save-session-summary <s>{W}— same as above (shorthand)")
             print(f"  {C['grey']}/doctor{W}              — live probe: what actually works right now")
             print(f"  {C['grey']}/autonomy{W}            — GREEN/YELLOW/RED zone table: what I can do without approval")
             print(f"  {C['grey']}/why-blocked [input]{W} — explain why the last action was blocked or deferred")
