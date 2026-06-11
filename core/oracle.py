@@ -1552,6 +1552,17 @@ def main():
             except Exception as e:
                 print(f"\n[capability error: {e}]\n")
             continue
+        if _cap_query in (
+            "what do you need from noah", "what do you need from me",
+            "what do you need", "show needs", "needs", "/needs",
+            "/reciprocity", "reciprocity status",
+        ):
+            try:
+                from reciprocity_engine import ReciprocityEngine
+                print("\n" + ReciprocityEngine().decision_ready_digest() + "\n")
+            except Exception as e:
+                print(f"\n[reciprocity error: {e}]\n")
+            continue
 
         try:
             from oracle_claude_channel import CLAUDE_TO_ORACLE
