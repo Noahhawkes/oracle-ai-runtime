@@ -53,3 +53,6 @@ thread_exports/
 
 # Local AI bridge/message logs - runtime coordination, not source
 Messages/*.md
+
+# Raise-Hand Protocol runtime queue and ledger
+state/
