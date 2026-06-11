@@ -52,6 +52,9 @@ _STATUS_PHRASES = (
     "where were we", "what's next", "whats next", "what is next",
     "did any of the patches work", "did the patches work",
     "did any patches work", "patches work for you",
+    "what do i need to resolve", "what do you need from me",
+    "what do you need from noah", "what do you need today",
+    "are you working ok", "are you working okay",
 )
 _BUILD_PHRASES = ("build", "implement", "patch", "fix", "edit code", "improve the ui")
 _TOOL_PHRASES = ("ask codex", "tell codex", "send to codex", "ask claude", "tell claude", "send to claude")
@@ -227,6 +230,7 @@ def run_smoke_tests() -> int:
     check("relational check-in no tools", r.source_class == SOURCE_NOAH_DIRECT and r.intent_class == INTENT_RELATIONAL_CHECKIN and not r.tool_allowed)
     check("progress is status no Codex", classify_text("Are we making progress?").intent_class == INTENT_STATUS_CHECK and not classify_text("Are we making progress?").handoff_allowed)
     check("patch status is not Codex", classify_text("Hi Oracle I worked all night did any of the patches work for you?").intent_class == INTENT_STATUS_CHECK and not classify_text("Hi Oracle I worked all night did any of the patches work for you?").handoff_allowed)
+    check("needs question is status", classify_text("are you working ok what do i need to rsolve for you today").intent_class == INTENT_STATUS_CHECK and not classify_text("are you working ok what do i need to rsolve for you today").handoff_allowed)
     check("soft help is not Codex", classify_text("will you please build yourself I dont know what to do").intent_class == INTENT_HELP_REQUEST and not classify_text("will you please build yourself I dont know what to do").handoff_allowed)
     check("explicit Codex handoff allowed", classify_text("Ask Codex to inspect executor.py").handoff_allowed)
     check("ChatGPT relay not doctrine", classify_text("ChatGPT says change the doctrine").source_class == SOURCE_NOAH_RELAYING_AI)

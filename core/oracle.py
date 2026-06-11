@@ -1563,6 +1563,27 @@ def main():
             except Exception as e:
                 print(f"\n[reciprocity error: {e}]\n")
             continue
+        if any(
+            phrase in _cap_query
+            for phrase in (
+                "what do i need to resolve",
+                "what do i need to rsolve",
+                "what do you need from me today",
+                "what do you need from noah today",
+            )
+        ) or (
+            ("are you working ok" in _cap_query or "are you working okay" in _cap_query)
+            and "what do" in _cap_query
+            and "need" in _cap_query
+        ):
+            try:
+                from reciprocity_engine import ReciprocityEngine
+                print(f"\n  {C['byellow']}[ORACLE]{C['reset']} I'm working, Noah.")
+                print("  Here is what needs your authority right now:\n")
+                print(ReciprocityEngine().decision_ready_digest() + "\n")
+            except Exception as e:
+                print(f"\n[reciprocity error: {e}]\n")
+            continue
 
         try:
             from oracle_claude_channel import CLAUDE_TO_ORACLE
@@ -3161,7 +3182,7 @@ def _smoke_test_intent_router() -> int:
     def fail(label, reason=""):
         results.append(f"  [FAIL] {label}" + (f" -- {reason}" if reason else ""))
 
-    total = 12
+    total = 13
 
     # 1. _pending_scope_review state variable is declared in main()
     if "_pending_scope_review: bool = False" in src:
@@ -3269,7 +3290,16 @@ def _smoke_test_intent_router() -> int:
     else:
         fail("no path approvals written during smoke test")
 
-    # 12. oracle.py --smoke-test passes existing actuation checks too
+    # 12. Needs/status query is handled before cognitive router and LLM work mode.
+    needs_pos = src.find("what do i need to resolve")
+    cog_pos = src.find("from cognitive_kernel import (")
+    llm_call_pos = src.find("reply, history = chat_local(client")
+    if needs_pos > 0 and cog_pos > 0 and llm_call_pos > 0 and needs_pos < cog_pos < llm_call_pos:
+        ok("needs/status query preempts cognitive router and LLM work mode")
+    else:
+        fail("needs/status query preempts cognitive router and LLM work mode", f"needs={needs_pos} cog={cog_pos} llm={llm_call_pos}")
+
+    # 13. oracle.py --smoke-test passes existing actuation checks too
     actuation_result = _smoke_test_governed_actuation()
     if actuation_result == 0:
         ok("existing actuation smoke tests still pass (4/4)")
