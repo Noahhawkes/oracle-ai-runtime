@@ -695,7 +695,7 @@ _SCOPE_AFFIRMATIVES = frozenset([
     "go ahead", "go", "show them", "review them", "show me",
     "yes proceed", "yes go", "yes show", "show it", "do it",
     "let's do it", "lets do it", "run it", "yes do it", "go for it",
-    "yes please", "please", "show me the paths",
+    "yes please", "please", "show me the paths", "approve", "approved",
 ])
 
 # Phrases that identify a ChatGPT relay message — treat as conversation, not governance.
@@ -1530,6 +1530,12 @@ def main():
         # Display the response but do NOT let qwen process it as a new command.
         # After showing it, continue so this turn is a display-only turn.
         _cap_query = user_input.lower().strip().rstrip("?!.")
+        if _pending_scope_review and _cap_query in _SCOPE_AFFIRMATIVES:
+            print(_show_scoped_path_table())
+            speak("Here are the proposed paths. No paths approved yet.")
+            log("SCOPE_REVIEW", "displayed proposed paths on early affirmative")
+            _pending_scope_review = False
+            continue
         if _cap_query in (
             "what tools do you have", "what tools do you have available",
             "show capabilities", "capabilities", "/capabilities",
@@ -3196,7 +3202,7 @@ def _smoke_test_intent_router() -> int:
     def fail(label, reason=""):
         results.append(f"  [FAIL] {label}" + (f" -- {reason}" if reason else ""))
 
-    total = 14
+    total = 15
 
     # 1. _pending_scope_review state variable is declared in main()
     if "_pending_scope_review: bool = False" in src:
@@ -3224,6 +3230,23 @@ def _smoke_test_intent_router() -> int:
     else:
         fail("pending-scope intercept fires before LLM call",
              f"intercept={intercept_pos} llm={llm_call_pos}")
+
+    # 4b. Early scope-review intercept beats generic pending approval handling.
+    early_scope_pos = src.find("_pending_scope_review and _cap_query in _SCOPE_AFFIRMATIVES")
+    pending_approve_pos = src.find("if (_approve_match or _reject_match) and _last_pending_ids")
+    if (
+        early_scope_pos > 0
+        and pending_approve_pos > 0
+        and llm_call_pos > 0
+        and early_scope_pos < pending_approve_pos < llm_call_pos
+        and '"approve"' in src[src.find("_SCOPE_AFFIRMATIVES"):src.find("# Phrases that identify")]
+    ):
+        ok("early scope-review approve displays table before pending approval")
+    else:
+        fail(
+            "early scope-review approve displays table before pending approval",
+            f"early={early_scope_pos} pending={pending_approve_pos} llm={llm_call_pos}",
+        )
 
     # 5. Status check clears _pending_scope_review (no loop on status)
     if '_pending_scope_review = False  # status check clears' in src:
