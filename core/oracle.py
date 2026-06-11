@@ -1584,6 +1584,20 @@ def main():
             except Exception as e:
                 print(f"\n[reciprocity error: {e}]\n")
             continue
+        if _cap_query in ("are you working", "are you working?", "are you working ok", "are you working okay"):
+            try:
+                from cognitive_kernel import resident_wake_report
+                _wake = resident_wake_report()
+                print(f"\n  {C['byellow']}[ORACLE]{C['reset']} Yes, Noah. I'm working in local governed mode.")
+                print(f"  Mode          : {_wake.get('current_mode', 'LOCAL')}")
+                print(f"  Project       : {_wake.get('active_project', 'ORACLE.AI')}")
+                print(f"  Blockers      : {', '.join((_wake.get('blockers') or [])[:2]) if _wake.get('blockers') else 'none'}")
+                print(f"  Pending items : {_wake.get('pending_approvals', 0)}")
+                print(f"  Codex unread  : {'YES' if _wake.get('codex_unread') else 'no'}")
+                print("  I will answer you directly before touching work queues.\n")
+            except Exception as e:
+                print(f"\n[working-status error: {e}]\n")
+            continue
 
         try:
             from oracle_claude_channel import CLAUDE_TO_ORACLE
@@ -3182,7 +3196,7 @@ def _smoke_test_intent_router() -> int:
     def fail(label, reason=""):
         results.append(f"  [FAIL] {label}" + (f" -- {reason}" if reason else ""))
 
-    total = 13
+    total = 14
 
     # 1. _pending_scope_review state variable is declared in main()
     if "_pending_scope_review: bool = False" in src:
@@ -3299,7 +3313,14 @@ def _smoke_test_intent_router() -> int:
     else:
         fail("needs/status query preempts cognitive router and LLM work mode", f"needs={needs_pos} cog={cog_pos} llm={llm_call_pos}")
 
-    # 13. oracle.py --smoke-test passes existing actuation checks too
+    # 13. "are you working?" is answered before cognitive router and LLM work mode.
+    working_pos = src.find('"are you working?"')
+    if working_pos > 0 and cog_pos > 0 and llm_call_pos > 0 and working_pos < cog_pos < llm_call_pos:
+        ok("working-status question preempts cognitive router and LLM work mode")
+    else:
+        fail("working-status question preempts cognitive router and LLM work mode", f"working={working_pos} cog={cog_pos} llm={llm_call_pos}")
+
+    # 14. oracle.py --smoke-test passes existing actuation checks too
     actuation_result = _smoke_test_governed_actuation()
     if actuation_result == 0:
         ok("existing actuation smoke tests still pass (4/4)")
