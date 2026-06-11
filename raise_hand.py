@@ -50,7 +50,16 @@ QUIET_END = dtime(7, 0)
 DAILY_TOAST_BUDGET = 5
 DECISION_READY_FIELDS = ("context", "options", "recommendation", "citation")
 
-DEFAULT_STATE_DIR = Path(os.environ.get("ORACLE_STATE_DIR", "./state"))
+def _default_state_dir() -> Path:
+    override = os.environ.get("ORACLE_STATE_DIR")
+    if override:
+        return Path(override)
+    if os.name == "nt":
+        return Path("C:/Oracle/state")
+    return Path("./state")
+
+
+DEFAULT_STATE_DIR = _default_state_dir()
 
 
 def self_id_line() -> str:

@@ -2,8 +2,8 @@
 stake_ledger.py - ORACLE 20-Day Stake Ledger runtime.
 
 Tracks staked implementation claims without automatically validating or sealing
-anything. Mutable ledger state lives under state/ and is intentionally ignored
-by git.
+anything. Mutable ledger state defaults to C:\\Oracle\\state on Windows, with
+ORACLE_STATE_DIR as an override.
 """
 
 from __future__ import annotations
@@ -42,7 +42,18 @@ EVIDENCE_TYPES = {
 }
 
 ROOT = Path(__file__).parent
-STATE_DIR = Path(os.environ.get("ORACLE_STATE_DIR", ROOT / "state"))
+
+
+def _default_state_dir() -> Path:
+    override = os.environ.get("ORACLE_STATE_DIR")
+    if override:
+        return Path(override)
+    if os.name == "nt":
+        return Path("C:/Oracle/state")
+    return ROOT / "state"
+
+
+STATE_DIR = _default_state_dir()
 LEDGER_STATE_FILE = STATE_DIR / "stake_ledger_state.json"
 REPORT_FILE = STATE_DIR / "stake_report.json"
 

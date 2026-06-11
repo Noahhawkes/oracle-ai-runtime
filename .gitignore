@@ -56,3 +56,4 @@ Messages/*.md
 
 # Raise-Hand Protocol runtime queue and ledger
 state/
+.snapshots/

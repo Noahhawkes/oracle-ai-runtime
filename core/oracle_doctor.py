@@ -21,7 +21,18 @@ from pathlib import Path
 MODULE_VERSION = "0.3"
 
 ROOT = Path(__file__).parent.parent
-STATE_DIR = Path(os.environ.get("ORACLE_STATE_DIR", str(ROOT / "state")))
+
+
+def _default_state_dir() -> Path:
+    override = os.environ.get("ORACLE_STATE_DIR")
+    if override:
+        return Path(override)
+    if os.name == "nt":
+        return Path("C:/Oracle/state")
+    return ROOT / "state"
+
+
+STATE_DIR = _default_state_dir()
 KERNEL_FILE = ROOT / "kernel.md"
 KERNEL_SHA_FILE = ROOT / "kernel.sha256"
 
