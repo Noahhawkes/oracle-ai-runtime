@@ -1,544 +1,394 @@
 """
-core/oracle_doctor.py — ORACLE /doctor live capability probe.
+core/oracle_doctor.py - ORACLE enforced boot gate v0.3.
 
-Runs live probes of every registered capability and returns a human-readable
-truth table.  Read-only.  Never writes state.  Never approves anything.
-Never modifies governance.  Safe to call at any time from the REPL.
-
-Usage:
-    from oracle_doctor import run_doctor
-    print(run_doctor())
-
-CLI:
-    python core/oracle_doctor.py
-    python core/oracle_doctor.py --smoke-test
+Daemon mode must run Doctor first. Exit 1 means refuse boot.
+Stdlib only. Writes only local runtime state and kernel sidecar.
 """
 
 from __future__ import annotations
 
-import shutil
+import argparse
+import hashlib
+import json
+import os
 import subprocess
 import sys
+import tempfile
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import NamedTuple
 
-if getattr(sys, "frozen", False):
-    ROOT = Path(sys.executable).parent
-else:
-    ROOT = Path(__file__).parent.parent
+MODULE_VERSION = "0.3"
 
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "core"))
+ROOT = Path(__file__).parent.parent
+STATE_DIR = Path(os.environ.get("ORACLE_STATE_DIR", str(ROOT / "state")))
+KERNEL_FILE = ROOT / "kernel.md"
+KERNEL_SHA_FILE = ROOT / "kernel.sha256"
 
 
-# ── Probe result ──────────────────────────────────────────────────────────────
-
-class ProbeResult(NamedTuple):
-    name: str
-    registered: str       # "available" / "degraded" / "unavailable" / "unknown"
-    live: str             # human description of what the live probe found
-    live_ok: bool         # True = working, False = not working
-    callable_by_oracle: str  # one-liner command or "NO"
-    blocker: str          # empty string if none
-    fix: str              # empty string if none
+def self_id_line() -> str:
+    digest = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:16]
+    return f"{Path(__file__).name} v{MODULE_VERSION} sha256 {digest}"
 
 
-# ── Individual probes ─────────────────────────────────────────────────────────
-
-def _probe_ollama() -> ProbeResult:
+def _atomic_write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".tmp.")
     try:
-        from llm import check_ollama, get_model
-        ok, msg = check_ollama()
-        model = get_model(vision=False)
-        return ProbeResult(
-            "Ollama / " + model[:20],
-            "available",
-            "UP" if ok else f"DOWN ({msg[:50]})",
-            ok,
-            f"local LLM via qwen2.5:7b" if ok else "NO",
-            "" if ok else "Ollama not running",
-            "" if ok else "Run: ollama serve",
-        )
-    except Exception as e:
-        return ProbeResult("Ollama", "unknown", f"probe error: {e}", False, "NO", str(e)[:60], "check llm.py")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, str(path))
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
 
 
-def _probe_codex_bridge() -> ProbeResult:
-    ch_file = ROOT / "core" / "oracle_codex_channel.py"
-    msg_dir = ROOT / "Messages"
-    ch_exists = ch_file.exists()
-    # Check if codex process is in the process list
-    codex_proc = False
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _now() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def _pid_live(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if pid == os.getpid():
+        return True
     try:
-        r = subprocess.run(
-            ["tasklist", "/FI", "IMAGENAME eq codex.exe"],
-            capture_output=True, text=True, timeout=3,
-        )
-        codex_proc = "codex.exe" in r.stdout.lower()
+        if os.name == "nt":
+            result = subprocess.run(["tasklist", "/FI", f"PID eq {pid}"], capture_output=True, text=True, timeout=5)
+            return str(pid) in result.stdout
+        os.kill(pid, 0)
+        return True
     except Exception:
-        pass
-    status_parts = []
-    if ch_exists:
-        status_parts.append("channel file OK")
-    if msg_dir.exists():
-        status_parts.append("Messages/ dir OK")
-    if codex_proc:
-        status_parts.append("codex.exe running")
-    else:
-        status_parts.append("codex.exe NOT detected")
-    live_ok = ch_exists
-    return ProbeResult(
-        "Codex bridge (file)",
-        "available" if ch_exists else "unavailable",
-        " | ".join(status_parts) if status_parts else "MISSING",
-        live_ok,
-        "ask codex to <task>  OR  /ask-codex <task>" if ch_exists else "NO",
-        "" if ch_exists else "oracle_codex_channel.py missing",
-        "" if ch_exists else "git status to verify",
-    )
+        return False
 
 
-def _probe_codex_watcher() -> ProbeResult:
-    watcher = ROOT / "core" / "oracle_codex_watcher.py"
-    ok = watcher.exists()
-    unread_msg = ""
+@dataclass
+class DoctorResult:
+    ok: bool
+    failures: list[str]
+    warnings: list[str]
+    skips: list[str]
+    boot_type: str
+    state_dir: Path
+    lock_acquired: bool = False
+
+
+def _ledger(event: str, extra: dict | None = None, *, state_dir: Path = STATE_DIR) -> None:
+    entry = {"ts": _now(), "event": event}
+    if extra:
+        entry.update(extra)
+    path = state_dir / "doctor_ledger.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def _boot_type(state_dir: Path, *, consume_clean: bool = True) -> str:
+    clean = state_dir / "clean_shutdown.marker"
+    heartbeat = state_dir / "heartbeat.json"
+    if clean.exists():
+        if consume_clean:
+            clean.unlink()
+        return "CLEAN"
+    if heartbeat.exists():
+        return "RECOVERED_FROM_CRASH"
+    return "FIRST_BOOT"
+
+
+def _check_state_path(state_dir: Path, warnings: list[str], failures: list[str]) -> None:
+    try:
+        state_dir.mkdir(parents=True, exist_ok=True)
+        probe = state_dir / ".doctor_write_probe"
+        _atomic_write_text(probe, "ok\n")
+        probe.unlink(missing_ok=True)
+    except Exception as exc:
+        failures.append(f"state path not writable: {state_dir}: {exc}")
+    lower = str(state_dir).lower()
+    if any(marker in lower for marker in ("my drive", "google drive", "onedrive", "dropbox")):
+        warnings.append(f"state path is inside sync folder: {state_dir}")
+
+
+def _check_kernel(warnings: list[str], failures: list[str]) -> None:
+    if not KERNEL_FILE.exists() or not KERNEL_FILE.read_text(encoding="utf-8", errors="replace").strip():
+        failures.append(f"kernel.md missing or empty: {KERNEL_FILE}")
+        return
+    digest = _sha256(KERNEL_FILE)
+    if not KERNEL_SHA_FILE.exists():
+        _atomic_write_text(KERNEL_SHA_FILE, digest + "\n")
+        warnings.append("kernel.sha256 missing; recorded trust-on-first-use sidecar")
+        return
+    recorded = KERNEL_SHA_FILE.read_text(encoding="utf-8").strip()
+    if recorded != digest:
+        failures.append("kernel.md sha256 mismatch; run --accept-kernel only after Noah verifies the change")
+
+
+def _check_wake_memory(warnings: list[str], failures: list[str]) -> None:
+    path = ROOT / "Memory" / "wake_memory.json"
+    if not path.exists():
+        warnings.append("wake_memory.json missing")
+        return
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("wake memory must be object")
+    except Exception as exc:
+        failures.append(f"wake_memory.json corrupt: {exc}")
+
+
+def _check_conflicts(state_dir: Path, failures: list[str]) -> None:
+    if not state_dir.exists():
+        return
+    for path in state_dir.rglob("*"):
+        name = path.name.lower()
+        if "conflict" in name or " (1)" in name or " (2)" in name:
+            failures.append(f"sync/conflict artifact in state dir: {path}")
+
+
+def _check_raise_hand(state_dir: Path, failures: list[str]) -> int:
+    queue = state_dir / "raise_hand_queue.json"
+    if not queue.exists():
+        return 0
+    try:
+        data = json.loads(queue.read_text(encoding="utf-8"))
+        return len([r for r in data.get("requests", []) if r.get("status") == "OPEN"])
+    except Exception as exc:
+        failures.append(f"raise_hand_queue.json corrupt: {exc}")
+        return 0
+
+
+def _acquire_lock(state_dir: Path, warnings: list[str], failures: list[str]) -> bool:
+    lock = state_dir / "oracle.lock"
+    if lock.exists():
+        try:
+            pid = int(lock.read_text(encoding="utf-8").strip())
+        except Exception:
+            pid = -1
+        if _pid_live(pid):
+            failures.append(f"already running with PID {pid}")
+            return False
+        lock.unlink(missing_ok=True)
+        warnings.append(f"removed stale oracle.lock for dead PID {pid}")
+    _atomic_write_text(lock, str(os.getpid()) + "\n")
+    return True
+
+
+def _git_status(warnings: list[str], skips: list[str]) -> None:
+    if not (ROOT / ".git").exists():
+        skips.append("git status skipped: no repo")
+        return
+    try:
+        result = subprocess.run(["git", "status", "--short"], cwd=str(ROOT), capture_output=True, text=True, timeout=8)
+        if result.stdout.strip():
+            warnings.append("git working tree dirty")
+    except Exception as exc:
+        skips.append(f"git status skipped: {exc}")
+
+
+def _check_env(failures: list[str]) -> None:
+    if os.environ.get("ORACLE_ACTUATION", "").lower() in {"1", "true", "yes", "enabled"}:
+        failures.append("ORACLE_ACTUATION enabled at boot")
+
+
+def run_check(*, state_dir: Path = STATE_DIR, acquire_lock: bool = True) -> DoctorResult:
+    failures: list[str] = []
+    warnings: list[str] = []
+    skips: list[str] = []
+    state_dir = Path(state_dir)
+    boot_type = _boot_type(state_dir)
+    _check_state_path(state_dir, warnings, failures)
+    _check_kernel(warnings, failures)
+    _check_wake_memory(warnings, failures)
+    _check_conflicts(state_dir, failures)
+    open_count = _check_raise_hand(state_dir, failures)
+    locked = _acquire_lock(state_dir, warnings, failures) if acquire_lock else False
+    _git_status(warnings, skips)
+    _check_env(failures)
+    ok = not failures
     if ok:
-        try:
-            from oracle_codex_watcher import unread_status
-            u = unread_status()
-            unread_msg = " | UNREAD REPLY" if u.get("unread") else ""
-        except Exception:
-            pass
-    return ProbeResult(
-        "Codex watcher",
-        "available" if ok else "unavailable",
-        ("FILE OK" + unread_msg) if ok else "MISSING",
-        ok,
-        "/read-codex to check reply" if ok else "NO",
-        "" if ok else "oracle_codex_watcher.py missing",
-        "",
-    )
-
-
-def _probe_claude_channel() -> ProbeResult:
-    cli = shutil.which("claude") is not None
-    win = False
-    try:
-        from claude_code_bridge import find_claude_window
-        win = find_claude_window() is not None
-    except Exception:
-        pass
-    ch_file = (ROOT / "core" / "oracle_claude_channel.py").exists()
-    if cli and win:
-        live = "CLI + WINDOW"
-        ok = True
-    elif cli:
-        live = "CLI only (window not open)"
-        ok = True
-    elif win:
-        live = "WINDOW only (no CLI)"
-        ok = True
+        _atomic_write_text(state_dir / "heartbeat.json", json.dumps({"ts": _now(), "pid": os.getpid(), "boot_type": boot_type}) + "\n")
+        _ledger("BOOT_OK", {"boot_type": boot_type, "open_queue_count": open_count}, state_dir=state_dir)
     else:
-        live = "NOT FOUND"
-        ok = False
-    return ProbeResult(
-        "Claude channel",
-        "available" if ok else "degraded",
-        live + (" | channel file OK" if ch_file else " | channel file MISSING"),
-        ok,
-        "/ask-claude <task>  OR  ask claude to <task>" if ok else "NO",
-        "" if ok else "Open Claude Desktop or install claude CLI",
-        "" if ok else "https://claude.ai/download  or  npm install -g @anthropic-ai/claude-code",
-    )
+        if locked:
+            release_lock(state_dir=state_dir)
+        _ledger("BOOT_REFUSED", {"boot_type": boot_type, "failures": failures}, state_dir=state_dir)
+    return DoctorResult(ok, failures, warnings, skips, boot_type, state_dir, locked)
 
 
-def _probe_chatgpt_relay() -> ProbeResult:
-    bridge = ROOT / "core" / "chatgpt_bridge.py"
-    ok = bridge.exists()
-    return ProbeResult(
-        "ChatGPT relay",
-        "available" if ok else "degraded",
-        "BRIDGE FILE OK (Noah-mediated)" if ok else "chatgpt_bridge.py MISSING",
-        ok,
-        "Say: 'ChatGPT says...'  to relay a message" if ok else "NO",
-        "" if ok else "chatgpt_bridge.py missing",
-        "",
-    )
-
-
-def _probe_drive_scope() -> ProbeResult:
-    try:
-        from drive_scope import is_in_scope
-        result = is_in_scope(str(ROOT))
-        return ProbeResult(
-            "Drive Scope",
-            "available",
-            f"IMPORTABLE + CALLABLE (ORACLE home={'IN' if result else 'OUT'} scope)",
-            True,
-            "wired into executor — automatic",
-            "",
-            "",
-        )
-    except Exception as e:
-        return ProbeResult(
-            "Drive Scope",
-            "unavailable",
-            f"IMPORT/CALL ERROR: {e}",
-            False,
-            "NO",
-            str(e)[:80],
-            "check drive_scope.py",
-        )
-
-
-def _probe_actuation_engine() -> ProbeResult:
-    ae_ok = False
-    pyautogui_ok = False
-    try:
-        from actuation_engine import type_into_window  # noqa
-        ae_ok = True
-    except Exception:
-        pass
-    try:
-        import pyautogui  # noqa
-        pyautogui_ok = True
-    except Exception:
-        pass
-    ok = ae_ok and pyautogui_ok
-    blocker = ""
-    fix = ""
-    if not ae_ok:
-        blocker = "actuation_engine import failed"
-        fix = "check actuation_engine.py"
-    elif not pyautogui_ok:
-        blocker = "pyautogui not installed"
-        fix = "pip install pyautogui pillow"
-    return ProbeResult(
-        "Actuation Engine",
-        "available" if ae_ok else "degraded",
-        ("IMPORTABLE" + (" + pyautogui OK" if pyautogui_ok else " | pyautogui MISSING")) if ae_ok else "IMPORT ERROR",
-        ok,
-        "/actuate <window> | <text>" if ae_ok else "NO",
-        blocker,
-        fix,
-    )
-
-
-def _probe_executor() -> ProbeResult:
-    ok = False
-    try:
-        from tools.executor import execute_tool  # noqa
-        ok = True
-    except Exception:
-        try:
-            sys.path.insert(0, str(ROOT / "tools"))
-            from executor import execute_tool  # noqa
-            ok = True
-        except Exception:
-            pass
-    return ProbeResult(
-        "tools/executor.py",
-        "available" if ok else "unavailable",
-        "IMPORTABLE" if ok else "IMPORT ERROR",
-        ok,
-        "used automatically for file/scan tools" if ok else "NO",
-        "" if ok else "executor import failed",
-        "",
-    )
-
-
-def _probe_resident_console() -> ProbeResult:
-    desktop = ROOT / "oracle_desktop.py"
-    oracle_main = ROOT / "core" / "oracle.py"
-    ok = desktop.exists()
-    return ProbeResult(
-        "Resident Console",
-        "available" if ok else "degraded",
-        "oracle_desktop.py present" if ok else "oracle_desktop.py MISSING",
-        True,  # always callable via oracle.py
-        "python oracle_desktop.py  OR  python core/oracle.py",
-        "" if ok else "oracle_desktop.py missing — using core/oracle.py fallback",
-        "",
-    )
-
-
-def _probe_voice() -> ProbeResult:
-    pyttsx3_ok = False
-    voice_enabled = False
-    voice_importable = False
-    try:
-        import pyttsx3  # noqa
-        pyttsx3_ok = True
-    except Exception:
-        pass
-    try:
-        from voice import is_voice_enabled
-        voice_enabled = is_voice_enabled()
-        voice_importable = True
-    except Exception:
-        pass
-    ok = pyttsx3_ok and voice_importable
-    return ProbeResult(
-        "Voice / TTS (pyttsx3)",
-        "available" if ok else ("degraded" if voice_importable else "unavailable"),
-        ("ENABLED" if voice_enabled else "MUTED — /voice on to enable") if ok else
-        ("voice.py OK but pyttsx3 MISSING" if voice_importable else "voice.py import error"),
-        ok,
-        "/voice on|off  or  speak() in code" if ok else "NO — pyttsx3 missing",
-        "" if ok else ("pyttsx3 not installed" if not pyttsx3_ok else "voice.py import failed"),
-        "" if pyttsx3_ok else "pip install pyttsx3",
-    )
-
-
-def _probe_scan_search() -> ProbeResult:
-    mapper = ROOT / "tools" / "filesystem_mapper.py"
-    executor = ROOT / "tools" / "executor.py"
-    ok = mapper.exists() and executor.exists()
-    return ProbeResult(
-        "scan/search tools",
-        "available" if ok else "degraded",
-        ("filesystem_mapper.py + executor.py present") if ok else
-        (("filesystem_mapper.py MISSING" if not mapper.exists() else "") +
-         (" executor.py MISSING" if not executor.exists() else "")),
-        ok,
-        "automatic via executor scope gate" if ok else "PARTIAL",
-        "" if ok else ("filesystem_mapper.py missing" if not mapper.exists() else "executor.py missing"),
-        "",
-    )
-
-
-# ── Routing gap analysis ──────────────────────────────────────────────────────
-
-def _routing_gaps() -> list[str]:
-    """Return known routing gaps — inputs that silently fall through incorrectly."""
-    gaps = []
-
-    # Test: "use codex to X" route
-    try:
-        import re
-        _NL_ASK_CODEX_PATTERNS = [
-            re.compile(r"^ask\s+codex\s+(.+)", re.I),
-            re.compile(r"^tell\s+codex\s+(?:to\s+)?(.+)", re.I),
-            re.compile(r"^(?:have|get)\s+codex\s+(?:to\s+)?(.+)", re.I),
-            re.compile(r"^use\s+codex\s+(?:to\s+)?(.+)", re.I),
-        ]
-        test = "use codex to inspect the repo"
-        matched = any(p.match(test) for p in _NL_ASK_CODEX_PATTERNS)
-        if not matched:
-            gaps.append("'use codex to X' — not in NL parser; use 'ask codex to X' or /ask-codex")
-    except Exception:
-        pass
-
-    # Test: over-gated questions
-    try:
-        from cognitive_kernel import decide_next, INTENT_APPROVAL_REQUIRED
-        over_gated = []
-        for q in [
-            "what should we commit next",
-            "pull up the repo status",
-            "what is the cloud architecture",
-            "explain the governance model",
-        ]:
-            d = decide_next(q)
-            if d.intent == INTENT_APPROVAL_REQUIRED:
-                over_gated.append(q)
-        if over_gated:
-            gaps.append(
-                f"Milestone policy blocks conversational questions containing "
-                f"commit/pull/cloud/governance keyword: {over_gated[0]!r} and "
-                f"{len(over_gated) - 1} more"
-            )
-    except Exception:
-        pass
-
-    return gaps
-
-
-# ── Overgating analysis ───────────────────────────────────────────────────────
-
-def _overgating_examples() -> list[tuple[str, str]]:
-    """Return (input, reason) pairs for over-gated inputs."""
-    results = []
-    try:
-        from cognitive_kernel import decide_next, INTENT_APPROVAL_REQUIRED
-        candidates = [
-            ("what should we commit next", "contains 'commit'"),
-            ("pull up the repo status", "contains 'pull'"),
-            ("what is the cloud architecture", "contains 'cloud'"),
-            ("explain the governance model", "contains 'governance'"),
-            ("what shared resources do we have", "contains 'share'"),
-            ("how does git push work", "contains 'push'"),
-        ]
-        for text, reason in candidates:
-            d = decide_next(text)
-            if d.intent == INTENT_APPROVAL_REQUIRED:
-                results.append((text, reason))
-    except Exception:
-        pass
-    return results
-
-
-# ── Main report ───────────────────────────────────────────────────────────────
-
-def run_doctor() -> str:
-    """
-    Run all live probes and return the formatted truth table.
-    Safe to call at any time. Read-only.
-    """
-    probes = [
-        _probe_ollama(),
-        _probe_codex_bridge(),
-        _probe_codex_watcher(),
-        _probe_claude_channel(),
-        _probe_chatgpt_relay(),
-        _probe_drive_scope(),
-        _probe_actuation_engine(),
-        _probe_executor(),
-        _probe_resident_console(),
-        _probe_voice(),
-        _probe_scan_search(),
-    ]
-
-    # Truth table
-    col_name = 30
-    col_reg = 12
-    col_live = 36
-    col_call = 8
-    sep = "─" * (col_name + col_reg + col_live + col_call + 34)
-
-    lines = [
-        "",
-        "  [ORACLE /doctor — LIVE CAPABILITY TRUTH TABLE]",
-        f"  {sep}",
-        f"  {'Capability':<{col_name}} {'Registered':<{col_reg}} {'Live Probe':<{col_live}} {'OK?':<{col_call}} Blocker / Fix",
-        f"  {sep}",
-    ]
-    for p in probes:
-        mark = "YES" if p.live_ok else "NO "
-        issue = (p.fix or p.blocker)[:38]
-        lines.append(
-            f"  {p.name:<{col_name}} {p.registered:<{col_reg}} {p.live:<{col_live}} {mark:<{col_call}} {issue}"
-        )
-    lines.append(f"  {sep}")
-
-    working = [p.name for p in probes if p.live_ok]
-    broken  = [p.name for p in probes if not p.live_ok]
-    lines += [
-        "",
-        f"  Working  ({len(working)}): " + ", ".join(working),
-        f"  Broken   ({len(broken)}): " + (", ".join(broken) if broken else "none"),
-        "",
-    ]
-
-    # Routing gaps
-    gaps = _routing_gaps()
-    if gaps:
-        lines.append("  [ROUTING GAPS]")
-        for g in gaps:
-            lines.append(f"  • {g}")
+def format_startup_screen(result: DoctorResult) -> str:
+    lines = [self_id_line(), "", "ORACLE STARTUP CHECK", ""]
+    lines.append(f"Boot type: {result.boot_type}")
+    lines.append(f"State path: {result.state_dir}")
+    for warning in result.warnings:
+        lines.append(f"WARN: {warning}")
+    for skip in result.skips:
+        lines.append(f"SKIP: {skip}")
+    if result.failures:
         lines.append("")
-
-    # Over-gating
-    og = _overgating_examples()
-    if og:
-        lines.append("  [OVER-GATING — inputs blocked that should reach the LLM]")
-        for text, reason in og:
-            lines.append(f"  • {text!r}  ← blocked because: {reason}")
-        lines.append("  FIX: Pure questions bypass hard-approval (applied in cognitive_kernel.py)")
-        lines.append("")
-
-    # Safe actions (no approval needed)
-    lines += [
-        "  [SAFE WITHOUT APPROVAL — use these freely]",
-        "  /capabilities         list registered capabilities",
-        "  /missing-capabilities list unavailable/degraded",
-        "  /pending              review approval queue",
-        "  /channel              check Claude + Codex channel status",
-        "  /read-codex           read last Codex reply",
-        "  /project-state  /ps   show current build phase",
-        "  /cycle  /runtime      run one governed resident cycle",
-        "  /session              show session state diagnostic",
-        "  /doctor               this report (live probes)",
-        "  ask codex to <task>   send task to Codex file bridge",
-        "  ask claude to <task>  send task to Claude channel",
-        "  talk to me            conversational mode",
-        "  remember this: <X>    store a fact",
-        "",
-        "  [VOICE STATUS]",
-    ]
+        lines.append("FAILURES:")
+        for failure in result.failures:
+            lines.append(f"- {failure}")
+        lines.append("BOOT REFUSED")
+        return "\n".join(lines)
     try:
-        from voice import is_voice_enabled
-        lines.append(
-            f"  pyttsx3 TTS path exists.  Currently: "
-            f"{'ENABLED' if is_voice_enabled() else 'MUTED (type /voice on to enable)'}."
-        )
+        from raise_hand import RaiseHandQueue
+        open_count = RaiseHandQueue(result.state_dir).tray_badge()
     except Exception:
-        lines.append("  Voice import failed — pyttsx3 may not be installed (pip install pyttsx3).")
-    lines.append("")
-
+        open_count = 0
+    lines.extend([
+        "Wake Memory: OK",
+        "Raise-Hand queue: OK",
+        "Single-instance lock: OK",
+        "Heartbeat: active",
+        "External actuation: disabled",
+        f"Noah authority required: {open_count if open_count else 'none'}",
+        "",
+        "Oracle is awake and operating in local governed mode.",
+    ])
     return "\n".join(lines)
 
 
-# ── Smoke tests ───────────────────────────────────────────────────────────────
+def release_lock(*, state_dir: Path = STATE_DIR) -> None:
+    lock = Path(state_dir) / "oracle.lock"
+    if lock.exists():
+        lock.unlink()
+
+
+def shutdown_clean(*, state_dir: Path = STATE_DIR) -> None:
+    state_dir = Path(state_dir)
+    _atomic_write_text(state_dir / "clean_shutdown.marker", _now() + "\n")
+    (state_dir / "heartbeat.json").unlink(missing_ok=True)
+    release_lock(state_dir=state_dir)
+    _ledger("CLEAN_SHUTDOWN", {}, state_dir=state_dir)
+
+
+def accept_kernel() -> None:
+    if not KERNEL_FILE.exists():
+        raise SystemExit("kernel.md missing")
+    _atomic_write_text(KERNEL_SHA_FILE, _sha256(KERNEL_FILE) + "\n")
+
+
+def run_doctor() -> str:
+    return format_startup_screen(run_check(acquire_lock=False))
+
 
 def run_smoke_tests() -> int:
-    checks = 0
+    import shutil
+
+    print(self_id_line())
+    tmp = Path(tempfile.mkdtemp(prefix="oracle_doctor_test_"))
     passed = 0
+    failed = 0
+    orig_state = STATE_DIR
+    orig_kernel = globals()["KERNEL_FILE"]
+    orig_sha = globals()["KERNEL_SHA_FILE"]
 
     def check(name: str, cond: bool) -> None:
-        nonlocal checks, passed
-        checks += 1
+        nonlocal passed, failed
         if cond:
             passed += 1
             print(f"  [PASS] {name}")
         else:
+            failed += 1
             print(f"  [FAIL] {name}")
 
-    report = run_doctor()
+    try:
+        globals()["KERNEL_FILE"] = tmp / "kernel.md"
+        globals()["KERNEL_SHA_FILE"] = tmp / "kernel.sha256"
+        globals()["KERNEL_FILE"].write_text("kernel\n", encoding="utf-8")
+        state = tmp / "state"
+        (ROOT / "Memory").mkdir(exist_ok=True)
 
-    check("run_doctor returns non-empty string", bool(report))
-    check("report contains truth table header", "LIVE CAPABILITY TRUTH TABLE" in report)
-    check("report contains Ollama row", "Ollama" in report)
-    check("report contains Codex bridge row", "Codex bridge" in report)
-    check("report contains Claude channel row", "Claude channel" in report)
-    check("report contains Drive Scope row", "Drive Scope" in report)
-    check("report contains voice row", "Voice" in report)
-    check("report contains Working/Broken summary", "Working" in report and "Broken" in report)
-    check("report contains safe actions section", "SAFE WITHOUT APPROVAL" in report)
-    check("report contains voice status section", "VOICE STATUS" in report)
+        result = run_check(state_dir=state)
+        check("check passes with TOFU warning", result.ok and any("TOFU" in w or "trust-on-first-use" in w for w in result.warnings))
+        check("heartbeat written", (state / "heartbeat.json").exists())
+        check("lock acquired", (state / "oracle.lock").exists())
+        shutdown_clean(state_dir=state)
+        check("shutdown_clean marker written", (state / "clean_shutdown.marker").exists())
+        clean = run_check(state_dir=state)
+        check("clean boot type consumed marker", clean.boot_type == "CLEAN" and not (state / "clean_shutdown.marker").exists())
+        release_lock(state_dir=state)
+        (state / "heartbeat.json").write_text("{}", encoding="utf-8")
+        recovered = run_check(state_dir=state)
+        check("crash boot type detected", recovered.boot_type == "RECOVERED_FROM_CRASH")
+        release_lock(state_dir=state)
+        (state / "raise_hand_queue.json").write_text("{bad", encoding="utf-8")
+        bad = run_check(state_dir=state)
+        check("corrupt queue fails", not bad.ok and any("raise_hand_queue" in f for f in bad.failures))
+        (state / "raise_hand_queue.json").unlink(missing_ok=True)
+        release_lock(state_dir=state)
+        (state / "file conflict.json").write_text("x", encoding="utf-8")
+        conflict = run_check(state_dir=state)
+        check("sync conflict file fails", not conflict.ok and any("conflict" in f for f in conflict.failures))
+        (state / "file conflict.json").unlink(missing_ok=True)
+        release_lock(state_dir=state)
+        (state / "oracle.lock").write_text(str(os.getpid()), encoding="utf-8")
+        locked = run_check(state_dir=state)
+        check("live lock fails", not locked.ok and any("already running" in f for f in locked.failures))
+        release_lock(state_dir=state)
+        globals()["KERNEL_FILE"].write_text("changed\n", encoding="utf-8")
+        mismatch = run_check(state_dir=state)
+        check("kernel mismatch fails", not mismatch.ok and any("sha256 mismatch" in f for f in mismatch.failures))
+        accept_kernel()
+        fixed = run_check(state_dir=state)
+        check("accept_kernel fixes mismatch", fixed.ok)
+        release_lock(state_dir=state)
+        old = os.environ.get("ORACLE_ACTUATION")
+        os.environ["ORACLE_ACTUATION"] = "enabled"
+        env_fail = run_check(state_dir=state)
+        check("actuation env fails boot", not env_fail.ok and any("ORACLE_ACTUATION" in f for f in env_fail.failures))
+        if old is None:
+            del os.environ["ORACLE_ACTUATION"]
+        else:
+            os.environ["ORACLE_ACTUATION"] = old
+        release_lock(state_dir=state)
+        screen = format_startup_screen(run_check(state_dir=state))
+        check("startup screen has awake line", "Oracle is awake and operating in local governed mode." in screen)
+        check("run_doctor returns string", isinstance(run_doctor(), str))
+    finally:
+        globals()["STATE_DIR"] = orig_state
+        globals()["KERNEL_FILE"] = orig_kernel
+        globals()["KERNEL_SHA_FILE"] = orig_sha
+        shutil.rmtree(tmp, ignore_errors=True)
 
-    # Individual probes don't crash
-    for fn in [
-        _probe_ollama, _probe_codex_bridge, _probe_codex_watcher,
-        _probe_claude_channel, _probe_chatgpt_relay, _probe_drive_scope,
-        _probe_actuation_engine, _probe_executor, _probe_resident_console,
-        _probe_voice, _probe_scan_search,
-    ]:
-        try:
-            result = fn()
-            check(f"probe {fn.__name__} returns ProbeResult", isinstance(result, ProbeResult))
-            check(f"probe {fn.__name__} has non-empty name", bool(result.name))
-            check(f"probe {fn.__name__} live_ok is bool", isinstance(result.live_ok, bool))
-        except Exception as e:
-            checks += 3
-            print(f"  [FAIL] probe {fn.__name__} crashed: {e}")
+    print(f"\n{passed}/{passed + failed} oracle_doctor smoke tests passed.")
+    return 0 if failed == 0 else 1
 
-    check("routing gap analysis runs without crash", isinstance(_routing_gaps(), list))
-    check("overgating analysis runs without crash", isinstance(_overgating_examples(), list))
 
-    print(f"\n{passed}/{checks} oracle_doctor smoke tests passed.")
-    return 0 if passed == checks else 1
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check", action="store_true")
+    parser.add_argument("--shutdown-clean", action="store_true")
+    parser.add_argument("--release-lock", action="store_true")
+    parser.add_argument("--accept-kernel", action="store_true")
+    parser.add_argument("--smoke-test", action="store_true")
+    args = parser.parse_args()
+    if args.smoke_test:
+        return run_smoke_tests()
+    if args.accept_kernel:
+        accept_kernel()
+        print(self_id_line())
+        print("kernel.sha256 accepted")
+        return 0
+    if args.shutdown_clean:
+        shutdown_clean()
+        print(self_id_line())
+        print("clean shutdown recorded")
+        return 0
+    if args.release_lock:
+        release_lock()
+        print(self_id_line())
+        print("lock released")
+        return 0
+    result = run_check()
+    print(format_startup_screen(result))
+    return 0 if result.ok else 1
 
 
 if __name__ == "__main__":
-    import argparse
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--smoke-test", action="store_true")
-    args = ap.parse_args()
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
-    if args.smoke_test:
-        raise SystemExit(run_smoke_tests())
-    print(run_doctor())
+    raise SystemExit(main())

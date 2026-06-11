@@ -10,6 +10,7 @@ ask-once behavior to raise_hand.py.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import tempfile
@@ -23,6 +24,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from raise_hand import DEFAULT_STATE_DIR, CorruptQueueError, RaiseHandQueue, Request, ToastDispatcher  # noqa: E402
+
+MODULE_VERSION = "0.3"
+
+
+def self_id_line() -> str:
+    digest = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:16]
+    return f"{Path(__file__).name} v{MODULE_VERSION} sha256 {digest}"
 
 NEED_APPROVAL_REQUIRED = "APPROVAL_REQUIRED"
 NEED_BLOCKED = "BLOCKED"
@@ -53,11 +61,11 @@ _NEED_TO_REQUEST = {
     NEED_APPROVAL_REQUIRED: "APPROVAL_PENDING",
     NEED_BLOCKED: "BLOCKED_ON_DECISION",
     NEED_CONTRADICTION_FLAGGED: "CONTRADICTION_FLAGGED",
-    NEED_MEMORY_CANDIDATE: "APPROVAL_PENDING",
-    NEED_DREAM_REVIEW: "PROPOSAL",
-    NEED_STATE_CORRUPTION: "HEALTH_ALERT",
+    NEED_MEMORY_CANDIDATE: "MEMORY_CANDIDATE",
+    NEED_DREAM_REVIEW: "DREAM_REVIEW",
+    NEED_STATE_CORRUPTION: "STATE_CORRUPTION",
     NEED_BUILD_PROPOSAL: "PROPOSAL",
-    NEED_RETURN_TO_LIFE: "PROPOSAL",
+    NEED_RETURN_TO_LIFE: "RETURN_TO_LIFE",
 }
 
 _URGENCY_ORDER = {
@@ -218,22 +226,8 @@ class ReciprocityEngine:
         return sorted(needs, key=lambda n: (_URGENCY_ORDER.get(n["urgency"], 99), n.get("created_at", "")))
 
     def decision_ready_digest(self, limit: int = 5) -> str:
-        needs = self.open_needs()[:limit]
-        if not needs:
-            return "Nothing needs Noah's authority right now."
-        lines = ["What I need from Noah:"]
-        for idx, need in enumerate(needs, start=1):
-            lines.append(
-                f"{idx}. [{need['urgency']}] {need['summary']} "
-                f"({need['type']}, request {need.get('request_id', 'unknown')})"
-            )
-            lines.append(f"   Context: {need['context']}")
-            lines.append(f"   Recommend: {need['recommendation']}")
-            lines.append(f"   Options: {', '.join(need['options'])}")
-            lines.append(f"   Response: {need['required_response']}")
-            if need.get("citations"):
-                lines.append(f"   Citation: {', '.join(need['citations'])}")
-        return "\n".join(lines)
+        _ = limit  # Raise-Hand owns ranking and ask-once presentation in v0.3.
+        return self.queue.what_do_you_need()
 
     def morning_digest(self) -> dict:
         return self.queue.morning_report()
@@ -249,6 +243,7 @@ def _engine_for_cli() -> ReciprocityEngine:
 def run_smoke_tests() -> int:
     import shutil
 
+    print(self_id_line())
     tmp = Path(tempfile.mkdtemp(prefix="reciprocity_test_"))
     passed = 0
     failed = 0
@@ -327,7 +322,7 @@ def run_smoke_tests() -> int:
     check("no external actuation exists", not hasattr(engine, "send_email") and not hasattr(engine, "actuate"))
     check("decision-ready digest reports open needs", "What I need from Noah:" in engine.decision_ready_digest())
     empty = ReciprocityEngine(tmp / "empty", ToastDispatcher(enabled=False), lambda: day)
-    check("empty digest says nothing needed", empty.decision_ready_digest() == "Nothing needs Noah's authority right now.")
+    check("empty digest says nothing needed", empty.decision_ready_digest() == "Nothing needs your authority right now.")
 
     shutil.rmtree(tmp, ignore_errors=True)
     print(f"\n{passed}/{passed + failed} reciprocity smoke tests passed.")

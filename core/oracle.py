@@ -3264,4 +3264,23 @@ if __name__ == "__main__":
         rc1 = _smoke_test_governed_actuation()
         rc2 = _smoke_test_intent_router()
         sys.exit(0 if rc1 == 0 and rc2 == 0 else 1)
-    main()
+    _daemon_mode = "--daemon" in sys.argv
+    if _daemon_mode:
+        try:
+            from oracle_doctor import format_startup_screen, run_check, shutdown_clean
+            _doctor = run_check()
+            print(format_startup_screen(_doctor))
+            if not _doctor.ok:
+                sys.exit(1)
+        except Exception as _doctor_err:
+            print(f"BOOT REFUSED: oracle_doctor failed: {_doctor_err}")
+            sys.exit(1)
+    try:
+        main()
+    finally:
+        if _daemon_mode:
+            try:
+                from oracle_doctor import shutdown_clean
+                shutdown_clean()
+            except Exception:
+                pass
