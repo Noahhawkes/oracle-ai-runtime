@@ -17,6 +17,8 @@ from typing import Any
 from milestone_policy import evaluate_action, policy_summary, requires_hard_approval
 from capability_registry import detect_need
 from cognitive_salience import (
+    INTENT_EMOTIONAL_DISTRESS as SALIENCE_EMOTIONAL_DISTRESS,
+    INTENT_HELP_REQUEST as SALIENCE_HELP_REQUEST,
     INTENT_RELATIONAL_CHECKIN as SALIENCE_RELATIONAL_CHECKIN,
     INTENT_STATUS_CHECK as SALIENCE_STATUS_CHECK,
     SOURCE_NOAH_DIRECT,
@@ -231,11 +233,15 @@ def classify_input(
             "salience: external or uncertain context is not an instruction",
             safest_next_step="answer from provenance, no tool handoff",
         )
+    if salience.intent_class in {
+        SALIENCE_RELATIONAL_CHECKIN,
+        SALIENCE_EMOTIONAL_DISTRESS,
+        SALIENCE_HELP_REQUEST,
+    }:
+        return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "social check-in")
     if any(phrase in lower for phrase in _ROUTINE_PHRASES):
         need = detect_need(text)
         return KernelDecision(INTENT_ROUTINE_LOCAL, KERNEL_ACT, "routine local action", safest_next_step=need.safest_next_step)
-    if salience.intent_class == SALIENCE_RELATIONAL_CHECKIN:
-        return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "social check-in")
     if salience.intent_class == SALIENCE_STATUS_CHECK:
         return KernelDecision(INTENT_STATUS, KERNEL_REPORT, "salience status check")
 
@@ -481,6 +487,11 @@ def run_smoke_tests() -> int:
         check("status returns report", decide_next("status").decision == KERNEL_REPORT)
         check("social check-in is conversation", decide_next("how are you doing?").intent == INTENT_CONVERSATION)
         check("soft check-in is conversation", decide_next("I just want to see how you're doing?").reason == "social check-in")
+        check("patch status question is not Codex", decide_next("Hi Oracle I worked all night did any of the patches work for you?").intent == INTENT_STATUS)
+        check("did patches work is status", decide_next("Did the patches work?").intent == INTENT_STATUS)
+        check("soft build help is conversation", decide_next("will you please build yourself I dont know what to do").intent == INTENT_CONVERSATION)
+        check("explicit Codex patch question can hand off", decide_next("Ask Codex if the patches worked").needed_capability == "Codex local file backed bridge")
+        check("explicit Codex file inspect can hand off", decide_next("Use Codex to inspect the patch files").needed_capability == "Codex local file backed bridge")
         check("conversation outranks pending queue", decide_next("how are you doing?", pending_intent=pending).intent == INTENT_CONVERSATION)
         check("quoted approval is not approval", decide_next('"yes please proceed"', pending_intent=pending).intent == INTENT_CONVERSATION)
         check("question is not a command", decide_next("should we commit this later?").intent == INTENT_CONVERSATION)

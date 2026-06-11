@@ -2479,6 +2479,28 @@ def main():
                 print(f"\n[doctor error: {e}]\n")
             continue
 
+        if user_input.lower().startswith("/salience "):
+            _salience_text = user_input[len("/salience "):].strip()
+            if not _salience_text:
+                print("\n  Usage: /salience <text>\n")
+                continue
+            try:
+                from cognitive_salience import classify_text
+                _sr = classify_text(_salience_text)
+                print(f"\n  {C['cyan']}[SALIENCE]{C['reset']}")
+                print(f"  Source       : {_sr.source_class}")
+                print(f"  Intent       : {_sr.intent_class}")
+                print(f"  Score        : {_sr.salience_score}")
+                print(f"  Gates        : tools={'yes' if _sr.tool_allowed else 'no'}; handoff={'yes' if _sr.handoff_allowed else 'no'}; memory={'yes' if _sr.memory_allowed else 'no'}; approval={'yes' if _sr.approval_required else 'no'}")
+                print(f"  Reason       : {_sr.reason}")
+                print("  Top meanings :")
+                for _meaning in _sr.top_meanings:
+                    print(f"    - {_meaning}")
+                print()
+            except Exception as e:
+                print(f"\n[salience error: {e}]\n")
+            continue
+
         # ── /wake-memory — show the current wake memory context ─────────────
         if user_input.lower() in ("/wake-memory", "/wake", "/wm"):
             try:
@@ -2858,6 +2880,7 @@ def main():
             print(f"  {C['grey']}/update-wake-memory <s>{W}— update the session summary in wake memory")
             print(f"  {C['grey']}/save-session-summary <s>{W}— same as above (shorthand)")
             print(f"  {C['grey']}/doctor{W}              — live probe: what actually works right now")
+            print(f"  {C['grey']}/salience <text>{W}     — classify a turn before routing")
             print(f"  {C['grey']}/autonomy{W}            — GREEN/YELLOW/RED zone table: what I can do without approval")
             print(f"  {C['grey']}/why-blocked [input]{W} — explain why the last action was blocked or deferred")
             print(f"  {C['grey']}/desktop-doctor{W}      — live desktop actuation probe")

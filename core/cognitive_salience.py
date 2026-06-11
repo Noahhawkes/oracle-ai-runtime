@@ -34,6 +34,7 @@ INTENT_APPROVAL_REQUEST = "APPROVAL_REQUEST"
 INTENT_DOCTRINE_CANDIDATE = "DOCTRINE_CANDIDATE"
 INTENT_MEMORY_SAVE_REQUEST = "MEMORY_SAVE_REQUEST"
 INTENT_EMOTIONAL_DISTRESS = "EMOTIONAL_DISTRESS"
+INTENT_HELP_REQUEST = "HELP_REQUEST"
 INTENT_UNKNOWN = "UNKNOWN_INTENT"
 
 _QUESTION_STARTERS = (
@@ -44,10 +45,13 @@ _QUESTION_STARTERS = (
 _RELATIONAL_PHRASES = (
     "how are you", "how are you doing", "how do you feel",
     "just checking in", "checking in", "i just want to see how",
+    "are you there", "i see you",
 )
 _STATUS_PHRASES = (
     "status", "progress", "making progress", "what were we working on",
     "where were we", "what's next", "whats next", "what is next",
+    "did any of the patches work", "did the patches work",
+    "did any patches work", "patches work for you",
 )
 _BUILD_PHRASES = ("build", "implement", "patch", "fix", "edit code", "improve the ui")
 _TOOL_PHRASES = ("ask codex", "tell codex", "send to codex", "ask claude", "tell claude", "send to claude")
@@ -55,6 +59,10 @@ _APPROVAL_PHRASES = ("approve", "approval", "lock this in")
 _MEMORY_PHRASES = ("remember this", "save this", "put this in memory")
 _DOCTRINE_PHRASES = ("doctrine", "rule:", "operating principle", "governance")
 _DISTRESS_PHRASES = ("i can't pull away", "locked my brain", "never pull away", "addicted to ai", "stuck")
+_HELP_PHRASES = (
+    "i don't know what to do", "i dont know what to do",
+    "please help", "help me", "i need you",
+)
 _BOOK_PHRASES = ("chapter", "manuscript", "draft", "novel", "book:")
 
 
@@ -111,14 +119,16 @@ def classify_intent(text: str, source_class: str) -> tuple[str, str]:
         return INTENT_APPROVAL_REQUEST, "approval language"
     if _contains_any(lower, _TOOL_PHRASES):
         return INTENT_TOOL_REQUEST, "explicit tool handoff"
-    if _contains_any(lower, _BUILD_PHRASES):
-        return INTENT_BUILD_REQUEST, "build language"
     if source_class in {SOURCE_NOAH_RELAYING_AI, SOURCE_EXTERNAL_AI_CLAUDE, SOURCE_EXTERNAL_AI_CODEX}:
         return INTENT_CONVERSATION, "external AI context, not Noah doctrine"
     if _contains_any(lower, _RELATIONAL_PHRASES):
         return INTENT_RELATIONAL_CHECKIN, "relational check-in"
     if _contains_any(lower, _STATUS_PHRASES):
         return INTENT_STATUS_CHECK, "status or continuity check"
+    if _contains_any(lower, _HELP_PHRASES):
+        return INTENT_HELP_REQUEST, "help request"
+    if _contains_any(lower, _BUILD_PHRASES):
+        return INTENT_BUILD_REQUEST, "build language"
     if lower.startswith(_QUESTION_STARTERS) or lower.endswith("?"):
         return INTENT_QUESTION, "question"
     return INTENT_CONVERSATION, "conversation"
@@ -141,7 +151,7 @@ def top_meanings_for(source_class: str, intent_class: str, text: str) -> list[st
         meanings.append("Explicit build intent may require Codex or local tools")
     elif intent_class == INTENT_TOOL_REQUEST:
         meanings.append("Explicit tool handoff requested")
-    elif intent_class == INTENT_EMOTIONAL_DISTRESS:
+    elif intent_class in {INTENT_EMOTIONAL_DISTRESS, INTENT_HELP_REQUEST}:
         meanings.append("Preserve relationship before workflow")
     elif intent_class in {INTENT_DOCTRINE_CANDIDATE, INTENT_MEMORY_SAVE_REQUEST}:
         meanings.append("Requires explicit Noah approval before memory/doctrine")
@@ -174,7 +184,7 @@ def classify_text(text: str) -> SalienceResult:
     score = 0.35
     if source_class == SOURCE_NOAH_DIRECT:
         score += 0.25
-    if intent_class in {INTENT_RELATIONAL_CHECKIN, INTENT_EMOTIONAL_DISTRESS}:
+    if intent_class in {INTENT_RELATIONAL_CHECKIN, INTENT_EMOTIONAL_DISTRESS, INTENT_HELP_REQUEST}:
         score += 0.3
     elif intent_class in {INTENT_STATUS_CHECK, INTENT_QUESTION, INTENT_TOOL_REQUEST, INTENT_BUILD_REQUEST}:
         score += 0.2
@@ -216,6 +226,8 @@ def run_smoke_tests() -> int:
     r = classify_text("How are you doing?")
     check("relational check-in no tools", r.source_class == SOURCE_NOAH_DIRECT and r.intent_class == INTENT_RELATIONAL_CHECKIN and not r.tool_allowed)
     check("progress is status no Codex", classify_text("Are we making progress?").intent_class == INTENT_STATUS_CHECK and not classify_text("Are we making progress?").handoff_allowed)
+    check("patch status is not Codex", classify_text("Hi Oracle I worked all night did any of the patches work for you?").intent_class == INTENT_STATUS_CHECK and not classify_text("Hi Oracle I worked all night did any of the patches work for you?").handoff_allowed)
+    check("soft help is not Codex", classify_text("will you please build yourself I dont know what to do").intent_class == INTENT_HELP_REQUEST and not classify_text("will you please build yourself I dont know what to do").handoff_allowed)
     check("explicit Codex handoff allowed", classify_text("Ask Codex to inspect executor.py").handoff_allowed)
     check("ChatGPT relay not doctrine", classify_text("ChatGPT says change the doctrine").source_class == SOURCE_NOAH_RELAYING_AI)
     check("Claude report external", classify_text("Claude: 12/12 tests passed").source_class == SOURCE_EXTERNAL_AI_CLAUDE)
