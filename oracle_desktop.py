@@ -141,6 +141,8 @@ class OracleProcess:
             return False
         if all(ch in "-_= ." for ch in text):
             return True
+        if all(ch in set("-_= .─━═") for ch in text):
+            return True
         banner_markers = (
             "████", "╔", "╗", "╚", "╝", "║", "═",
             "SOVEREIGN OPERATOR LAYER",
@@ -152,9 +154,14 @@ class OracleProcess:
             "LAST MILESTONE",
             "RESUMING",
             "Last session:",
+            "Local SOV1 vision working",
+            "Next: Run /pending",
+            "ONE NEXT ACTION:",
             "Good morning,",
             "Good afternoon,",
             "Good evening,",
+            "Monday,", "Tuesday,", "Wednesday,", "Thursday,",
+            "Friday,", "Saturday,", "Sunday,",
             "Active constructs:",
             "◆ /pending",
         )
@@ -214,7 +221,7 @@ class OracleDesktopApp:
     # ── UI construction ───────────────────────────────────────────────────
 
     def _build_ui(self):
-        self.root.title("ORACLE Resident Console")
+        self.root.title("ORACLE - Local Conversation")
         self.root.configure(bg=self.BG)
         self.root.geometry("1180x760")
         self.root.minsize(900, 580)
@@ -229,7 +236,7 @@ class OracleDesktopApp:
         ).pack(side=tk.LEFT, padx=(0, 10))
 
         tk.Label(
-            top, text="Resident Console", bg=self.BG, fg=self.FG_DIM,
+            top, text="Local Conversation", bg=self.BG, fg=self.FG_DIM,
             font=("Segoe UI", 11)
         ).pack(side=tk.LEFT, padx=(0, 18))
 
@@ -265,9 +272,9 @@ class OracleDesktopApp:
         # Conversation pane
         self._chat = scrolledtext.ScrolledText(
             main, bg="#0b0f16", fg=self.FG,
-            font=self.FONT_MONO,
+            font=("Segoe UI", 11),
             relief=tk.FLAT, wrap=tk.WORD,
-            padx=14, pady=12,
+            padx=18, pady=14,
             state=tk.DISABLED,
             insertbackground=self.ACCENT,
             selectbackground="#24364a",
@@ -278,10 +285,30 @@ class OracleDesktopApp:
         for label, color in _LABEL_COLORS.items():
             self._chat.tag_configure(label, foreground=color)
         self._chat.tag_configure("dim", foreground=self.FG_DIM)
-        self._chat.tag_configure("bold", font=("Consolas", 11, "bold"))
-        self._chat.tag_configure("oracle", foreground=self.ACCENT, font=("Consolas", 11, "bold"))
+        self._chat.tag_configure("bold", font=("Segoe UI", 11, "bold"))
+        self._chat.tag_configure("oracle", foreground=self.ACCENT, font=("Segoe UI", 11, "bold"))
         self._chat.tag_configure("system", foreground=self.GREEN)
         self._chat.tag_configure("warn", foreground=self.YELLOW)
+        self._chat.tag_configure(
+            "user_msg", foreground=self.FG, background="#20304a",
+            lmargin1=120, lmargin2=120, rmargin=12,
+            spacing1=8, spacing3=8, justify=tk.RIGHT,
+        )
+        self._chat.tag_configure(
+            "oracle_msg", foreground=self.FG, background="#172231",
+            lmargin1=12, lmargin2=12, rmargin=120,
+            spacing1=8, spacing3=8,
+        )
+        self._chat.tag_configure(
+            "meta_msg", foreground=self.FG_DIM,
+            lmargin1=12, lmargin2=12, rmargin=80,
+            spacing1=5, spacing3=5,
+        )
+        self._chat.tag_configure(
+            "warn_msg", foreground=self.YELLOW, background="#2c2617",
+            lmargin1=12, lmargin2=12, rmargin=80,
+            spacing1=8, spacing3=8,
+        )
 
         # Status panel
         panel = tk.Frame(main, bg=self.BG_PANEL, width=290)
@@ -294,7 +321,7 @@ class OracleDesktopApp:
         ).pack(pady=(16, 4))
 
         self._summary = tk.Label(
-            panel, text="Awake, local, governed.", bg=self.BG_PANEL,
+            panel, text="Awake locally. Direct conversation has priority.", bg=self.BG_PANEL,
             fg=self.FG_DIM, font=self.FONT_UI, wraplength=250, justify=tk.LEFT
         )
         self._summary.pack(fill=tk.X, padx=16, pady=(0, 10))
@@ -334,6 +361,7 @@ class OracleDesktopApp:
         ).pack(anchor="w", padx=14, pady=(2, 6))
 
         for label, cmd, color in [
+            ("Talk to Oracle", "How are you doing?", self.ACCENT),
             ("Wake cycle", "run one resident cycle", self.GREEN),
             ("Pending approvals", "/pending", self.YELLOW),
             ("Memory", "/memory", self.BLUE),
@@ -354,7 +382,7 @@ class OracleDesktopApp:
 
         self._input = tk.Entry(
             bottom, bg=self.BG_INPUT, fg=self.FG,
-            font=self.FONT_MONO, relief=tk.FLAT,
+            font=("Segoe UI", 11), relief=tk.FLAT,
             insertbackground=self.ACCENT,
         )
         self._input.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(14, 6), pady=12)
@@ -383,10 +411,10 @@ class OracleDesktopApp:
     # ── Oracle process ────────────────────────────────────────────────────
 
     def _start_oracle(self):
-        self._append_line("Starting local runtime...", tag="dim")
-        self._append_line("ORACLE Resident Console", tag="oracle")
-        self._append_line("Awake on local runtime. Routine in-scope work is delegated; major changes still come back to Noah.", tag="system")
-        self._append_line("Try: 'run one resident cycle' or 'show me your status'.", tag="dim")
+        self._append_line("Starting local runtime...", tag="meta_msg")
+        self._append_line("ORACLE is waking locally.", tag="oracle_msg")
+        self._append_line("Direct conversation comes first. Routine in-scope work can wait behind Noah.", tag="system")
+        self._append_line("Try: 'How are you doing?' or 'What were we working on?'.", tag="meta_msg")
         self._append_line("", tag="dim")
         self.oracle.start()
         # Kick off a background status refresh in 3 seconds
@@ -435,19 +463,48 @@ class OracleDesktopApp:
         self._status_vars["pending"].set(str(pending))
         if hasattr(self, "_summary"):
             pending_note = "No pending approvals" if pending == 0 else f"{pending} approval item(s) waiting"
-            self._summary.config(text=f"Awake locally. Delegated routine work is enabled. {pending_note}.")
+            self._summary.config(text=f"Awake locally. Direct conversation has priority. {pending_note}.")
         self._status_vars["model_name"].set(str(s.get("model", "—")))
 
     # ── Chat pane helpers ─────────────────────────────────────────────────
 
+    def _normalize_runtime_line(self, text: str) -> str:
+        stripped = text.strip()
+        if stripped.startswith("│") and stripped.endswith("│"):
+            stripped = stripped.strip("│").strip()
+        if stripped.startswith("┌") or stripped.startswith("└"):
+            return ""
+        if stripped in {"Oracle", "Oracle:"}:
+            return ""
+        return stripped
+
+    def _display_tag_for(self, text: str, tag: str | None) -> str | None:
+        if tag:
+            return tag
+        stripped = text.strip()
+        if stripped.startswith("You:"):
+            return "user_msg"
+        if stripped.startswith(("[APPROVAL REQUIRED]", "[BLOCKED]", "[GOVERNANCE]")):
+            return "warn_msg"
+        if stripped.startswith(("[CONTINUITY]", "[PENDING STEP]", "[CODEX CHANNEL]", "[CLAUDE RESPONSE]")):
+            return "meta_msg"
+        if stripped.startswith(("[ORACLE]", "Oracle:", "I'm here", "Better than yesterday")):
+            return "oracle_msg"
+        for label in _LABEL_COLORS:
+            if stripped.startswith(label):
+                return label
+        return "oracle_msg"
+
     def _append_line(self, text: str, tag: str | None = None):
+        text = self._normalize_runtime_line(text)
+        if not text and tag != "dim":
+            return
+        tag = self._display_tag_for(text, tag)
+        if text.startswith("You:"):
+            text = text[4:].strip()
+        if text.startswith("[ORACLE]"):
+            text = text[len("[ORACLE]"):].strip()
         self._chat.config(state=tk.NORMAL)
-        if not tag:
-            # Auto-detect a label at the start of the line
-            for label in _LABEL_COLORS:
-                if text.strip().startswith(label):
-                    tag = label
-                    break
         if tag:
             self._chat.insert(tk.END, text + "\n", tag)
         else:
@@ -465,14 +522,14 @@ class OracleDesktopApp:
         self._input_history.append(text)
         self._history_idx = -1
         # Show in chat
-        self._append_line(f"You: {text}", tag="You:")
+        self._append_line(f"You: {text}", tag="user_msg")
         # Push to oracle
         self.oracle.send(text)
         # Update last-action label
         self._lbl_last.config(text=f"Last: {text[:40]}")
 
     def _send_command(self, cmd: str):
-        self._append_line(f"You: {cmd}", tag="You:")
+        self._append_line(f"You: {cmd}", tag="user_msg")
         self.oracle.send(cmd)
 
     def _history_up(self, event=None):

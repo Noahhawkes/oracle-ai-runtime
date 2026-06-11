@@ -1455,6 +1455,9 @@ def main():
         system_prompt = _wake_ctx + "\n\n" + system_prompt
     except Exception as _wm_err:
         log("WAKE_MEMORY_WARN", f"wake memory load failed: {_wm_err}")
+        print(f"ERROR: Wake Memory unavailable: {_wm_err}")
+        print("Refusing to start without prompt anchors. Run: python core/wake_memory.py --show")
+        sys.exit(1)
     # ── End wake memory injection ─────────────────────────────────────────────
 
     pass  # local mode — no diagnostic chatter
@@ -1572,8 +1575,10 @@ def main():
         try:
             from cognitive_kernel import (
                 INTENT_APPROVAL_REQUIRED,
+                INTENT_CONVERSATION,
                 INTENT_PROCEED_PENDING,
                 INTENT_SHOW_PENDING,
+                INTENT_STATUS,
                 KERNEL_ACT,
                 KERNEL_ASK,
                 KERNEL_DEFER,
@@ -1593,6 +1598,32 @@ def main():
                 pending_intent=_pending_runtime_step,
                 has_pending_items=_has_pending_items,
             )
+            if _cog.intent == INTENT_STATUS:
+                try:
+                    from cognitive_kernel import resident_wake_report
+                    _wake = resident_wake_report()
+                    _pending_intent = _wake.get("pending_intent")
+                    print(f"\n  {C['cyan']}[CONTINUITY]{C['reset']}")
+                    print(f"  Mode          : {_wake.get('current_mode', 'LOCAL')}")
+                    print(f"  Project       : {_wake.get('active_project', 'ORACLE.AI')}")
+                    if isinstance(_pending_intent, dict) and _pending_intent.get("text"):
+                        print(f"  Pending intent: {_pending_intent.get('text', '')[:140]}")
+                    else:
+                        print("  Pending intent: none")
+                    print(f"  Blockers      : {', '.join((_wake.get('blockers') or [])[:2]) if _wake.get('blockers') else 'none'}")
+                    print(f"  Next safe     : {_wake.get('next_safe_action', 'wait')}")
+                    print(f"  Pending items : {_wake.get('pending_approvals', 0)}")
+                    print(f"  Codex unread  : {'YES' if _wake.get('codex_unread') else 'no'}\n")
+                except Exception as e:
+                    print(f"\n[continuity error: {e}]\n")
+                continue
+            if _cog.intent == INTENT_CONVERSATION and getattr(_cog, "reason", "") == "social check-in":
+                print(f"\n  {C['byellow']}[ORACLE]{C['reset']} I'm here, Noah.")
+                print("  Better than yesterday: the Codex bridge is awake, Drive Scope is enforcing boundaries,")
+                print("  and the kernel is learning to tell conversation apart from work.")
+                print("  Biggest weakness right now: I still need this reasoning layer tightened so I don't")
+                print("  over-route ordinary conversation into tools.\n")
+                continue
             if _cog.intent == INTENT_SHOW_PENDING:
                 if _pending_runtime_step:
                     print(f"\n  {C['cyan']}[PENDING STEP]{C['reset']}")

@@ -144,12 +144,9 @@ def _chat_local(history: list[dict], system: str, model: str) -> str:
 
 
 def _load_wake_context() -> str:
-    """Load wake memory and return the formatted context block. Silent fallback."""
-    try:
-        from wake_memory import load_wake_memory, format_wake_context
-        return format_wake_context(load_wake_memory())
-    except Exception:
-        return ""
+    """Load wake memory and return the formatted context block."""
+    from wake_memory import load_wake_memory, format_wake_context
+    return format_wake_context(load_wake_memory())
 
 
 def _build_system_prompt(session_notes: list[str]) -> str:
@@ -328,8 +325,8 @@ def main() -> None:
                 try:
                     from wake_memory import save_session_summary
                     save_session_summary(session_notes[-1])
-                except Exception:
-                    pass
+                except Exception as exc:
+                    print(f"\n  [Wake memory save failed: {exc}]\n")
             break
 
         # ── /wake-memory — show what ORACLE remembers ─────────────────────────

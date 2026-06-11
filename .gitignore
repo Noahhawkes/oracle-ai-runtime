@@ -50,3 +50,6 @@ build/
 
 # Raw thread exports — never commit raw conversation text
 thread_exports/
+
+# Local AI bridge/message logs - runtime coordination, not source
+Messages/*.md

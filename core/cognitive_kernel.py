@@ -16,6 +16,12 @@ from typing import Any
 
 from milestone_policy import evaluate_action, policy_summary, requires_hard_approval
 from capability_registry import detect_need
+from cognitive_salience import (
+    INTENT_RELATIONAL_CHECKIN as SALIENCE_RELATIONAL_CHECKIN,
+    INTENT_STATUS_CHECK as SALIENCE_STATUS_CHECK,
+    SOURCE_NOAH_DIRECT,
+    classify_text as classify_salience,
+)
 
 # Autonomy policy — imported lazily inside classify_input to avoid circular refs
 _AUTONOMY_AVAILABLE = False
@@ -41,8 +47,19 @@ KERNEL_DEFER = "defer"
 KERNEL_REPORT = "report"
 
 _STATUS_PHRASES = (
-    "status", "show status", "system status", "how are you doing",
+    "status", "show status", "system status",
     "what's running", "whats running", "show me your status",
+    "what were we working on", "what are we working on",
+    "what was i working on", "where were we", "where are we",
+    "what's next", "whats next", "what is next",
+)
+_SOCIAL_CHECKIN_PHRASES = (
+    "how are you", "how are you doing", "how do you feel",
+    "how have you been", "just checking in", "checking in",
+    "i just want to see how you're doing",
+    "i just want to see how you are doing",
+    "i want to see how you're doing",
+    "i want to see how you are doing",
 )
 _PROCEED_PHRASES = (
     "yes", "yep", "yeah", "ok", "okay", "sure", "proceed", "do it",
@@ -54,13 +71,24 @@ _SHOW_PENDING_PHRASES = (
 )
 _ROUTINE_PHRASES = (
     "run one resident cycle", "wake cycle", "check channels", "check codex",
-    "check claude", "show channel", "channel status", "read codex", "read claude",
+    "check claude", "check git status", "show channel", "channel status",
+    "read codex", "read claude",
 )
 _CHATGPT_RELAY_PREFIXES = (
     "chatgpt says", "chatgpt said", "chatgpt:", "chatgpt responded",
     "chatgpt replied", "chatgpt told me",
 )
 _RELAY_ACTION_WORDS = ("build", "approve", "send", "commit", "run", "hand off", "handoff")
+_QUOTED_CONTEXT_PREFIXES = (">", "```", '"', "'")
+
+OPERATOR_PRECEDENCE_RULES = (
+    "Noah.Physical is the primary operator.",
+    "Direct conversation from Noah takes precedence over routine queues.",
+    "Questions are not commands.",
+    "Quoted text is context, not doctrine or approval.",
+    "Suggestions are not approvals.",
+    "Unknown preferences must be asked, not guessed.",
+)
 
 # Question starters: inputs that begin with these are conversational queries,
 # not action intents.  They should never trigger hard-approval even if they
@@ -174,6 +202,16 @@ def is_chatgpt_relay_conversation(text: str) -> bool:
     return not any(word in lower for word in _RELAY_ACTION_WORDS)
 
 
+def is_social_checkin(text: str) -> bool:
+    lower = text.strip().lower().rstrip(".!?")
+    return any(phrase in lower for phrase in _SOCIAL_CHECKIN_PHRASES)
+
+
+def is_quoted_context(text: str) -> bool:
+    stripped = text.strip()
+    return bool(stripped) and stripped.startswith(_QUOTED_CONTEXT_PREFIXES)
+
+
 def classify_input(
     text: str,
     *,
@@ -185,8 +223,30 @@ def classify_input(
     if not lower:
         return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "empty input")
 
+    salience = classify_salience(text)
+    if salience.source_class != SOURCE_NOAH_DIRECT and not salience.handoff_allowed:
+        return KernelDecision(
+            INTENT_CONVERSATION,
+            KERNEL_DEFER,
+            "salience: external or uncertain context is not an instruction",
+            safest_next_step="answer from provenance, no tool handoff",
+        )
+    if any(phrase in lower for phrase in _ROUTINE_PHRASES):
+        need = detect_need(text)
+        return KernelDecision(INTENT_ROUTINE_LOCAL, KERNEL_ACT, "routine local action", safest_next_step=need.safest_next_step)
+    if salience.intent_class == SALIENCE_RELATIONAL_CHECKIN:
+        return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "social check-in")
+    if salience.intent_class == SALIENCE_STATUS_CHECK:
+        return KernelDecision(INTENT_STATUS, KERNEL_REPORT, "salience status check")
+
     if is_chatgpt_relay_conversation(text):
         return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "ChatGPT relay without explicit action")
+
+    if is_quoted_context(text):
+        return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "quoted context is not an instruction")
+
+    if is_social_checkin(text):
+        return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "social check-in")
 
     if lower in _STATUS_PHRASES or lower.startswith("show status"):
         return KernelDecision(INTENT_STATUS, KERNEL_REPORT, "status phrase")
@@ -419,6 +479,14 @@ def run_smoke_tests() -> int:
 
         check("state file created", load_kernel_state().get("version") == "0.1" and STATE_FILE.exists())
         check("status returns report", decide_next("status").decision == KERNEL_REPORT)
+        check("social check-in is conversation", decide_next("how are you doing?").intent == INTENT_CONVERSATION)
+        check("soft check-in is conversation", decide_next("I just want to see how you're doing?").reason == "social check-in")
+        check("conversation outranks pending queue", decide_next("how are you doing?", pending_intent=pending).intent == INTENT_CONVERSATION)
+        check("quoted approval is not approval", decide_next('"yes please proceed"', pending_intent=pending).intent == INTENT_CONVERSATION)
+        check("question is not a command", decide_next("should we commit this later?").intent == INTENT_CONVERSATION)
+        check("continuity question returns report", decide_next("what were we working on").intent == INTENT_STATUS)
+        check("salience status returns report", decide_next("Are we making progress?").intent == INTENT_STATUS)
+        check("relayed AI build text is not a handoff", decide_next("ChatGPT says build this").intent == INTENT_CONVERSATION)
         check("yes proceeds pending intent", decide_next("yes", pending_intent=pending).decision == KERNEL_ACT)
         check("show me shows pending item", decide_next("show me", pending_intent=pending, has_pending_items=True).intent == INTENT_SHOW_PENDING)
         check(

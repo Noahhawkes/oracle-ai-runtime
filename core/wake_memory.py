@@ -8,7 +8,7 @@ Rules:
   - No raw transcripts stored.
   - No secrets stored.
   - Short enough to fit every prompt (target < 600 chars injected).
-  - If file is missing, a safe default is created automatically.
+  - If the live file is missing or corrupt, runtime fails loud.
   - Update is always a human-readable short summary, not raw session data.
 
 Usage:
@@ -26,6 +26,7 @@ CLI:
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -67,17 +68,20 @@ _DEFAULT_WAKE_MEMORY: dict[str, Any] = {
 }
 
 
+class WakeMemoryUnavailable(RuntimeError):
+    """Raised when Wake Memory cannot be trusted for runtime prompt anchoring."""
+
+
 # ── Load ──────────────────────────────────────────────────────────────────────
 
 def load_wake_memory() -> dict[str, Any]:
     """
     Load wake memory from disk. Returns the dict.
-    Creates the safe default file if missing or unreadable.
-    Never raises.
+    Raises WakeMemoryUnavailable if the live anchor file is missing,
+    malformed, or not a JSON object. Runtime callers should fail loud.
     """
     if not WAKE_MEMORY_FILE.exists():
-        _write_wake_memory(_DEFAULT_WAKE_MEMORY.copy())
-        return _DEFAULT_WAKE_MEMORY.copy()
+        raise WakeMemoryUnavailable(f"wake memory file missing: {WAKE_MEMORY_FILE}")
     try:
         data = json.loads(WAKE_MEMORY_FILE.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
@@ -86,8 +90,8 @@ def load_wake_memory() -> dict[str, Any]:
         merged = _DEFAULT_WAKE_MEMORY.copy()
         merged.update(data)
         return merged
-    except Exception:
-        return _DEFAULT_WAKE_MEMORY.copy()
+    except Exception as exc:
+        raise WakeMemoryUnavailable(f"wake memory file unreadable: {WAKE_MEMORY_FILE}: {exc}") from exc
 
 
 # ── Format ────────────────────────────────────────────────────────────────────
@@ -232,10 +236,16 @@ def _sanitize(text: str) -> str:
 
 def _write_wake_memory(data: dict[str, Any]) -> None:
     WAKE_MEMORY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    WAKE_MEMORY_FILE.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    payload = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    tmp = WAKE_MEMORY_FILE.with_name(WAKE_MEMORY_FILE.name + ".tmp")
+    with tmp.open("w", encoding="utf-8") as fh:
+        fh.write(payload)
+        fh.flush()
+        os.fsync(fh.fileno())
+    tmp.replace(WAKE_MEMORY_FILE)
+    loaded = json.loads(WAKE_MEMORY_FILE.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict):
+        raise WakeMemoryUnavailable(f"atomic write verification failed: {WAKE_MEMORY_FILE}")
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -297,8 +307,15 @@ def run_smoke_tests() -> int:
 
     try:
         # 1. Missing file → safe default created
+        try:
+            load_wake_memory()
+            missing_failed_loud = False
+        except WakeMemoryUnavailable:
+            missing_failed_loud = True
+        check("missing file fails loud", missing_failed_loud)
+        _write_wake_memory(_DEFAULT_WAKE_MEMORY.copy())
         wake = load_wake_memory()
-        check("missing file creates safe default", tmp_file.exists())
+        check("explicit default seed is loadable", tmp_file.exists())
         check("default has identity", "identity" in wake)
         check("default has noah key", "noah" in wake.get("identity", {}))
         check("default has oracle key", "oracle" in wake.get("identity", {}))
@@ -315,6 +332,7 @@ def run_smoke_tests() -> int:
         update_wake_memory(last_session_summary="We built Wake Memory together.")
         wake2 = load_wake_memory()
         check("update stores session summary", "Wake Memory" in wake2.get("last_session_summary", ""))
+        check("atomic write leaves no temp file", not tmp_file.with_name(tmp_file.name + ".tmp").exists())
 
         # 4. update_wake_memory — next action
         update_wake_memory(single_next_action="Test wake memory tomorrow.")
@@ -359,8 +377,12 @@ def run_smoke_tests() -> int:
 
         # 12. Corrupt file → falls back to default
         tmp_file.write_text("NOT VALID JSON ][", encoding="utf-8")
-        wake_corrupt = load_wake_memory()
-        check("corrupt file returns default", "identity" in wake_corrupt)
+        try:
+            load_wake_memory()
+            corrupt_failed_loud = False
+        except WakeMemoryUnavailable:
+            corrupt_failed_loud = True
+        check("corrupt file fails loud", corrupt_failed_loud)
 
         # 13. format_wake_context with full data
         full = {
