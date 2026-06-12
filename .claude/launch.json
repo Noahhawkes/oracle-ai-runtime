@@ -7,6 +7,13 @@
       "runtimeArgs": ["core/oracle.py"],
       "port": null,
       "note": "Terminal-based assistant. Requires ANTHROPIC_API_KEY in .env."
+    },
+    {
+      "name": "oracle-ui",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["oracle_server.py", "--port", "7777"],
+      "port": 7777,
+      "autoPort": false
     }
   ]
 }
