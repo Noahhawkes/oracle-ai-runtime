@@ -235,8 +235,56 @@ def execute_tool(tool_name: str, tool_input: dict) -> str:
     """
     Dispatch a tool call. Returns a string result to feed back to Claude.
     All calls are logged via audit_log.
+
+    Every call passes through the Runtime Output Validator before dispatch.
+    A BLOCKED result short-circuits execution and returns the violation list
+    so the caller can surface it to Noah or request approval.
     """
     from audit_log import log
+
+    # ── Runtime Output Validator gate ─────────────────────────────────────────
+    try:
+        from output_validator import validate_tool_call, ApprovalState, SourceContext
+        _vr = validate_tool_call(
+            tool_name=tool_name,
+            tool_input=tool_input,
+            source_context=SourceContext.MODEL_OUTPUT,
+            # Tool executor always starts with NONE; callers that have obtained
+            # explicit approval should call validate_tool_call directly and
+            # pass the result through before calling execute_tool.
+            approval_state=ApprovalState.NONE,
+        )
+        if not _vr.valid:
+            log("BLOCKED", f"output_validator blocked {tool_name}: {_vr.violations}")
+            lines = [f"[BLOCKED by output validator] {tool_name}"]
+            for v in _vr.violations:
+                lines.append(f"  • {v}")
+            lines.append(f"  next: {_vr.safe_next_action}")
+            return "\n".join(lines)
+    except ImportError as _ve:
+        # Fail-closed: a missing validator is not a pass. Block execution and
+        # return a diagnostic. Fix: ensure core/output_validator.py is present.
+        _msg = (
+            f"[BLOCKED] output_validator unavailable (ImportError: {_ve}). "
+            f"Cannot execute '{tool_name}' without the validation layer. "
+            f"Check that core/output_validator.py is present and importable."
+        )
+        try:
+            log("BLOCKED", _msg)
+        except Exception:
+            pass
+        return _msg
+    except Exception as _ve:
+        # Any validator error also blocks — never let a validation crash become a pass.
+        _msg = (
+            f"[BLOCKED] output_validator raised an unexpected error ({type(_ve).__name__}: {_ve}). "
+            f"Cannot execute '{tool_name}'. Check core/output_validator.py."
+        )
+        try:
+            log("BLOCKED", _msg)
+        except Exception:
+            pass
+        return _msg
 
     try:
         if tool_name == "open_app":
