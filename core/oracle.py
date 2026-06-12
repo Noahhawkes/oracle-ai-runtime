@@ -1508,6 +1508,17 @@ def main():
     _ctx = get_live_context()
     _ctx.set_task("Interactive session")
 
+    # ── Meaning Engine — OBS watcher background thread ───────────────────────
+    try:
+        import threading
+        from meaning_engine import watch as _me_watch
+        _me_thread = threading.Thread(target=_me_watch, daemon=True, name="meaning_engine")
+        _me_thread.start()
+        log("MEANING_ENGINE", "OBS watcher started (background)")
+    except Exception as _me_err:
+        log("MEANING_ENGINE_WARN", f"could not start OBS watcher: {_me_err}")
+    # ── End Meaning Engine ────────────────────────────────────────────────────
+
     _last_pending_ids: list = []           # populated by /pending, consumed by approve/reject
     _last_pending_secret_flags: list[bool] = []  # parallel list — True = secret-blocked
     _pending_scope_review: bool = False    # True after ORACLE proposes a scope-path review
