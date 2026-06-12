@@ -1539,47 +1539,66 @@ def main():
         except Exception:
             pass
 
-    banner(identity)
-    print(f"  {C['bmagenta'] if _oracle_mode == MODE_COMPANION else C['byellow']}ORACLE MODE: {_oracle_mode}{C['reset']}")
-    if _no_route:
-        print(f"  {C['bmagenta']}NO-ROUTE: ON{C['reset']}  {C['dim']}local conversation only{C['reset']}")
-    print()
+    _fast_mode = "--fast" in sys.argv or "-f" in sys.argv
+
+    if _fast_mode:
+        # Fast mode: skip all animation, print one line, accept input immediately.
+        mode_color = C['bmagenta'] if _oracle_mode == MODE_COMPANION else C['byellow']
+        print(f"\n  {C['bcyan']}ORACLE{C['reset']}  {mode_color}{_oracle_mode}{C['reset']}  {C['grey']}ready{C['reset']}\n")
+    else:
+        banner(identity)
+        print(f"  {C['bmagenta'] if _oracle_mode == MODE_COMPANION else C['byellow']}ORACLE MODE: {_oracle_mode}{C['reset']}")
+        if _no_route:
+            print(f"  {C['bmagenta']}NO-ROUTE: ON{C['reset']}  {C['dim']}local conversation only{C['reset']}")
+        print()
+
     log("SESSION_START", f"Session {session_id} started")
 
     _claude_cli_found = shutil.which("claude") is not None
     _claude_win_found = _claude_available_now()
 
-    # Resident wake: read-only continuity snapshot, then wait.
-    try:
-        from cognitive_kernel import resident_wake_report
-        from voice import speak_prompt
-        _wake = resident_wake_report()
-        _pending_n = int(_wake.get("pending_approvals", 0) or 0)
-        _codex_unread = bool(_wake.get("codex_unread"))
-        _pending_intent = _wake.get("pending_intent")
-        _blockers = _wake.get("blockers") or []
+    # Resident wake: run in background so it never blocks the prompt.
+    _wake: dict = {}
+    _pending_n = 0
+    _codex_unread = False
+    _pending_intent = None
+    _blockers: list = []
 
-        print(f"\n  {C['cyan']}* ORACLE AWAKE{C['reset']} local governed continuity loaded")
-        print(f"  Current mode   : {_wake.get('current_mode', 'LOCAL')}")
-        print(f"  Active project : {_wake.get('active_project', 'ORACLE.AI')}")
-        print(f"  Pending intent : {str(_pending_intent.get('text', ''))[:100] if isinstance(_pending_intent, dict) else 'none'}")
-        print(f"  Blockers       : {', '.join(_blockers[:2]) if _blockers else 'none'}")
-        print(f"  Next safe      : {_wake.get('next_safe_action', 'wait')}")
-        print(f"  Pending approvals : {_pending_n}")
-        print(f"  Codex unread      : {'YES' if _codex_unread else 'no'}")
-        _focus_report = _wake.get("focus_report", "")
-        if _focus_report:
-            print()
-            print(_focus_report)
-        print()
-        speak_prompt("I'm up.")
-    except Exception:
-        pass
-    # End resident wake.
+    def _load_wake_bg():
+        nonlocal _wake, _pending_n, _codex_unread, _pending_intent, _blockers
+        try:
+            from cognitive_kernel import resident_wake_report
+            _wake = resident_wake_report()
+            _pending_n = int(_wake.get("pending_approvals", 0) or 0)
+            _codex_unread = bool(_wake.get("codex_unread"))
+            _pending_intent = _wake.get("pending_intent")
+            _blockers = _wake.get("blockers") or []
+            if not _fast_mode:
+                _focus = _wake.get("focus_report", "")
+                if _focus:
+                    print(f"\n{_focus}\n")
+                if _pending_n:
+                    print(f"  {C['byellow']}» {_pending_n} pending approval(s) — type /pending to review{C['reset']}\n")
+        except Exception:
+            pass
+
+    import threading as _th
+    _wake_thread = _th.Thread(target=_load_wake_bg, daemon=True, name="wake_bg")
+    _wake_thread.start()
+
+    if not _fast_mode:
+        # In normal mode wait briefly so the wake report can print before first prompt.
+        _wake_thread.join(timeout=1.5)
+        try:
+            from voice import speak_prompt
+            speak_prompt("I'm up.")
+        except Exception:
+            pass
 
     while True:
         try:
-            user_input = input(f"ORACLE MODE: {_oracle_mode}\nYou: ").strip()
+            _prompt = f"» " if _fast_mode else f"ORACLE MODE: {_oracle_mode}\nYou: "
+        user_input = input(_prompt).strip()
         except (EOFError, KeyboardInterrupt):
             print("\n\nOracle offline. Session saved.")
             log("SESSION_END", f"Session {session_id} ended")
