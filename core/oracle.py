@@ -32,6 +32,18 @@ from tools.definitions import TOOL_DEFINITIONS
 from tools.executor import execute_tool
 from llm import is_local, make_client, get_model, to_openai_tools, startup_status
 from voice import speak, set_voice_enabled, is_voice_enabled
+from conversation_mode import (
+    MODE_BUILDER,
+    MODE_COMPANION,
+    begin_debug_turn,
+    classify_route as classify_conversation_route,
+    direct_response,
+    ensure_personality_seed,
+    echo_last_prompt,
+    format_debug_context,
+    load_mode_state,
+    save_mode_state,
+)
 
 MAX_TOKENS = 4096
 MAX_TOOL_CALLS_PER_TURN = 3    # hard cap — local 7B models loop; keep it tight
@@ -322,6 +334,35 @@ def _classify_interaction_mode(text: str) -> str:
         t in lower for t in ("[oracle]", "[local mode]", "[governance]", "[claude code error]", "sovereign operator layer")
     ):
         return "DIAGNOSTIC"
+
+    # Noah.Direct relationship/status/help messages outrank stale work and
+    # implementation keywords unless Noah explicitly asks for an AI handoff.
+    try:
+        from cognitive_salience import (
+            INTENT_EMOTIONAL_DISCLOSURE,
+            INTENT_EMOTIONAL_DISTRESS,
+            INTENT_HELP_REQUEST,
+            INTENT_RELATIONAL_CHECKIN,
+            INTENT_STATUS_CHECK,
+            SOURCE_NOAH_DIRECT,
+            classify_text,
+        )
+        _salience = classify_text(text)
+        if (
+            _salience.source_class == SOURCE_NOAH_DIRECT
+            and not _salience.handoff_allowed
+            and _salience.intent_class in {
+                INTENT_RELATIONAL_CHECKIN,
+                INTENT_STATUS_CHECK,
+                INTENT_EMOTIONAL_DISTRESS,
+                INTENT_EMOTIONAL_DISCLOSURE,
+                INTENT_HELP_REQUEST,
+            }
+        ):
+            return "CHAT"
+    except Exception:
+        pass
+
     # Explicit Claude delegation always routes to BUILD regardless of other words
     _claude_delegation = ("ask claude", "tell claude", "send to claude", "pass to claude", "use claude")
     if any(t in lower for t in _claude_delegation):
@@ -1471,8 +1512,27 @@ def main():
     _last_pending_secret_flags: list[bool] = []  # parallel list — True = secret-blocked
     _pending_scope_review: bool = False    # True after ORACLE proposes a scope-path review
     _pending_runtime_step: dict | None = None
+    _mode_state = load_mode_state()
+    ensure_personality_seed()
+    _oracle_mode = _mode_state.get("mode", MODE_COMPANION)
+    _no_route = bool(_mode_state.get("no_route"))
+    if "--mode" in sys.argv:
+        try:
+            _arg_mode = sys.argv[sys.argv.index("--mode") + 1].strip().lower()
+            if _arg_mode in ("companion", "chat", "heart"):
+                _mode_state = save_mode_state(mode=MODE_COMPANION)
+            elif _arg_mode in ("builder", "build", "work"):
+                _mode_state = save_mode_state(mode=MODE_BUILDER, no_route=False)
+            _oracle_mode = _mode_state.get("mode", MODE_COMPANION)
+            _no_route = bool(_mode_state.get("no_route"))
+        except Exception:
+            pass
 
     banner(identity)
+    print(f"  {C['bmagenta'] if _oracle_mode == MODE_COMPANION else C['byellow']}ORACLE MODE: {_oracle_mode}{C['reset']}")
+    if _no_route:
+        print(f"  {C['bmagenta']}NO-ROUTE: ON{C['reset']}  {C['dim']}local conversation only{C['reset']}")
+    print()
     log("SESSION_START", f"Session {session_id} started")
 
     _claude_cli_found = shutil.which("claude") is not None
@@ -1495,7 +1555,12 @@ def main():
         print(f"  Blockers       : {', '.join(_blockers[:2]) if _blockers else 'none'}")
         print(f"  Next safe      : {_wake.get('next_safe_action', 'wait')}")
         print(f"  Pending approvals : {_pending_n}")
-        print(f"  Codex unread      : {'YES' if _codex_unread else 'no'}\n")
+        print(f"  Codex unread      : {'YES' if _codex_unread else 'no'}")
+        _focus_report = _wake.get("focus_report", "")
+        if _focus_report:
+            print()
+            print(_focus_report)
+        print()
         speak_prompt("I'm up.")
     except Exception:
         pass
@@ -1503,7 +1568,7 @@ def main():
 
     while True:
         try:
-            user_input = input("You: ").strip()
+            user_input = input(f"ORACLE MODE: {_oracle_mode}\nYou: ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\n\nOracle offline. Session saved.")
             log("SESSION_END", f"Session {session_id} ended")
@@ -1604,6 +1669,46 @@ def main():
             except Exception as e:
                 print(f"\n[working-status error: {e}]\n")
             continue
+
+        # Router-facing salience contract: ordinary non-command conversation
+        # answers directly before channel, cognitive, or builder routing.
+        if not user_input.startswith("/"):
+            _early_route = classify_conversation_route(
+                user_input,
+                current_mode=_oracle_mode,
+                no_route=_no_route,
+            )
+            if _early_route.route == MODE_COMPANION:
+                try:
+                    print(f"  {C['bmagenta']}[COMPANION]{C['reset']} acknowledging now")
+                    save_message(session_id, "user", user_input)
+                    log("INPUT", user_input)
+                    begin_debug_turn(user_input, _early_route, current_mode=_oracle_mode, no_route=_no_route)
+                    direct = direct_response(
+                        user_input,
+                        history=history,
+                        model=model,
+                        timeout_s=4.5,
+                        base_prompt=system_prompt,
+                    )
+                    reply = direct.text
+                    history.append({"role": "user", "content": user_input})
+                    history.append({"role": "assistant", "content": reply})
+                    save_message(session_id, "assistant", reply)
+                    log("OUTPUT", reply[:200] + ("..." if len(reply) > 200 else ""))
+                    if direct.timed_out:
+                        log("COMPANION_TIMEOUT", f"local model timeout for: {user_input[:80]}")
+                    print(f"  {C['bmagenta']}ORACLE MODE: COMPANION{C['reset']}")
+                    _print_oracle_reply(reply)
+                    speak(reply)
+                except Exception as _chat_err:
+                    reply = "I'm here, Noah. The direct local path tripped, but I am not routing this away."
+                    history.append({"role": "user", "content": user_input})
+                    history.append({"role": "assistant", "content": reply})
+                    save_message(session_id, "assistant", reply)
+                    print(f"\n{C['bmagenta']}  [COMPANION FALLBACK]{C['reset']} {reply}\n")
+                    log("COMPANION_ERROR", str(_chat_err))
+                continue
 
         try:
             from oracle_claude_channel import CLAUDE_TO_ORACLE
@@ -1828,7 +1933,14 @@ def main():
                 print(f"  Mode    : {st['mode']}  model: {st['model']}")
                 print(f"  Claude  : {'CONNECTED (window)' if st['claude_window'] else 'window not found'}")
                 print(f"  Hands   : {'ready' if st['hands_ready'] else 'offline'}")
-                print(f"  Pending : {st['pending']} items\n")
+                print(f"  Pending : {st['pending']} items")
+                try:
+                    from salience_filter import focus_report
+                    print()
+                    print(focus_report())
+                    print()
+                except Exception as _sf_err:
+                    print(f"  Focus   : unavailable ({_sf_err})\n")
                 _pending_scope_review = False  # status check clears pending state
                 continue
 
@@ -2542,6 +2654,44 @@ def main():
                 print(f"\n[salience error: {e}]\n")
             continue
 
+        if user_input.lower().startswith("/attention ") or user_input.lower().startswith("/filter "):
+            _prefix = "/attention " if user_input.lower().startswith("/attention ") else "/filter "
+            _attention_text = user_input[len(_prefix):].strip()
+            if not _attention_text:
+                print("\n  Usage: /attention <noisy context to filter>\n")
+                continue
+            try:
+                from attention_filter import attention_filter, format_attention_frame
+                _frame = attention_filter(_attention_text)
+                print("\n" + format_attention_frame(_frame) + "\n")
+            except Exception as e:
+                print(f"\n[attention error: {e}]\n")
+            continue
+
+        if user_input.lower() == "/debug-context":
+            try:
+                print("\n" + format_debug_context() + "\n")
+            except Exception as e:
+                print(f"\n[debug-context error: {e}]\n")
+            continue
+
+        if user_input.lower() == "/echo-prompt":
+            try:
+                print("\n[ECHO PROMPT - REDACTED]\n")
+                print(echo_last_prompt())
+                print()
+            except Exception as e:
+                print(f"\n[echo-prompt error: {e}]\n")
+            continue
+
+        if user_input.lower() in ("/focus", "/salience-focus", "/attention-focus"):
+            try:
+                from salience_filter import focus_report
+                print("\n" + focus_report() + "\n")
+            except Exception as e:
+                print(f"\n[focus error: {e}]\n")
+            continue
+
         # ── /wake-memory — show the current wake memory context ─────────────
         if user_input.lower() in ("/wake-memory", "/wake", "/wm"):
             try:
@@ -2922,6 +3072,13 @@ def main():
             print(f"  {C['grey']}/save-session-summary <s>{W}— same as above (shorthand)")
             print(f"  {C['grey']}/doctor{W}              — live probe: what actually works right now")
             print(f"  {C['grey']}/salience <text>{W}     — classify a turn before routing")
+            print(f"  {C['grey']}/attention <text>{W}    — filter noisy context into 1-5 focus signals")
+            print(f"  {C['grey']}/focus{W}               — show persistent pre-model salience focus")
+            print(f"  {C['grey']}/debug-context{W}       — show last Companion prompt plumbing")
+            print(f"  {C['grey']}/echo-prompt{W}         — print last local model prompt, redacted")
+            print(f"  {C['grey']}/companion{W}           — ORACLE MODE: COMPANION, direct local conversation")
+            print(f"  {C['grey']}/builder{W}             — ORACLE MODE: BUILDER, code/work routing enabled")
+            print(f"  {C['grey']}/no-route{W}            — force local conversation until /builder or /route-on")
             print(f"  {C['grey']}/autonomy{W}            — GREEN/YELLOW/RED zone table: what I can do without approval")
             print(f"  {C['grey']}/why-blocked [input]{W} — explain why the last action was blocked or deferred")
             print(f"  {C['grey']}/desktop-doctor{W}      — live desktop actuation probe")
@@ -2952,6 +3109,40 @@ def main():
             print(f"  {C['grey']}quit{W}                 — exit\n")
             continue
 
+        _cmd_mode = user_input.lower().strip()
+        if _cmd_mode in ("/companion", "companion mode", "/mode companion"):
+            _mode_state = save_mode_state(mode=MODE_COMPANION)
+            _oracle_mode = MODE_COMPANION
+            _no_route = bool(_mode_state.get("no_route"))
+            print(f"\n  {C['bmagenta']}ORACLE MODE: COMPANION{C['reset']}")
+            print(f"  {C['dim']}Direct conversation stays local. No Claude/Codex routing by default.{C['reset']}\n")
+            speak("Companion mode.")
+            continue
+        if _cmd_mode in ("/builder", "builder mode", "/mode builder"):
+            _mode_state = save_mode_state(mode=MODE_BUILDER, no_route=False)
+            _oracle_mode = MODE_BUILDER
+            _no_route = False
+            print(f"\n  {C['byellow']}ORACLE MODE: BUILDER{C['reset']}")
+            print(f"  {C['dim']}Work routing is enabled for explicit build/code/tool requests.{C['reset']}\n")
+            speak("Builder mode.")
+            continue
+        if _cmd_mode in ("/no-route", "no-route", "/noroute"):
+            _mode_state = save_mode_state(mode=MODE_COMPANION, no_route=True)
+            _oracle_mode = MODE_COMPANION
+            _no_route = True
+            print(f"\n  {C['bmagenta']}ORACLE MODE: COMPANION{C['reset']}")
+            print(f"  {C['bmagenta']}NO-ROUTE: ON{C['reset']}  {C['dim']}All conversation stays local until /no-route off or /builder.{C['reset']}\n")
+            speak("No route is on.")
+            continue
+        if _cmd_mode in ("/no-route off", "no-route off", "/noroute off", "/route on", "/route-on", "route-on"):
+            _mode_state = save_mode_state(no_route=False)
+            _oracle_mode = _mode_state.get("mode", MODE_COMPANION)
+            _no_route = False
+            print(f"\n  {C['byellow']}NO-ROUTE: OFF{C['reset']}")
+            print(f"  {C['dim']}Current mode: {_oracle_mode}{C['reset']}\n")
+            speak("No route is off.")
+            continue
+
         # ── Interaction mode — CHAT / WORK / BUILD / DIAGNOSTIC ──────────────────
         # Determines routing behaviour for this turn:
         #   CHAT    → skip all routing, respond conversationally via local model
@@ -2961,15 +3152,23 @@ def main():
         # ── Action-intent check — must fire BEFORE mode classifier ──────────────
         # Catches "open ChatGPT and have a conversation" even when the mode
         # classifier would otherwise return CHAT and skip tool routing entirely.
-        try:
-            from oracle_inner import is_action_intent
-            _pre_action, _pre_hint = is_action_intent(user_input)
-            if _pre_action:
-                _imode = "WORK"   # force WORK so tool path runs
-            else:
+        _route_decision = classify_conversation_route(
+            user_input,
+            current_mode=_oracle_mode,
+            no_route=_no_route,
+        )
+        if _route_decision.route == MODE_COMPANION:
+            _imode = "CHAT"
+        else:
+            try:
+                from oracle_inner import is_action_intent
+                _pre_action, _pre_hint = is_action_intent(user_input)
+                if _pre_action:
+                    _imode = "WORK"   # force WORK so tool path runs
+                else:
+                    _imode = _classify_interaction_mode(user_input)
+            except Exception:
                 _imode = _classify_interaction_mode(user_input)
-        except Exception:
-            _imode = _classify_interaction_mode(user_input)
 
         # ── "remember this / remember that" — explicit memory storage ───────────
         _uil_mem = user_input.lower().strip()
@@ -3003,16 +3202,34 @@ def main():
         # ── CHAT mode fast-path — skip routing, respond directly ─────────────────
         if _imode == "CHAT":
             try:
-                reply, history = chat_local(client, session_id, system_prompt, history, user_input, model)
-                blocked = _detect_hallucination(reply, [])
-                if blocked:
-                    reply = blocked
-                    log("HALLUCINATION_DETECTED", f"reply: {reply[:120]}")
-                print(f"  {C['cyan']}[CHAT]{C['reset']}")
+                print(f"  {C['bmagenta']}[COMPANION]{C['reset']} acknowledging now")
+                save_message(session_id, "user", user_input)
+                log("INPUT", user_input)
+                begin_debug_turn(user_input, _route_decision, current_mode=_oracle_mode, no_route=_no_route)
+                direct = direct_response(
+                    user_input,
+                    history=history,
+                    model=model,
+                    timeout_s=4.5,
+                    base_prompt=system_prompt,
+                )
+                reply = direct.text
+                history.append({"role": "user", "content": user_input})
+                history.append({"role": "assistant", "content": reply})
+                save_message(session_id, "assistant", reply)
+                log("OUTPUT", reply[:200] + ("..." if len(reply) > 200 else ""))
+                if direct.timed_out:
+                    log("COMPANION_TIMEOUT", f"local model timeout for: {user_input[:80]}")
+                print(f"  {C['bmagenta']}ORACLE MODE: COMPANION{C['reset']}")
                 _print_oracle_reply(reply)
                 speak(reply)
             except Exception as _chat_err:
-                print(f"\n{C['bred']}  [Error: {_chat_err}]{C['reset']}\n")
+                reply = "I'm here, Noah. The direct local path tripped, but I am not routing this away."
+                history.append({"role": "user", "content": user_input})
+                history.append({"role": "assistant", "content": reply})
+                save_message(session_id, "assistant", reply)
+                print(f"\n{C['bmagenta']}  [COMPANION FALLBACK]{C['reset']} {reply}\n")
+                log("COMPANION_ERROR", str(_chat_err))
             continue
 
         # ── Claude Code routing — BUILD mode or explicit claude/code task ─────────
@@ -3202,7 +3419,7 @@ def _smoke_test_intent_router() -> int:
     def fail(label, reason=""):
         results.append(f"  [FAIL] {label}" + (f" -- {reason}" if reason else ""))
 
-    total = 15
+    total = 19
 
     # 1. _pending_scope_review state variable is declared in main()
     if "_pending_scope_review: bool = False" in src:
@@ -3343,7 +3560,73 @@ def _smoke_test_intent_router() -> int:
     else:
         fail("working-status question preempts cognitive router and LLM work mode", f"working={working_pos} cog={cog_pos} llm={llm_call_pos}")
 
-    # 14. oracle.py --smoke-test passes existing actuation checks too
+    # 14. Noah.Direct salience preempts BUILD mode unless explicitly handed off.
+    samples = {
+        "RELATIONAL_CHECKIN": "How are you doing after all those patches?",
+        "STATUS_CHECK": "Hi Oracle I worked all night did any of the patches work for you?",
+        "EMOTIONAL_DISCLOSURE": "I'm stuck and I can't pull away from this build loop",
+        "HELP_REQUEST": "will you please build yourself I dont know what to do",
+    }
+    if (
+        all(_classify_interaction_mode(sample) == "CHAT" for sample in samples.values())
+        and _classify_interaction_mode("Use Codex to inspect executor.py") != "CHAT"
+    ):
+        ok("Noah.Direct relational/status/help preempts BUILD except explicit Codex")
+    else:
+        fail("Noah.Direct relational/status/help preempts BUILD except explicit Codex")
+
+    # 15. Companion/no-route direct response is wired before Claude/Codex routing.
+    conv_pos = src.find("_route_decision = classify_conversation_route")
+    direct_pos = src.find("direct_response(", conv_pos)
+    claude_route_pos = src.find("# ── Claude Code routing")
+    if (
+        conv_pos > 0
+        and direct_pos > 0
+        and claude_route_pos > 0
+        and conv_pos < direct_pos < claude_route_pos
+        and '"/companion"' in src
+        and '"/builder"' in src
+        and '"/no-route"' in src
+        and "ORACLE MODE: COMPANION" in src
+        and "ORACLE MODE: BUILDER" in src
+    ):
+        ok("companion/no-route direct response preempts external routing")
+    else:
+        fail(
+            "companion/no-route direct response preempts external routing",
+            f"conv={conv_pos} direct={direct_pos} claude={claude_route_pos}",
+        )
+
+    # 16. Conversation-first gate runs before channel/cognitive/builder routing.
+    early_gate_pos = src.find("# Router-facing salience contract")
+    claude_inbox_pos = src.find("from oracle_claude_channel import CLAUDE_TO_ORACLE", early_gate_pos)
+    cognitive_pos = src.find("from cognitive_kernel import (", early_gate_pos)
+    if (
+        early_gate_pos > 0
+        and claude_inbox_pos > 0
+        and cognitive_pos > 0
+        and early_gate_pos < claude_inbox_pos < cognitive_pos
+    ):
+        ok("conversation-first gate precedes channel and cognitive routing")
+    else:
+        fail(
+            "conversation-first gate precedes channel and cognitive routing",
+            f"gate={early_gate_pos} claude={claude_inbox_pos} cognitive={cognitive_pos}",
+        )
+
+    # 17. Debug context commands are present and use redacted prompt plumbing.
+    if (
+        '"/debug-context"' in src
+        and '"/echo-prompt"' in src
+        and "format_debug_context" in src
+        and "echo_last_prompt" in src
+        and "begin_debug_turn" in src
+    ):
+        ok("debug-context and echo-prompt commands are wired")
+    else:
+        fail("debug-context and echo-prompt commands are wired")
+
+    # 18. oracle.py --smoke-test passes existing actuation checks too
     actuation_result = _smoke_test_governed_actuation()
     if actuation_result == 0:
         ok("existing actuation smoke tests still pass (4/4)")
@@ -3356,7 +3639,72 @@ def _smoke_test_intent_router() -> int:
     return 0 if passed == total else 1
 
 
+def _conversation_smoke_test() -> int:
+    """Verify ORACLE's direct conversation loop without starting the REPL."""
+    from conversation_mode import (
+        MODE_BUILDER as _MODE_BUILDER,
+        MODE_COMPANION as _MODE_COMPANION,
+        classify_route as _classify_route,
+        direct_response as _direct_response,
+        ensure_personality_seed as _ensure_seed,
+    )
+
+    checks = 0
+    passed = 0
+
+    def check(name: str, cond: bool) -> None:
+        nonlocal checks, passed
+        checks += 1
+        if cond:
+            passed += 1
+            print(f"  [PASS] {name}")
+        else:
+            print(f"  [FAIL] {name}")
+
+    companion_inputs = (
+        "are you there",
+        "I just want to talk",
+        "what do you think",
+        "I am frustrated",
+    )
+    builder_inputs = (
+        "ask Claude to patch this",
+        "use Codex to inspect the repo",
+        "write code",
+        "run tests",
+        "generate diff",
+    )
+
+    check(
+        "companion routing pass",
+        all(_classify_route(text).route == _MODE_COMPANION for text in companion_inputs),
+    )
+    check(
+        "builder routing pass",
+        all(_classify_route(text).route == _MODE_BUILDER for text in builder_inputs),
+    )
+    check(
+        "no-route pass",
+        not _classify_route("ask Claude to patch this", no_route=True).external_routing,
+    )
+
+    def slow_call(_messages: list[dict], _model: str) -> str:
+        import time as _time
+        _time.sleep(0.2)
+        return "late"
+
+    timeout_reply = _direct_response("are you there", timeout_s=0.01, llm_call=slow_call)
+    check("timeout fallback pass", timeout_reply.fallback_used and bool(timeout_reply.text))
+    check("companion does not create code tasks", "tools" not in _direct_response.__code__.co_varnames)
+    check("personality seed exists", _ensure_seed().get("default_mode") == "companion")
+
+    print(f"\n{passed}/{checks} ORACLE conversation smoke tests passed.")
+    return 0 if passed == checks else 1
+
+
 if __name__ == "__main__":
+    if "--conversation-smoke-test" in sys.argv:
+        sys.exit(_conversation_smoke_test())
     if "--smoke-test" in sys.argv or "--smoke" in sys.argv:
         rc1 = _smoke_test_governed_actuation()
         rc2 = _smoke_test_intent_router()

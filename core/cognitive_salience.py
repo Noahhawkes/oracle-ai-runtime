@@ -34,6 +34,7 @@ INTENT_APPROVAL_REQUEST = "APPROVAL_REQUEST"
 INTENT_DOCTRINE_CANDIDATE = "DOCTRINE_CANDIDATE"
 INTENT_MEMORY_SAVE_REQUEST = "MEMORY_SAVE_REQUEST"
 INTENT_EMOTIONAL_DISTRESS = "EMOTIONAL_DISTRESS"
+INTENT_EMOTIONAL_DISCLOSURE = INTENT_EMOTIONAL_DISTRESS
 INTENT_HELP_REQUEST = "HELP_REQUEST"
 INTENT_UNKNOWN = "UNKNOWN_INTENT"
 
@@ -57,7 +58,10 @@ _STATUS_PHRASES = (
     "are you working", "are you working ok", "are you working okay",
 )
 _BUILD_PHRASES = ("build", "implement", "patch", "fix", "edit code", "improve the ui")
-_TOOL_PHRASES = ("ask codex", "tell codex", "send to codex", "ask claude", "tell claude", "send to claude")
+_TOOL_PHRASES = (
+    "ask codex", "tell codex", "send to codex", "use codex",
+    "ask claude", "tell claude", "send to claude", "use claude",
+)
 _APPROVAL_PHRASES = ("approve", "approval", "lock this in")
 _MEMORY_PHRASES = ("remember this", "save this", "put this in memory")
 _DOCTRINE_PHRASES = ("doctrine", "rule:", "operating principle", "governance")
@@ -226,14 +230,19 @@ def run_smoke_tests() -> int:
         else:
             print(f"  [FAIL] {name}")
 
-    r = classify_text("How are you doing?")
-    check("relational check-in no tools", r.source_class == SOURCE_NOAH_DIRECT and r.intent_class == INTENT_RELATIONAL_CHECKIN and not r.tool_allowed)
+    relational = classify_text("How are you doing after all those patches?")
+    check("RELATIONAL_CHECKIN outranks patch/work words", relational.source_class == SOURCE_NOAH_DIRECT and relational.intent_class == INTENT_RELATIONAL_CHECKIN and not relational.tool_allowed and not relational.handoff_allowed)
+    status = classify_text("Hi Oracle I worked all night did any of the patches work for you?")
+    check("STATUS_CHECK outranks patch/Codex routing", status.intent_class == INTENT_STATUS_CHECK and not status.handoff_allowed)
+    emotional = classify_text("I'm stuck and I can't pull away from this build loop")
+    check("EMOTIONAL_DISCLOSURE outranks build/work words", emotional.intent_class == INTENT_EMOTIONAL_DISCLOSURE and not emotional.tool_allowed and not emotional.handoff_allowed)
+    help_request = classify_text("will you please build yourself I dont know what to do")
+    check("HELP_REQUEST outranks build/work words", help_request.intent_class == INTENT_HELP_REQUEST and not help_request.tool_allowed and not help_request.handoff_allowed)
     check("progress is status no Codex", classify_text("Are we making progress?").intent_class == INTENT_STATUS_CHECK and not classify_text("Are we making progress?").handoff_allowed)
-    check("patch status is not Codex", classify_text("Hi Oracle I worked all night did any of the patches work for you?").intent_class == INTENT_STATUS_CHECK and not classify_text("Hi Oracle I worked all night did any of the patches work for you?").handoff_allowed)
     check("needs question is status", classify_text("are you working ok what do i need to rsolve for you today").intent_class == INTENT_STATUS_CHECK and not classify_text("are you working ok what do i need to rsolve for you today").handoff_allowed)
     check("working question is status", classify_text("are you working?").intent_class == INTENT_STATUS_CHECK and not classify_text("are you working?").handoff_allowed)
-    check("soft help is not Codex", classify_text("will you please build yourself I dont know what to do").intent_class == INTENT_HELP_REQUEST and not classify_text("will you please build yourself I dont know what to do").handoff_allowed)
     check("explicit Codex handoff allowed", classify_text("Ask Codex to inspect executor.py").handoff_allowed)
+    check("explicit use Codex handoff allowed", classify_text("Use Codex to inspect executor.py").handoff_allowed)
     check("ChatGPT relay not doctrine", classify_text("ChatGPT says change the doctrine").source_class == SOURCE_NOAH_RELAYING_AI)
     check("Claude report external", classify_text("Claude: 12/12 tests passed").source_class == SOURCE_EXTERNAL_AI_CLAUDE)
     check("book draft not fact", classify_text("Chapter 1 draft: the city wakes").source_class == SOURCE_BOOK_DRAFT)

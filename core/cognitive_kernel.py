@@ -17,6 +17,7 @@ from typing import Any
 from milestone_policy import evaluate_action, policy_summary, requires_hard_approval
 from capability_registry import detect_need
 from cognitive_salience import (
+    INTENT_EMOTIONAL_DISCLOSURE as SALIENCE_EMOTIONAL_DISCLOSURE,
     INTENT_EMOTIONAL_DISTRESS as SALIENCE_EMOTIONAL_DISTRESS,
     INTENT_HELP_REQUEST as SALIENCE_HELP_REQUEST,
     INTENT_RELATIONAL_CHECKIN as SALIENCE_RELATIONAL_CHECKIN,
@@ -236,6 +237,7 @@ def classify_input(
     if salience.intent_class in {
         SALIENCE_RELATIONAL_CHECKIN,
         SALIENCE_EMOTIONAL_DISTRESS,
+        SALIENCE_EMOTIONAL_DISCLOSURE,
         SALIENCE_HELP_REQUEST,
     }:
         return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "social check-in")
@@ -438,6 +440,48 @@ def resident_wake_report() -> dict[str, Any]:
     state = load_oracle_state()
     pending = state.get("pending_intent")
     blockers = state.get("blockers") or []
+    focus = "Nothing in focus. All signals below threshold."
+    try:
+        from salience_filter import Signal, focus_report, ingest_signal
+        if pending:
+            ingest_signal(Signal(
+                "pending_intent",
+                str(pending.get("text", ""))[:240],
+                urgency=0.75,
+                relevance=0.85,
+                novelty=0.55,
+                consequence=0.7,
+            ))
+        if state.get("pending_approvals"):
+            ingest_signal(Signal(
+                "approval_center",
+                f"{state.get('pending_approvals')} approval item(s) waiting",
+                urgency=0.7,
+                relevance=0.8,
+                novelty=0.45,
+                consequence=0.8,
+            ))
+        if state.get("codex_unread"):
+            ingest_signal(Signal(
+                "codex_channel",
+                "Codex unread reply is waiting",
+                urgency=0.8,
+                relevance=0.75,
+                novelty=0.9,
+                consequence=0.65,
+            ))
+        if state.get("claude_response_ready"):
+            ingest_signal(Signal(
+                "claude_channel",
+                "Claude response is ready",
+                urgency=0.75,
+                relevance=0.75,
+                novelty=0.85,
+                consequence=0.65,
+            ))
+        focus = focus_report()
+    except Exception as exc:
+        blockers.append(f"salience_filter: {exc}")
     if pending:
         next_safe_action = "show pending intent or wait for explicit approval"
     elif state.get("pending_approvals"):
@@ -455,6 +499,7 @@ def resident_wake_report() -> dict[str, Any]:
         "pending_approvals": state.get("pending_approvals", 0),
         "codex_unread": bool(state.get("codex_unread")),
         "blockers": blockers,
+        "focus_report": focus,
         "next_safe_action": next_safe_action,
     }
 
@@ -485,11 +530,16 @@ def run_smoke_tests() -> int:
 
         check("state file created", load_kernel_state().get("version") == "0.1" and STATE_FILE.exists())
         check("status returns report", decide_next("status").decision == KERNEL_REPORT)
-        check("social check-in is conversation", decide_next("how are you doing?").intent == INTENT_CONVERSATION)
+        relational = decide_next("how are you doing after all those patches?")
+        check("RELATIONAL_CHECKIN preempts Codex/work routing", relational.intent == INTENT_CONVERSATION and relational.needed_capability == "")
         check("soft check-in is conversation", decide_next("I just want to see how you're doing?").reason == "social check-in")
-        check("patch status question is not Codex", decide_next("Hi Oracle I worked all night did any of the patches work for you?").intent == INTENT_STATUS)
+        status = decide_next("Hi Oracle I worked all night did any of the patches work for you?")
+        check("STATUS_CHECK preempts Codex/work routing", status.intent == INTENT_STATUS and status.needed_capability == "")
         check("did patches work is status", decide_next("Did the patches work?").intent == INTENT_STATUS)
-        check("soft build help is conversation", decide_next("will you please build yourself I dont know what to do").intent == INTENT_CONVERSATION)
+        emotional = decide_next("I'm stuck and I can't pull away from this build loop")
+        check("EMOTIONAL_DISCLOSURE preempts Codex/work routing", emotional.intent == INTENT_CONVERSATION and emotional.needed_capability == "")
+        help_request = decide_next("will you please build yourself I dont know what to do")
+        check("HELP_REQUEST preempts Codex/work routing", help_request.intent == INTENT_CONVERSATION and help_request.needed_capability == "")
         check("explicit Codex patch question can hand off", decide_next("Ask Codex if the patches worked").needed_capability == "Codex local file backed bridge")
         check("explicit Codex file inspect can hand off", decide_next("Use Codex to inspect the patch files").needed_capability == "Codex local file backed bridge")
         check("conversation outranks pending queue", decide_next("how are you doing?", pending_intent=pending).intent == INTENT_CONVERSATION)
@@ -506,7 +556,9 @@ def run_smoke_tests() -> int:
         )
         check("destructive action requires approval", decide_next("delete that file").decision == KERNEL_ASK)
         check("world model updates last intent", load_kernel_state().get("last_intent") == INTENT_APPROVAL_REQUIRED)
-        check("resident wake report has mode", "current_mode" in resident_wake_report())
+        _wake_report = resident_wake_report()
+        check("resident wake report has mode", "current_mode" in _wake_report)
+        check("resident wake report has salience focus", "focus_report" in _wake_report)
         # Autonomy policy integration
         check("GREEN action gets KERNEL_ACT", decide_next("check git status").decision == KERNEL_ACT)
         check("GREEN question does not require approval", not decide_next("what can you do without approval").hard_approval_required)
