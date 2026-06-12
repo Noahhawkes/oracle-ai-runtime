@@ -24,6 +24,10 @@ DEBUG_STATE_FILE = ROOT / "Memory" / "companion_debug_last.json"
 PERSONALITY_SEED_FILE = ROOT / "state" / "oracle_personality_seed.json"
 DEFAULT_TIMEOUT_SECONDS = 4.5
 
+# Singleton pool — prevents zombie thread accumulation on repeated qwen timeouts.
+# One worker: one outstanding local-model request at a time.
+_LOCAL_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="qwen_worker")
+
 MODE_COMPANION = "COMPANION"
 MODE_BUILDER = "BUILDER"
 
@@ -237,6 +241,53 @@ def classify_route(text: str, *, current_mode: str = MODE_BUILDER, no_route: boo
     return RouteDecision(MODE_COMPANION, False, "default to direct conversation")
 
 
+def _claude_fallback(user_input: str, *, timed_out: bool = False) -> str:
+    """
+    When qwen times out or errors, ask Claude directly for a companion response.
+    Falls back to static string only if Claude is also unavailable.
+    """
+    try:
+        from openai import OpenAI as _OAI
+        import os as _os
+        api_key = _os.environ.get("ANTHROPIC_API_KEY") or _os.environ.get("CLAUDE_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("no api key")
+        client = _OAI(
+            base_url="https://api.anthropic.com/v1/",
+            api_key=api_key,
+            default_headers={"anthropic-version": "2023-06-01"},
+        )
+        system = _system_prompt()
+        resp = client.chat.completions.create(
+            model="claude-sonnet-4-6",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_input},
+            ],
+            max_tokens=300,
+            temperature=0.7,
+            timeout=12,
+        )
+        return resp.choices[0].message.content or fallback_response(user_input, timed_out=timed_out)
+    except Exception:
+        pass
+
+    # Last resort — try the native Anthropic SDK
+    try:
+        import anthropic as _ant
+        client = _ant.Anthropic()
+        system = _system_prompt()
+        msg = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=300,
+            system=system,
+            messages=[{"role": "user", "content": user_input}],
+        )
+        return msg.content[0].text if msg.content else fallback_response(user_input, timed_out=timed_out)
+    except Exception:
+        return fallback_response(user_input, timed_out=timed_out)
+
+
 def fallback_response(text: str, *, timed_out: bool = False) -> str:
     lower = text.lower()
     if "are you there" in lower:
@@ -363,29 +414,24 @@ def direct_response(
         )
         return resp.choices[0].message.content or ""
 
-    pool = ThreadPoolExecutor(max_workers=1)
     _LAST_DEBUG["local_model_request_started"] = True
     _LAST_DEBUG["local_model_request_start_ts"] = time.time()
     _write_debug_snapshot()
-    future = pool.submit(call_local)
+    future = _LOCAL_POOL.submit(call_local)
     try:
         reply = future.result(timeout=timeout_s)
     except FutureTimeout:
-        future.cancel()
-        pool.shutdown(wait=False, cancel_futures=True)
+        # Do NOT cancel — the thread owns the HTTP socket; cancelling leaves it dangling.
+        # Just stop waiting and fall through to Claude.
         _LAST_DEBUG["timeout_fired"] = True
         _LAST_DEBUG["fallback_answered"] = True
         _write_debug_snapshot()
-        return DirectResponse(fallback_response(user_input, timed_out=True), timed_out=True, fallback_used=True)
+        return DirectResponse(_claude_fallback(user_input, timed_out=True), timed_out=True, fallback_used=True)
     except Exception:
-        pool.shutdown(wait=False, cancel_futures=True)
         _LAST_DEBUG["fallback_answered"] = True
         _LAST_DEBUG["model_error"] = True
         _write_debug_snapshot()
-        return DirectResponse(fallback_response(user_input), fallback_used=True)
-    finally:
-        if future.done():
-            pool.shutdown(wait=False, cancel_futures=True)
+        return DirectResponse(_claude_fallback(user_input), fallback_used=True)
     if not reply.strip():
         _LAST_DEBUG["fallback_answered"] = True
         _write_debug_snapshot()
