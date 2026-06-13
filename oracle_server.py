@@ -14,10 +14,19 @@ Then open: http://localhost:7777
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import sys
 import time
 import uuid
+
+# Ensure UTF-8 output on Windows consoles (avoids charmap errors for Unicode chars like ◌)
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 from pathlib import Path
 from typing import AsyncGenerator, Any
 
