@@ -1629,6 +1629,16 @@ def main():
     _last_pending_secret_flags: list[bool] = []  # parallel list — True = secret-blocked
     _pending_scope_review: bool = False    # True after ORACLE proposes a scope-path review
     _pending_runtime_step: dict | None = None
+    # ── Loop / flood protection ───────────────────────────────────────────────
+    # A multi-line paste arrives as many separate input() lines; technical-looking
+    # lines auto-route to Claude. Without a cap, one paste spams Claude dozens of
+    # times. These guards bound that: dedupe recent inputs and cap consecutive
+    # auto-routes to Claude. Both reset on any human conversational turn.
+    from collections import deque as _deque
+    _recent_input_hashes: "_deque" = _deque(maxlen=12)   # (hash, ts) of recent inputs
+    _claude_route_streak: int = 0          # consecutive Claude routes with no human chat turn
+    _CLAUDE_ROUTE_STREAK_CAP = 3           # stop auto-routing after this many in a row
+    _DUP_INPUT_WINDOW_S = 8.0              # identical input within this window is suppressed
     _mode_state = load_mode_state()
     ensure_personality_seed()
     _oracle_mode = _mode_state.get("mode", MODE_COMPANION)
@@ -1726,6 +1736,22 @@ def main():
             except Exception:
                 pass
             continue
+
+        # ── Duplicate-input suppression (flood / paste guard) ────────────────
+        # Identical input repeated within a short window is almost always a paste
+        # flood or a replayed line, not a deliberate human repeat. Suppress it so
+        # it cannot trigger another route. Slash-commands are exempt (a user may
+        # legitimately re-run /pending, /status, etc.).
+        import time as _time
+        from loop_guard import is_duplicate_input as _is_dup, input_hash as _input_hash
+        if not user_input.startswith("/"):
+            _now_ts = _time.time()
+            _dup = _is_dup(_recent_input_hashes, user_input, _now_ts, _DUP_INPUT_WINDOW_S)
+            _recent_input_hashes.append((_input_hash(user_input), _now_ts))
+            if _dup:
+                log("LOOP_GUARD", f"duplicate input suppressed: {user_input[:60]}")
+                print(f"  {C['dim']}[skipped duplicate input]{C['reset']}")
+                continue
 
         # ── Pending Claude channel response — surface and consume before LLM ──
         # Display the response but do NOT let qwen process it as a new command.
@@ -3495,6 +3521,22 @@ def main():
                 _route_to_claude = is_claude_directed(user_input) or is_code_task(user_input)
 
             if _route_to_claude:
+                # ── Consecutive-route cap (flood guard) ──────────────────────
+                # An explicit BUILD mode never gets capped (Noah chose it). But
+                # auto-detected routes (is_code_task / is_claude_directed) that
+                # fire repeatedly with no human chat turn between them are a paste
+                # flood. Stop after the cap and require a real human turn to reset.
+                if _imode != "BUILD":
+                    from loop_guard import route_streak_exceeded as _streak_exceeded
+                    _claude_route_streak += 1
+                    if _streak_exceeded(_claude_route_streak, _CLAUDE_ROUTE_STREAK_CAP):
+                        log("LOOP_GUARD", f"Claude route streak cap hit ({_claude_route_streak}); halting auto-route: {user_input[:60]}")
+                        print(f"\n  {C['byellow']}[LOOP GUARD]{C['reset']} Stopped auto-routing to Claude after "
+                              f"{_CLAUDE_ROUTE_STREAK_CAP} in a row.")
+                        print(f"  {C['dim']}This looks like a paste flood. Type a normal message to reset, "
+                              f"or use BUILD mode to route deliberately.{C['reset']}\n")
+                        continue
+
                 # Claude availability gate — check before claiming routing happened
                 _claude_up = _claude_available_now()
                 _cli_up = shutil.which("claude") is not None
@@ -3560,6 +3602,15 @@ def main():
                 "routing to claude code.", "routing to claude code",
             )
             if _QWEN_ROUTING_HALLUCINATION or any(p.lower() in reply.lower() for p in _IMPL_PATTERNS):
+                # Respect the same flood cap — a stream of qwen routing-hallucinations
+                # must not bypass the streak guard and spam Claude.
+                from loop_guard import route_streak_exceeded as _streak_exceeded2
+                _claude_route_streak += 1
+                if _streak_exceeded2(_claude_route_streak, _CLAUDE_ROUTE_STREAK_CAP):
+                    log("LOOP_GUARD", f"post-LLM re-route streak cap hit ({_claude_route_streak}); halting: {user_input[:60]}")
+                    print(f"\n  {C['byellow']}[LOOP GUARD]{C['reset']} Suppressed repeated auto-route to Claude "
+                          f"(post-model guard). Type a normal message to reset.\n")
+                    continue
                 print(f"\n  {C['byellow']}[GOVERNANCE]{C['reset']} Local model attempted implementation — re-routing to Claude Code.\n")
                 log("ROUTING", "post-LLM guard triggered — re-routing to Claude Code")
                 try:
@@ -3578,6 +3629,10 @@ def main():
                     continue
                 except Exception as _guard_err:
                     print(f"  {C['yellow']}[GOVERNANCE]{C['reset']} Re-route failed: {_guard_err} — showing local reply anyway\n")
+
+            # A real local/companion reply happened — this is a genuine human
+            # conversational turn, so reset the Claude auto-route streak.
+            _claude_route_streak = 0
 
             _mode_lbl = "WORK" if (_imode == "WORK") else "LOCAL"
             print(f"  {C['grey']}[{_mode_lbl}]{C['reset']}")
