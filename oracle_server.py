@@ -599,7 +599,9 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 yield _sse({"type": "done", "mode": effective_mode})
                 return
             except Exception as core_err:
-                reply = f"Core engine error: {core_err}"
+                import traceback as _tb
+                _tb.print_exc()  # full traceback to server stderr for diagnosis
+                reply = f"Core engine error: {type(core_err).__name__}: {core_err}"
                 yield _sse({"type": "token", "text": reply})
                 yield _sse({"type": "done", "mode": effective_mode})
                 return
@@ -607,7 +609,9 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             raise RuntimeError("core engine bridge returned unexpectedly")
 
         except Exception as e:
-            reply = f"I'm here, Noah. (Local model error: {e})"
+            import traceback as _tb
+            _tb.print_exc()
+            reply = f"I'm here, Noah. (Local model error: {type(e).__name__}: {e})"
             yield _sse({"type": "token", "text": reply})
 
     # ── Builder path — tools, full capability ────────────────────────────────
@@ -647,7 +651,9 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             yield _sse({"type": "done", "mode": effective_mode})
             return
         except Exception as core_err:
-            reply = f"Core engine error: {core_err}"
+            import traceback as _tb
+            _tb.print_exc()
+            reply = f"Core engine error: {type(core_err).__name__}: {core_err}"
             yield _sse({"type": "token", "text": reply})
             yield _sse({"type": "done", "mode": effective_mode})
             return

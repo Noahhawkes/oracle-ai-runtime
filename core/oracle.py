@@ -9,6 +9,15 @@ import sys
 import shutil
 import time
 from datetime import datetime
+
+# Must be at module level — _print_thinking() uses ◌ (U+25CC) which Windows
+# cp1252 cannot encode. Reconfigure before any print() call in this module.
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 from pathlib import Path
 from dotenv import load_dotenv
 
