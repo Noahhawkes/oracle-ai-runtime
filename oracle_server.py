@@ -118,6 +118,13 @@ def _boot():
         companion_bootstrap.get(force_refresh=True)
     except Exception:
         pass
+    # Start presence daemon (always-on monitoring and notifications)
+    try:
+        from presence_daemon import start_daemon
+        start_daemon()
+        print("[Boot] Presence daemon started")
+    except Exception as e:
+        print(f"[Boot] Presence daemon not available: {e}")
 
 _boot()
 
@@ -695,6 +702,78 @@ async def clear():
     except Exception:
         _session_id = uuid.uuid4().hex[:8]
     return JSONResponse({"ok": True, "session_id": _session_id})
+
+
+# ── Daemon/Hotkey integration endpoints ────────────────────────────────────────
+
+_pending_notifications = []
+_paused = False
+
+@app.post("/api/notify")
+async def notify(request: Request):
+    """Receive notifications from event daemon."""
+    global _pending_notifications
+    body = await request.json()
+    message = body.get("message", "")
+    urgency = body.get("urgency", 0.5)
+    
+    # Queue notification for UI to pick up
+    _pending_notifications.append({
+        "message": message,
+        "urgency": urgency,
+        "timestamp": time.time(),
+    })
+    
+    # Keep last 50
+    if len(_pending_notifications) > 50:
+        _pending_notifications.pop(0)
+    
+    return JSONResponse({"ok": True, "queued": len(_pending_notifications)})
+
+
+@app.get("/api/notifications")
+async def get_notifications():
+    """Retrieve queued notifications."""
+    global _pending_notifications
+    notifs = _pending_notifications[-10:]  # Last 10
+    return JSONResponse({"notifications": notifs})
+
+
+@app.post("/api/approve")
+async def approve(request: Request):
+    """Handle hotkey approval action."""
+    body = await request.json()
+    action = body.get("action", "")
+    print(f"[APPROVAL via hotkey] {action}")
+    return JSONResponse({"ok": True, "action": action})
+
+
+@app.post("/api/pause")
+async def pause():
+    """Emergency stop: pause ORACLE daemon."""
+    global _paused
+    _paused = True
+    print("[PAUSED] ORACLE daemon paused (Ctrl+Shift+X)")
+    return JSONResponse({"ok": True, "paused": _paused})
+
+
+@app.post("/api/resume")
+async def resume():
+    """Resume ORACLE daemon."""
+    global _paused
+    _paused = False
+    print("[RESUMED] ORACLE daemon resumed")
+    return JSONResponse({"ok": True, "paused": _paused})
+
+
+@app.get("/api/status")
+async def status_endpoint():
+    """Get daemon status."""
+    return JSONResponse({
+        "paused": _paused,
+        "notifications_queued": len(_pending_notifications),
+        "session_id": _session_id,
+    })
 
 
 def _source_discipline_smoke_test() -> int:
