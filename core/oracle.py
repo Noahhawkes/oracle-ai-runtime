@@ -1516,6 +1516,23 @@ def web_engine_response(
     except Exception:
         pass
 
+    # ── Execution policy — parse once, passed to all fallback paths ───────────
+    try:
+        from execution_policy import parse as _ep_parse, build_deterministic_response, build_timeout_response
+        _policy = _ep_parse(user_input)
+    except Exception:
+        _policy = None
+
+    # ── Deterministic bypass — no LLM for diagnostic/schema requests ──────────
+    if _policy is not None and _policy.is_diagnostic:
+        log("DIAGNOSTIC_BYPASS", f"deterministic bypass for: {user_input[:80]}")
+        reply = build_deterministic_response(_policy)
+        engine_history.append({"role": "user", "content": user_input})
+        engine_history.append({"role": "assistant", "content": reply})
+        save_message(session_id, "user", user_input)
+        save_message(session_id, "assistant", reply)
+        return reply, engine_history, MODE_COMPANION
+
     route_decision = classify_conversation_route(
         user_input,
         current_mode=mode,
@@ -1529,14 +1546,21 @@ def web_engine_response(
             model=model,
             timeout_s=4.5,
             base_prompt=system_prompt,
+            policy=_policy,
         )
         reply = direct.text
+
+        # Handle schema-preserving timeout sentinel
+        if reply == "__ORACLE_TIMEOUT_SCHEMA_PRESERVE__" and _policy is not None:
+            log("COMPANION_TIMEOUT_SCHEMA", f"schema-preserving timeout: {user_input[:80]}")
+            reply = build_timeout_response(_policy)
+        elif direct.timed_out:
+            log("COMPANION_TIMEOUT", f"web local model timeout for: {user_input[:80]}")
+
         engine_history.append({"role": "user", "content": user_input})
         engine_history.append({"role": "assistant", "content": reply})
         save_message(session_id, "user", user_input)
         save_message(session_id, "assistant", reply)
-        if direct.timed_out:
-            log("COMPANION_TIMEOUT", f"web local model timeout for: {user_input[:80]}")
         return reply, engine_history, MODE_COMPANION
 
     if local:

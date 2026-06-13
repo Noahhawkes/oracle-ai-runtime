@@ -369,6 +369,7 @@ def direct_response(
     timeout_s: float = DEFAULT_TIMEOUT_SECONDS,
     base_prompt: str = "",
     llm_call: Callable[[list[dict], str], str] | None = None,
+    policy=None,  # Optional[ExecutionPolicy] — avoids circular import
 ) -> DirectResponse:
     history = list(history or [])
     system = _system_prompt(base_prompt)
@@ -417,25 +418,39 @@ def direct_response(
     _LAST_DEBUG["local_model_request_started"] = True
     _LAST_DEBUG["local_model_request_start_ts"] = time.time()
     _write_debug_snapshot()
+    # Determine whether Claude fallback is permitted by the active policy
+    _claude_permitted = (policy is None) or (not policy.forbids("claude"))
+
     future = _LOCAL_POOL.submit(call_local)
     try:
         reply = future.result(timeout=timeout_s)
     except FutureTimeout:
         # Do NOT cancel — the thread owns the HTTP socket; cancelling leaves it dangling.
-        # Just stop waiting and fall through to Claude.
+        # Just stop waiting. If Claude is permitted and no schema was requested, ask Claude.
+        # If Claude is forbidden or a schema was requested, return a schema-aware sentinel
+        # that oracle.py will intercept and replace with build_timeout_response().
         _LAST_DEBUG["timeout_fired"] = True
         _LAST_DEBUG["fallback_answered"] = True
         _write_debug_snapshot()
-        return DirectResponse(_claude_fallback(user_input, timed_out=True), timed_out=True, fallback_used=True)
+        if _claude_permitted and (policy is None or not policy.has_schema()):
+            return DirectResponse(_claude_fallback(user_input, timed_out=True), timed_out=True, fallback_used=True)
+        # Schema request or Claude forbidden: return sentinel — oracle.py replaces with structured output
+        _LAST_DEBUG["schema_preserving_timeout"] = True
+        _write_debug_snapshot()
+        return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=True, fallback_used=True)
     except Exception:
         _LAST_DEBUG["fallback_answered"] = True
         _LAST_DEBUG["model_error"] = True
         _write_debug_snapshot()
-        return DirectResponse(_claude_fallback(user_input), fallback_used=True)
+        if _claude_permitted:
+            return DirectResponse(_claude_fallback(user_input), fallback_used=True)
+        return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=True, fallback_used=True)
     if not reply.strip():
         _LAST_DEBUG["fallback_answered"] = True
         _write_debug_snapshot()
-        return DirectResponse(fallback_response(user_input), fallback_used=True)
+        if _claude_permitted:
+            return DirectResponse(fallback_response(user_input), fallback_used=True)
+        return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=True, fallback_used=True)
     _LAST_DEBUG["first_token_received"] = True
     _LAST_DEBUG["response_received_ts"] = time.time()
     _write_debug_snapshot()
