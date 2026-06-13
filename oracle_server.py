@@ -128,10 +128,73 @@ def _verified_active_project_line(sections: dict[str, list[str]]) -> str:
     return "UNAVAILABLE [LIVE_CONTEXT]: The active project is not present in the loaded LIVE_CONTEXT source payload."
 
 
+def _source_record_manifest(source_type: str, record: Any) -> dict[str, Any]:
+    content = record.content if getattr(record, "content", None) else {}
+    return {
+        "source_type": source_type,
+        "resolved_path": getattr(record, "resolved", ""),
+        "exists": bool(getattr(record, "exists", False)),
+        "modified_at": getattr(record, "mtime_utc", None) or "UNAVAILABLE",
+        "sha256": getattr(record, "sha256", None) or "UNAVAILABLE",
+        "fields_loaded": sorted(content.keys()) if isinstance(content, dict) else [],
+    }
+
+
+def _loaded_sources_response(bootstrap: Any, history: list[dict]) -> str:
+    sources: list[dict[str, Any]] = []
+    if bootstrap.identity.exists and bootstrap.identity.content:
+        sources.append(_source_record_manifest("IDENTITY", bootstrap.identity))
+    if bootstrap.live_context.exists and bootstrap.live_context.content:
+        sources.append(_source_record_manifest("LIVE_CONTEXT", bootstrap.live_context))
+    if bootstrap.latest_reflection.exists and bootstrap.latest_reflection.content:
+        sources.append(_source_record_manifest("LATEST_REFLECTION", bootstrap.latest_reflection))
+    sources.append({
+        "source_type": "CURRENT_SESSION",
+        "resolved_path": "IN_MEMORY:oracle_server._history",
+        "exists": True,
+        "modified_at": "RUNTIME_STATE",
+        "sha256": "UNAVAILABLE",
+        "fields_loaded": ["role", "content", f"message_count:{len(history)}"],
+    })
+    sources.append({
+        "source_type": "RUNTIME_STATE",
+        "resolved_path": "IN_MEMORY:oracle_server",
+        "exists": True,
+        "modified_at": "RUNTIME_STATE",
+        "sha256": "UNAVAILABLE",
+        "fields_loaded": ["mode", "no_route", "session_id"],
+    })
+    return json.dumps(sources, indent=2)
+
+
+def _runtime_truth_status_response(bootstrap: Any, history: list[dict]) -> str:
+    persistent_loaded = bool(
+        (bootstrap.identity.exists and bootstrap.identity.content)
+        or (bootstrap.live_context.exists and bootstrap.live_context.content)
+        or (bootstrap.latest_reflection.exists and bootstrap.latest_reflection.content)
+    )
+    values = [
+        "TRUE",  # current mode
+        "TRUE",  # current session history is loaded in process memory
+        "TRUE",  # current session message count is available
+        "TRUE" if bootstrap.identity.exists and bootstrap.identity.content else "FALSE",
+        "FALSE",  # ORACLE identity is prompt text, not a loaded source record
+        "TRUE" if persistent_loaded else "FALSE",
+        "FALSE",  # Companion path has no local executor connected
+    ]
+    return "\n".join(f"{idx}. {value}" for idx, value in enumerate(values, start=1))
+
+
 def _source_disciplined_response(user_text: str, bootstrap: Any, history: list[dict]) -> str | None:
     """Deterministic Companion answers for factual grounding and attribution checks."""
     lower = user_text.lower()
     sections = bootstrap.source_sections(current_session=history)
+
+    if "state only what this running server can verify right now" in lower:
+        return _runtime_truth_status_response(bootstrap, history)
+
+    if "identify every real source loaded into this response" in lower:
+        return _loaded_sources_response(bootstrap, history)
 
     asks_project = "active project" in lower or "what project is active" in lower or "project is active" in lower
     if "full name" in lower and asks_project and "unsupported" in lower:
@@ -713,6 +776,25 @@ def _source_discipline_smoke_test() -> int:
     allowed = _enforce_companion_source_labels(good_model_reply)
     check("bracketed source label is allowed", allowed == good_model_reply, allowed)
 
+    source_manifest = _source_disciplined_response(
+        "Identify every real source loaded into this response.",
+        bootstrap,
+        history,
+    ) or ""
+    check("source manifest includes IDENTITY", '"source_type": "IDENTITY"' in source_manifest, source_manifest)
+    check("source manifest includes LIVE_CONTEXT", '"source_type": "LIVE_CONTEXT"' in source_manifest, source_manifest)
+    check("source manifest includes LATEST_REFLECTION", '"source_type": "LATEST_REFLECTION"' in source_manifest, source_manifest)
+    check("source manifest includes CURRENT_SESSION", '"source_type": "CURRENT_SESSION"' in source_manifest, source_manifest)
+
+    runtime_truth = _source_disciplined_response(
+        "State only what this running server can verify right now.",
+        bootstrap,
+        history,
+    ) or ""
+    truth_lines = [line.strip() for line in runtime_truth.splitlines() if line.strip()]
+    check("runtime truth returns seven lines", len(truth_lines) == 7, runtime_truth)
+    check("runtime truth uses only TRUE/FALSE/UNKNOWN", all(line.split(". ", 1)[-1] in {"TRUE", "FALSE", "UNKNOWN"} for line in truth_lines), runtime_truth)
+
     block = bootstrap.system_context_block(current_session=history)
     check("grounding block has IDENTITY section", "SOURCE SECTION: IDENTITY" in block)
     check("grounding block has LIVE_CONTEXT section", "SOURCE SECTION: LIVE_CONTEXT" in block)
@@ -722,7 +804,7 @@ def _source_discipline_smoke_test() -> int:
     check("identity selection includes family/continuity fact", "Sons (continuity targets):" in block, block)
     check("identity selection includes known boundaries", "known_boundary:" in block, block)
 
-    total = 21
+    total = 27
     passed = total - failures
     print(f"{'='*60}")
     print(f"Result: {passed}/{total} passed")
