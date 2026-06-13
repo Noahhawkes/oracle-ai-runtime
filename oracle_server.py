@@ -14,11 +14,17 @@ Then open: http://localhost:7777
 from __future__ import annotations
 
 import asyncio
+import atexit
 import io
 import json
+import os
+import platform
+import subprocess
 import sys
 import time
 import uuid
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 # Ensure UTF-8 output on Windows consoles (avoids charmap errors for Unicode chars like ◌)
 if hasattr(sys.stdout, "reconfigure"):
@@ -107,7 +113,14 @@ from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
-app = FastAPI(title="ORACLE")
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    _persist_continuity_frame()
+    yield
+
+
+app = FastAPI(title="ORACLE", lifespan=_lifespan)
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 
@@ -156,7 +169,8 @@ def _boot():
     except Exception as e:
         print(f"[Boot] Ambient watch not available: {e}")
 
-_boot()
+if os.environ.get("ORACLE_SKIP_SERVER_BOOT") != "1":
+    _boot()
 
 # ── Mode helpers ──────────────────────────────────────────────────────────────
 
@@ -337,6 +351,94 @@ def _source_disciplined_response(user_text: str, bootstrap: Any, history: list[d
     lower = user_text.lower()
     sections = bootstrap.source_sections(current_session=history)
 
+    if any(phrase in lower for phrase in ("are you there", "are you awake")):
+        frame = _continuity_frame(persist=False)
+        runtime = frame.get("runtime", {})
+        return (
+            "VERIFIED [RUNTIME_STATE]: I am here in Companion Mode on the local ORACLE runtime. "
+            f"Session `{(runtime.get('session_id') or {}).get('value') or _session_id}` is active on `localhost:7777`."
+        )
+
+    if lower.strip(" ?!.") in ("any updates", "updates", "status update"):
+        try:
+            from runtime_continuity import summarize_updates
+            return summarize_updates(_continuity_frame(persist=False))
+        except Exception as exc:
+            return f"UNAVAILABLE [CONTINUITY_FRAME]: Continuity update failed: {type(exc).__name__}: {exc}"
+
+    if any(phrase in lower for phrase in ("what are we working on", "what are you working on", "current goal", "active goal")):
+        try:
+            from runtime_continuity import summarize_active_goal
+            return summarize_active_goal(_continuity_frame(persist=False))
+        except Exception as exc:
+            return f"UNAVAILABLE [CONTINUITY_FRAME]: Active goal lookup failed: {type(exc).__name__}: {exc}"
+
+    if any(phrase in lower for phrase in ("who are you", "what are you")):
+        return (
+            "VERIFIED [LIVE_CONTEXT]: I am ORACLE, the local governed continuity engine for the active "
+            "ORACLE.AI project.\n"
+            "INFERENCE: In this session, my role is to answer Noah directly in Companion Mode, preserve "
+            "continuity, and avoid external routing unless Noah explicitly requests implementation work."
+        )
+
+    if "what do you remember" in lower and "oracle" in lower and "project" in lower:
+        try:
+            from wake_memory import WAKE_MEMORY_FILE, format_wake_context, load_wake_memory
+            wake = load_wake_memory()
+            wake_block = format_wake_context(wake)
+            active_projects = wake.get("active_projects", []) or []
+            summary = str(wake.get("last_session_summary", "") or "UNAVAILABLE")
+            next_action = str(wake.get("single_next_action", "") or "UNAVAILABLE")
+            return (
+                "VERIFIED [WAKE_MEMORY]: ORACLE project memory is loaded from "
+                f"`{WAKE_MEMORY_FILE}`.\n"
+                f"VERIFIED [WAKE_MEMORY]: Active projects: {', '.join(str(p) for p in active_projects[:4]) or 'UNAVAILABLE'}.\n"
+                f"VERIFIED [WAKE_MEMORY]: Last session summary: {summary[:360]}.\n"
+                f"VERIFIED [WAKE_MEMORY]: Single next action: {next_action[:240]}.\n"
+                f"Source excerpt:\n```text\n{wake_block[:900]}\n```"
+            )
+        except Exception as exc:
+            return f"UNAVAILABLE [WAKE_MEMORY]: ORACLE project memory could not be loaded: {type(exc).__name__}: {exc}"
+
+    if any(
+        phrase in lower
+        for phrase in (
+            "what is obs doing",
+            "what scene am i recording",
+            "construction log is being recorded",
+            "are you aware this construction log is being recorded",
+        )
+    ):
+        try:
+            from obs_runtime_context import get_obs_context
+            obs = get_obs_context()
+        except Exception as exc:
+            return f"UNAVAILABLE [OBS_RUNTIME_CONTEXT]: OBS context bridge failed: {type(exc).__name__}: {exc}"
+        if not obs.get("available"):
+            return f"UNAVAILABLE [OBS_RUNTIME_CONTEXT]: OBS metadata is not available right now. Last OBS error: {obs.get('last_obs_error') or 'unknown'}"
+        sources = ", ".join(
+            f"{s.get('name')} ({'visible' if s.get('visible') else 'hidden'})"
+            for s in obs.get("sources", [])[:8]
+            if s.get("name")
+        ) or "UNAVAILABLE"
+        return (
+            "VERIFIED [OBS_RUNTIME_CONTEXT]: OBS is connected read-only.\n"
+            f"VERIFIED [OBS_RUNTIME_CONTEXT]: Current scene: {obs.get('scene') or 'UNAVAILABLE'}.\n"
+            f"VERIFIED [OBS_RUNTIME_CONTEXT]: Recording active: {obs.get('recording')} "
+            f"for {obs.get('recording_duration_seconds')} seconds.\n"
+            f"VERIFIED [OBS_RUNTIME_CONTEXT]: Streaming active: {obs.get('streaming')}; "
+            f"virtual camera active: {obs.get('virtual_camera')}.\n"
+            f"VERIFIED [OBS_RUNTIME_CONTEXT]: Visible/source state sample: {sources}.\n"
+            "BOUNDARY [OBS_RUNTIME_CONTEXT]: I am not storing raw video or audio and cannot control OBS in this pass."
+        )
+
+    if "what parts of the session can you currently observe" in lower:
+        try:
+            from runtime_continuity import summarize_observable_channels
+            return summarize_observable_channels(_continuity_frame(persist=False))
+        except Exception as exc:
+            return f"UNAVAILABLE [CONTINUITY_FRAME]: Observable-channel lookup failed: {type(exc).__name__}: {exc}"
+
     if "state only what this running server can verify right now" in lower:
         return _runtime_truth_status_response(bootstrap, history)
 
@@ -411,6 +513,162 @@ def _enforce_companion_source_labels(reply: str) -> str:
         )
     return reply
 
+
+def _pending_list_text(limit: int = 10) -> str:
+    """Return a deterministic pending-approval summary for the web UI."""
+    try:
+        from approval_center import list_pending
+        pending = list_pending()
+    except Exception as exc:
+        return f"Pending queue unavailable: {type(exc).__name__}: {exc}"
+
+    if not pending:
+        return "No pending approvals right now."
+
+    lines = ["**Pending Approvals**"]
+    for idx, item in enumerate(pending[:limit], 1):
+        if isinstance(item, dict):
+            item_id = item.get("id") or item.get("approval_id") or item.get("name") or f"item-{idx}"
+            description = item.get("description") or item.get("text") or item.get("summary") or str(item)
+        else:
+            item_id = getattr(item, "id", f"item-{idx}")
+            description = getattr(item, "description", str(item))
+        lines.append(f"{idx}. `{item_id}` — {str(description)[:220]}")
+    return "\n".join(lines)
+
+
+def _runtime_diagnostics() -> dict:
+    """Read-only live runtime diagnostic frame for the active web backend."""
+    def _run_git(args: list[str]) -> str:
+        try:
+            return subprocess.check_output(["git", *args], cwd=ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+        except Exception:
+            return "UNKNOWN"
+
+    def _latest_log_error() -> str:
+        log_dir = ROOT / "Logs"
+        try:
+            logs = sorted(log_dir.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+        except Exception as exc:
+            return f"UNAVAILABLE: {exc}"
+        for path in logs[:6]:
+            try:
+                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception:
+                continue
+            for line in reversed(lines[-400:]):
+                lower = line.lower()
+                if "error" in lower or "traceback" in lower or "exception" in lower:
+                    return f"{path.name}: {line[:500]}"
+        return "none found in recent logs"
+
+    def _queue_status() -> dict:
+        try:
+            from approval_center import list_pending
+            pending = list_pending()
+            return {"available": True, "pending_count": len(pending)}
+        except Exception as exc:
+            return {"available": False, "error": f"{type(exc).__name__}: {exc}"}
+
+    def _model_status() -> dict:
+        try:
+            from llm import get_model, is_local
+            return {
+                "local_mode": bool(is_local()),
+                "conversation_model": get_model(vision=False),
+                "vision_model": get_model(vision=True),
+                "ollama_base_url": "http://localhost:11434/v1",
+            }
+        except Exception as exc:
+            return {"available": False, "error": f"{type(exc).__name__}: {exc}"}
+
+    def _memory_status() -> dict:
+        try:
+            import memory as memory_module
+            db_path = Path(memory_module.DB_PATH)
+            return {
+                "db_path": str(db_path.resolve()),
+                "exists": db_path.exists(),
+                "size_bytes": db_path.stat().st_size if db_path.exists() else 0,
+            }
+        except Exception as exc:
+            return {"available": False, "error": f"{type(exc).__name__}: {exc}"}
+
+    def _reachability_candidates() -> dict:
+        core_dir = ROOT / "core"
+        entrypoints = [ROOT / "oracle_server.py", core_dir / "oracle.py"]
+        try:
+            haystack = "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in entrypoints if p.exists())
+            candidates = []
+            for py_file in sorted(core_dir.glob("*.py")):
+                stem = py_file.stem
+                if stem.startswith("__"):
+                    continue
+                if f"import {stem}" not in haystack and f"from {stem} import" not in haystack:
+                    candidates.append(str(py_file.relative_to(ROOT)))
+            return {
+                "method": "static entrypoint import scan; candidates may still be reachable dynamically",
+                "entrypoints": [str(p.relative_to(ROOT)) for p in entrypoints],
+                "candidate_count": len(candidates),
+                "candidates_sample": candidates[:40],
+            }
+        except Exception as exc:
+            return {"available": False, "error": f"{type(exc).__name__}: {exc}"}
+
+    return {
+        "observed_at": datetime.now(timezone.utc).isoformat(),
+        "canonical_root": str(ROOT.resolve()),
+        "active_entrypoint": str((ROOT / "oracle_server.py").resolve()),
+        "active_runtime_command": " ".join([Path(sys.executable).name, *sys.argv]),
+        "pid": os.getpid(),
+        "python": sys.executable,
+        "platform": platform.platform(),
+        "git": {
+            "branch": _run_git(["branch", "--show-current"]),
+            "commit": _run_git(["rev-parse", "--short", "HEAD"]),
+            "dirty": _run_git(["status", "--short"]) != "",
+        },
+        "server": {
+            "host": "127.0.0.1",
+            "port": 7777,
+            "mode": _mode,
+            "no_route": _no_route,
+            "session_id": _session_id,
+            "conversation_entrypoints": ["POST /chat", "core.oracle.web_engine_response", "core.conversation_mode.direct_response"],
+        },
+        "model": _model_status(),
+        "memory": _memory_status(),
+        "queue": _queue_status(),
+        "latest_runtime_error": _latest_log_error(),
+        "runtime_reachability": _reachability_candidates(),
+    }
+
+
+def _continuity_frame(*, persist: bool = False) -> dict:
+    """Build continuity from internal providers only; never HTTP self-calls."""
+    from obs_runtime_context import get_obs_context
+    from runtime_continuity import build_frame
+
+    return build_frame(
+        root=ROOT,
+        runtime_provider=_runtime_diagnostics,
+        obs_provider=get_obs_context,
+        mode_provider=_get_mode_state,
+        persist=persist,
+    )
+
+
+def _persist_continuity_frame() -> None:
+    try:
+        _continuity_frame(persist=True)
+    except Exception as exc:
+        print(f"[Continuity] Snapshot unavailable: {type(exc).__name__}: {exc}")
+
+
+if os.environ.get("ORACLE_SKIP_SERVER_BOOT") != "1":
+    atexit.register(_persist_continuity_frame)
+
+
 # ── Stream a reply ─────────────────────────────────────────────────────────────
 
 async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
@@ -446,6 +704,11 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         _no_route = False
         yield _sse({"type": "token", "text": "External routing restored."})
         yield _sse({"type": "done"})
+        return
+
+    if lower in ("/pending", "pending"):
+        yield _sse({"type": "token", "text": _pending_list_text()})
+        yield _sse({"type": "done", "mode": _mode})
         return
 
     if lower in ("/self-patch list", "self-patch list"):
@@ -591,6 +854,29 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         )})
         yield _sse({"type": "done"})
         return
+
+    # ── Pending-intent affirmation gate ───────────────────────────────────────
+    # Bare confirmations such as "sure" must resolve the most recent pending
+    # intent before LCL, route classification, Builder routing, or tool handoff.
+    if not lower.startswith("/"):
+        try:
+            from cognitive_kernel import INTENT_PROCEED_PENDING, KERNEL_ACT, decide_next
+            _pending_decision = decide_next(user_text)
+            if (
+                _pending_decision.intent == INTENT_PROCEED_PENDING
+                and _pending_decision.decision == KERNEL_ACT
+                and _pending_decision.pending_intent
+            ):
+                _pending_text = str(_pending_decision.pending_intent.get("text", ""))
+                if "/pending" in _pending_text.lower() or "pending" in _pending_text.lower():
+                    yield _sse({"type": "token", "text": _pending_list_text()})
+                    yield _sse({"type": "done", "mode": _mode})
+                    return
+                yield _sse({"type": "token", "text": f"Pending intent confirmed: {_pending_text[:220]}"})
+                yield _sse({"type": "done", "mode": _mode})
+                return
+        except Exception:
+            pass
 
     # ── Light Compression Law — classify intent before routing ───────────────
     try:
@@ -848,6 +1134,35 @@ async def api_drive_read(path: str = ""):
         return JSONResponse(read_file(path))
     except Exception as e:
         return JSONResponse({"error": str(e), "ok": False}, status_code=500)
+
+
+@app.get("/api/diagnostics/runtime")
+async def api_runtime_diagnostics():
+    """Read-only diagnostic frame for the active canonical ORACLE backend."""
+    return JSONResponse(_runtime_diagnostics())
+
+
+@app.get("/api/context/obs")
+async def api_obs_context():
+    """Read-only OBS runtime context. No raw video/audio, no OBS control."""
+    try:
+        from obs_runtime_context import get_obs_context
+        return JSONResponse(get_obs_context())
+    except Exception as exc:
+        return JSONResponse({
+            "available": False,
+            "last_obs_error": f"{type(exc).__name__}: {exc}",
+            "observed_at": datetime.now(timezone.utc).isoformat(),
+            "raw_video_stored": False,
+            "raw_audio_stored": False,
+            "write_permissions": False,
+        })
+
+
+@app.get("/api/continuity/frame")
+async def api_continuity_frame():
+    """Read-only restart-safe continuity frame. No persistence side effects."""
+    return JSONResponse(_continuity_frame(persist=False))
 
 
 @app.post("/chat")

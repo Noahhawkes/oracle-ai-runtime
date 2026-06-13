@@ -241,53 +241,6 @@ def classify_route(text: str, *, current_mode: str = MODE_BUILDER, no_route: boo
     return RouteDecision(MODE_COMPANION, False, "default to direct conversation")
 
 
-def _claude_fallback(user_input: str, *, timed_out: bool = False) -> str:
-    """
-    When qwen times out or errors, ask Claude directly for a companion response.
-    Falls back to static string only if Claude is also unavailable.
-    """
-    try:
-        from openai import OpenAI as _OAI
-        import os as _os
-        api_key = _os.environ.get("ANTHROPIC_API_KEY") or _os.environ.get("CLAUDE_API_KEY", "")
-        if not api_key:
-            raise RuntimeError("no api key")
-        client = _OAI(
-            base_url="https://api.anthropic.com/v1/",
-            api_key=api_key,
-            default_headers={"anthropic-version": "2023-06-01"},
-        )
-        system = _system_prompt()
-        resp = client.chat.completions.create(
-            model="claude-sonnet-4-6",
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_input},
-            ],
-            max_tokens=300,
-            temperature=0.7,
-            timeout=12,
-        )
-        return resp.choices[0].message.content or fallback_response(user_input, timed_out=timed_out)
-    except Exception:
-        pass
-
-    # Last resort — try the native Anthropic SDK
-    try:
-        import anthropic as _ant
-        client = _ant.Anthropic()
-        system = _system_prompt()
-        msg = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=300,
-            system=system,
-            messages=[{"role": "user", "content": user_input}],
-        )
-        return msg.content[0].text if msg.content else fallback_response(user_input, timed_out=timed_out)
-    except Exception:
-        return fallback_response(user_input, timed_out=timed_out)
-
-
 def fallback_response(text: str, *, timed_out: bool = False) -> str:
     lower = text.lower()
     if "are you there" in lower:
@@ -297,7 +250,7 @@ def fallback_response(text: str, *, timed_out: bool = False) -> str:
     elif "how are you" in lower:
         base = "I'm here and steady. More importantly, I'm with you right now."
     else:
-        base = "Noah, I am here. I am in Companion Mode. I am not routing this to Claude or Codex. Tell me what you want to talk through."
+        base = "Noah, I am here. I am in Companion Mode, staying local and conversational. Tell me what you want to talk through."
     if timed_out:
         return f"{base} The local model took too long, so I'm answering directly instead."
     return base
@@ -418,39 +371,38 @@ def direct_response(
     _LAST_DEBUG["local_model_request_started"] = True
     _LAST_DEBUG["local_model_request_start_ts"] = time.time()
     _write_debug_snapshot()
-    # Determine whether Claude fallback is permitted by the active policy
-    _claude_permitted = (policy is None) or (not policy.forbids("claude"))
-
     future = _LOCAL_POOL.submit(call_local)
     try:
         reply = future.result(timeout=timeout_s)
     except FutureTimeout:
         # Do NOT cancel — the thread owns the HTTP socket; cancelling leaves it dangling.
-        # Just stop waiting. If Claude is permitted and no schema was requested, ask Claude.
-        # If Claude is forbidden or a schema was requested, return a schema-aware sentinel
-        # that oracle.py will intercept and replace with build_timeout_response().
+        # Just stop waiting. If a schema was requested, return a schema-aware
+        # sentinel that oracle.py will replace with build_timeout_response().
         _LAST_DEBUG["timeout_fired"] = True
         _LAST_DEBUG["fallback_answered"] = True
         _write_debug_snapshot()
-        if _claude_permitted and (policy is None or not policy.has_schema()):
-            return DirectResponse(_claude_fallback(user_input, timed_out=True), timed_out=True, fallback_used=True)
-        # Schema request or Claude forbidden: return sentinel — oracle.py replaces with structured output
-        _LAST_DEBUG["schema_preserving_timeout"] = True
-        _write_debug_snapshot()
-        return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=True, fallback_used=True)
+        if policy is not None and policy.has_schema():
+            _LAST_DEBUG["schema_preserving_timeout"] = True
+            _write_debug_snapshot()
+            return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=True, fallback_used=True)
+        return DirectResponse(fallback_response(user_input, timed_out=True), timed_out=True, fallback_used=True)
     except Exception:
         _LAST_DEBUG["fallback_answered"] = True
         _LAST_DEBUG["model_error"] = True
         _write_debug_snapshot()
-        if _claude_permitted:
-            return DirectResponse(_claude_fallback(user_input), fallback_used=True)
-        return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=True, fallback_used=True)
+        if policy is not None and policy.has_schema():
+            _LAST_DEBUG["schema_preserving_timeout"] = True
+            _write_debug_snapshot()
+            return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=True, fallback_used=True)
+        return DirectResponse(fallback_response(user_input), fallback_used=True)
     if not reply.strip():
         _LAST_DEBUG["fallback_answered"] = True
         _write_debug_snapshot()
-        if _claude_permitted:
-            return DirectResponse(fallback_response(user_input), fallback_used=True)
-        return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=True, fallback_used=True)
+        if policy is not None and policy.has_schema():
+            _LAST_DEBUG["schema_preserving_timeout"] = True
+            _write_debug_snapshot()
+            return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=True, fallback_used=True)
+        return DirectResponse(fallback_response(user_input), fallback_used=True)
     _LAST_DEBUG["first_token_received"] = True
     _LAST_DEBUG["response_received_ts"] = time.time()
     _write_debug_snapshot()

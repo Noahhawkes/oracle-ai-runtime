@@ -52,8 +52,14 @@ _NO_CODEX_PATTERNS: list[str] = [
     r"\bforbid.*codex\b",
 ]
 
-# Section header extraction: lines ending with ":" or wrapped in [brackets]
-_SECTION_RE = re.compile(r"^\s*[\[#*-]?\s*([A-Za-z][A-Za-z_ ]{2,40})\s*[\]:]?\s*$", re.MULTILINE)
+# Section header extraction for explicit schemas only:
+#   Current mode:
+#   [Current mode]
+# Plain conversational lines like "any updates" are not schema headings.
+_SECTION_RE = re.compile(
+    r"^\s*(?:\[\s*([A-Za-z][A-Za-z_ ]{2,40})\s*\]|[#*-]?\s*([A-Za-z][A-Za-z_ ]{2,40})\s*:)\s*$",
+    re.MULTILINE,
+)
 
 
 @dataclass(frozen=True)
@@ -107,7 +113,7 @@ def parse(text: str) -> ExecutionPolicy:
     # Extract requested section headings
     sections: list[str] = []
     for m in _SECTION_RE.finditer(text):
-        candidate = m.group(1).strip()
+        candidate = (m.group(1) or m.group(2) or "").strip()
         if 3 <= len(candidate) <= 40 and candidate.lower() not in ("the", "and", "for", "with"):
             sections.append(candidate)
     sections = list(dict.fromkeys(sections))  # deduplicate preserving order

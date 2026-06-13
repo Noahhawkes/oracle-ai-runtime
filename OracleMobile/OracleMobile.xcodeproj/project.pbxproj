@@ -1,0 +1,89 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		7F524C229B5921B4C960B031 /* OracleMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8084476D0216F5BB79A38EED /* OracleMobileApp.swift */; };
+		B2A72071CD4F7626BDCE8442 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBB8BB193AA50971632FFE1B /* ChatMessage.swift */; };
+		207F02A92DC9EF14897B5319 /* OracleStreamEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A989204A499020C80F84CCB0 /* OracleStreamEvent.swift */; };
+		51E04D8379A6DB36BF561F9F /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0B630F9520EF353418601C7 /* KeychainStore.swift */; };
+		675977FAFAD7AC5DDDD070C0 /* OracleAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591EAC1128BDBCF9409F4733 /* OracleAPIClient.swift */; };
+		2EB387E5B71EF85C6D25E17E /* SpeechRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A902B9676780126518C28239 /* SpeechRecognizer.swift */; };
+		84355137BA73631E1757FDA5 /* SpeechSpeaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D6CBB0953B2A19871DADBEE /* SpeechSpeaker.swift */; };
+		5A0B5FF0924DC7B5E088C338 /* OracleSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AAAA808B54BAF90C643D905 /* OracleSettings.swift */; };
+		9B2F7BC72F4F34730A0170A0 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26508AAA6E10560159B01453 /* ChatViewModel.swift */; };
+		CAF63E89F3BB11CDD7D5E76B /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C077E87A947D5DDDBDDC9A72 /* RootView.swift */; };
+		1802C6D914B816F242D343D4 /* MessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDCEF5ED0979F63F23F02287 /* MessageBubble.swift */; };
+		30A033228EED3E59F0169C6C /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D464BF81CAAF4B57B2C04D84 /* ChatView.swift */; };
+		5A048A5962D239BE0A1D024E /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABE597B046599B4546D34412 /* SettingsView.swift */; };
+		222F0DBFFE5EB23DCD3FD16F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CFDBAC21689581B04CB7ABB5 /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		8084476D0216F5BB79A38EED /* OracleMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OracleMobileApp.swift"; sourceTree = "<group>"; };
+		FBB8BB193AA50971632FFE1B /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatMessage.swift"; sourceTree = "<group>"; };
+		A989204A499020C80F84CCB0 /* OracleStreamEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OracleStreamEvent.swift"; sourceTree = "<group>"; };
+		D0B630F9520EF353418601C7 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "KeychainStore.swift"; sourceTree = "<group>"; };
+		591EAC1128BDBCF9409F4733 /* OracleAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OracleAPIClient.swift"; sourceTree = "<group>"; };
+		A902B9676780126518C28239 /* SpeechRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SpeechRecognizer.swift"; sourceTree = "<group>"; };
+		2D6CBB0953B2A19871DADBEE /* SpeechSpeaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SpeechSpeaker.swift"; sourceTree = "<group>"; };
+		0AAAA808B54BAF90C643D905 /* OracleSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OracleSettings.swift"; sourceTree = "<group>"; };
+		26508AAA6E10560159B01453 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatViewModel.swift"; sourceTree = "<group>"; };
+		C077E87A947D5DDDBDDC9A72 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RootView.swift"; sourceTree = "<group>"; };
+		DDCEF5ED0979F63F23F02287 /* MessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MessageBubble.swift"; sourceTree = "<group>"; };
+		D464BF81CAAF4B57B2C04D84 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatView.swift"; sourceTree = "<group>"; };
+		ABE597B046599B4546D34412 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsView.swift"; sourceTree = "<group>"; };
+		CFDBAC21689581B04CB7ABB5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Assets.xcassets"; sourceTree = "<group>"; };
+		3FB6BD64A997C517BC11CC6E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info.plist"; sourceTree = "<group>"; };
+		AEF63687048485D45524643C /* OracleMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OracleMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		7B8633C7EB6F5CB13673C25D /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		6CFC827E67DCAE34C72B9CED = {isa = PBXGroup; children = (1DF401F405384E02A0BF02D3 /* OracleMobile */, 021F2B7F3E0C61452C987484 /* Products */); sourceTree = "<group>"; };
+		1DF401F405384E02A0BF02D3 /* OracleMobile */ = {isa = PBXGroup; children = (8084476D0216F5BB79A38EED /* OracleMobileApp.swift */, BF657CFE8769AAE6C0570C29 /* Models */, 6EE67047A4B2648DDBB08231 /* Services */, 05C17F9FDD2EF4C74A28A071 /* Stores */, 529389268FE012CA42456275 /* ViewModels */, 58492F208780FA5EF3807E8F /* Views */, CFDBAC21689581B04CB7ABB5 /* Assets.xcassets */, 3FB6BD64A997C517BC11CC6E /* Info.plist */); path = OracleMobile; sourceTree = "<group>"; };
+		BF657CFE8769AAE6C0570C29 /* Models */ = {isa = PBXGroup; children = (FBB8BB193AA50971632FFE1B /* ChatMessage.swift */, A989204A499020C80F84CCB0 /* OracleStreamEvent.swift */); path = Models; sourceTree = "<group>"; };
+		6EE67047A4B2648DDBB08231 /* Services */ = {isa = PBXGroup; children = (D0B630F9520EF353418601C7 /* KeychainStore.swift */, 591EAC1128BDBCF9409F4733 /* OracleAPIClient.swift */, A902B9676780126518C28239 /* SpeechRecognizer.swift */, 2D6CBB0953B2A19871DADBEE /* SpeechSpeaker.swift */); path = Services; sourceTree = "<group>"; };
+		05C17F9FDD2EF4C74A28A071 /* Stores */ = {isa = PBXGroup; children = (0AAAA808B54BAF90C643D905 /* OracleSettings.swift */); path = Stores; sourceTree = "<group>"; };
+		529389268FE012CA42456275 /* ViewModels */ = {isa = PBXGroup; children = (26508AAA6E10560159B01453 /* ChatViewModel.swift */); path = ViewModels; sourceTree = "<group>"; };
+		58492F208780FA5EF3807E8F /* Views */ = {isa = PBXGroup; children = (C077E87A947D5DDDBDDC9A72 /* RootView.swift */, DDCEF5ED0979F63F23F02287 /* MessageBubble.swift */, D464BF81CAAF4B57B2C04D84 /* ChatView.swift */, ABE597B046599B4546D34412 /* SettingsView.swift */); path = Views; sourceTree = "<group>"; };
+		021F2B7F3E0C61452C987484 /* Products */ = {isa = PBXGroup; children = (AEF63687048485D45524643C /* OracleMobile.app */); name = Products; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0E8A3AD980EC179856012B7E /* OracleMobile */ = {isa = PBXNativeTarget; buildConfigurationList = CCBFB2F7B133DA12073314B0 /* Build configuration list for PBXNativeTarget "OracleMobile" */; buildPhases = (E4F78730D65EE9F55E2BAC2F /* Sources */, 7B8633C7EB6F5CB13673C25D /* Frameworks */, C52ABA055DA4D0050382EB56 /* Resources */); buildRules = (); dependencies = (); name = OracleMobile; packageProductDependencies = (); productName = OracleMobile; productReference = AEF63687048485D45524643C /* OracleMobile.app */; productType = "com.apple.product-type.application"; };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		98F54143AB4E86B28C3AFEE0 /* Project object */ = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = 1; LastSwiftUpdateCheck = 2700; LastUpgradeCheck = 2700; TargetAttributes = {0E8A3AD980EC179856012B7E = {CreatedOnToolsVersion = 27.0; }; }; }; buildConfigurationList = 2085AFA2AE905A69F4756592 /* Build configuration list for PBXProject "OracleMobile" */; compatibilityVersion = "Xcode 15.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = 6CFC827E67DCAE34C72B9CED; productRefGroup = 021F2B7F3E0C61452C987484 /* Products */; projectDirPath = ""; projectRoot = ""; targets = (0E8A3AD980EC179856012B7E /* OracleMobile */); };
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		C52ABA055DA4D0050382EB56 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (222F0DBFFE5EB23DCD3FD16F /* Assets.xcassets in Resources */); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E4F78730D65EE9F55E2BAC2F /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (7F524C229B5921B4C960B031 /* OracleMobileApp.swift in Sources */, B2A72071CD4F7626BDCE8442 /* ChatMessage.swift in Sources */, 207F02A92DC9EF14897B5319 /* OracleStreamEvent.swift in Sources */, 51E04D8379A6DB36BF561F9F /* KeychainStore.swift in Sources */, 675977FAFAD7AC5DDDD070C0 /* OracleAPIClient.swift in Sources */, 2EB387E5B71EF85C6D25E17E /* SpeechRecognizer.swift in Sources */, 84355137BA73631E1757FDA5 /* SpeechSpeaker.swift in Sources */, 5A0B5FF0924DC7B5E088C338 /* OracleSettings.swift in Sources */, 9B2F7BC72F4F34730A0170A0 /* ChatViewModel.swift in Sources */, CAF63E89F3BB11CDD7D5E76B /* RootView.swift in Sources */, 1802C6D914B816F242D343D4 /* MessageBubble.swift in Sources */, 30A033228EED3E59F0169C6C /* ChatView.swift in Sources */, 5A048A5962D239BE0A1D024E /* SettingsView.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		5E8ACABCCBE1DB5D311988C9 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CLANG_WARN_BOOL_CONVERSION = YES; CLANG_WARN_CONSTANT_CONVERSION = YES; CLANG_WARN_DOCUMENTATION_COMMENTS = YES; CLANG_WARN_EMPTY_BODY = YES; CLANG_WARN_ENUM_CONVERSION = YES; CLANG_WARN_INFINITE_RECURSION = YES; CLANG_WARN_INT_CONVERSION = YES; CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES; CLANG_WARN_OBJC_LITERAL_CONVERSION = YES; CLANG_WARN_RANGE_LOOP_ANALYSIS = YES; CLANG_WARN_STRICT_PROTOTYPES = YES; CLANG_WARN_SUSPICIOUS_MOVE = YES; ENABLE_STRICT_OBJC_MSGSEND = YES; GCC_C_LANGUAGE_STANDARD = gnu17; GCC_NO_COMMON_BLOCKS = YES; SDKROOT = iphoneos; DEBUG_INFORMATION_FORMAT = dwarf; ENABLE_TESTABILITY = YES; GCC_OPTIMIZATION_LEVEL = 0; ONLY_ACTIVE_ARCH = YES; SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Debug; };
+		F84FD35CA8548076F2B51EDF /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; CLANG_WARN_BOOL_CONVERSION = YES; CLANG_WARN_CONSTANT_CONVERSION = YES; CLANG_WARN_DOCUMENTATION_COMMENTS = YES; CLANG_WARN_EMPTY_BODY = YES; CLANG_WARN_ENUM_CONVERSION = YES; CLANG_WARN_INFINITE_RECURSION = YES; CLANG_WARN_INT_CONVERSION = YES; CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES; CLANG_WARN_OBJC_LITERAL_CONVERSION = YES; CLANG_WARN_RANGE_LOOP_ANALYSIS = YES; CLANG_WARN_STRICT_PROTOTYPES = YES; CLANG_WARN_SUSPICIOUS_MOVE = YES; ENABLE_STRICT_OBJC_MSGSEND = YES; GCC_C_LANGUAGE_STANDARD = gnu17; GCC_NO_COMMON_BLOCKS = YES; SDKROOT = iphoneos; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; ENABLE_NS_ASSERTIONS = NO; SWIFT_COMPILATION_MODE = wholemodule; }; name = Release; };
+		52E4B1F45A8301801ABFA155 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_ASSET_PATHS = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = OracleMobile/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.noahhawkes.oraclemobile; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SUPPORTS_MACCATALYST = NO; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1;}; name = Debug; };
+		9F4924C3DF89CA99B9B1F005 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_ASSET_PATHS = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = OracleMobile/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 1.0; PRODUCT_BUNDLE_IDENTIFIER = com.noahhawkes.oraclemobile; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SUPPORTS_MACCATALYST = NO; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1;}; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2085AFA2AE905A69F4756592 /* Build configuration list for PBXProject "OracleMobile" */ = {isa = XCConfigurationList; buildConfigurations = (5E8ACABCCBE1DB5D311988C9 /* Debug */, F84FD35CA8548076F2B51EDF /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		CCBFB2F7B133DA12073314B0 /* Build configuration list for PBXNativeTarget "OracleMobile" */ = {isa = XCConfigurationList; buildConfigurations = (52E4B1F45A8301801ABFA155 /* Debug */, 9F4924C3DF89CA99B9B1F005 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+
+	};
+	rootObject = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+}

@@ -1832,6 +1832,64 @@ def main():
                 print(f"\n[working-status error: {e}]\n")
             continue
 
+        # Pending-intent affirmations must resolve before Companion routing,
+        # channel checks, Builder routing, or model calls. This is the "sure"
+        # path after ORACLE asks whether to open /pending.
+        if not user_input.startswith("/"):
+            try:
+                from cognitive_kernel import (
+                    INTENT_APPROVAL_REQUIRED as _EARLY_INTENT_APPROVAL_REQUIRED,
+                    INTENT_PROCEED_PENDING as _EARLY_INTENT_PROCEED_PENDING,
+                    KERNEL_ASK as _EARLY_KERNEL_ASK,
+                    classify_input as _early_classify_input,
+                    load_kernel_state as _early_load_kernel_state,
+                    milestone_policy_summary as _early_milestone_policy_summary,
+                    remember_pending_intent as _early_remember_pending_intent,
+                    requires_hard_approval as _early_requires_hard_approval,
+                )
+                _early_pending_intent = _pending_runtime_step
+                if _early_pending_intent is None:
+                    _early_pending_intent = _early_load_kernel_state().get("pending_intent")
+                if _early_pending_intent:
+                    _early_pending_decision = _early_classify_input(
+                        user_input,
+                        pending_intent=_early_pending_intent,
+                        has_pending_items=bool(_last_pending_ids),
+                    )
+                    if _early_pending_decision.intent == _EARLY_INTENT_PROCEED_PENDING:
+                        _early_step_text = str(_early_pending_intent.get("text", ""))
+                        if (
+                            _early_pending_decision.decision == _EARLY_KERNEL_ASK
+                            or _early_pending_intent.get("approval_required")
+                            or _early_requires_hard_approval(_early_step_text)
+                        ):
+                            print(f"\n  {C['byellow']}[APPROVAL REQUIRED]{C['reset']} {_early_step_text[:160]}")
+                            print(f"  {_early_milestone_policy_summary()}")
+                            print("  I will not execute this from a bare confirmation.\n")
+                            continue
+                        _pending_runtime_step = None
+                        _early_remember_pending_intent(None)
+                        if "/pending" in _early_step_text.lower() or "pending" in _early_step_text.lower():
+                            user_input = "/pending"
+                            _cap_query = "/pending"
+                        else:
+                            try:
+                                from oracle_runtime import MODE_MANUAL, run_cycle
+                                result = run_cycle(mode=MODE_MANUAL)
+                                print(f"\n  {C['bgreen']}[ADVANCED]{C['reset']} {result.action_taken[:160]}\n")
+                                speak("Advanced the pending step.")
+                            except Exception as e:
+                                print(f"\n[cognitive-loop error: {e}]\n")
+                            continue
+                    elif _early_pending_decision.intent == _EARLY_INTENT_APPROVAL_REQUIRED:
+                        _early_step_text = str(_early_pending_intent.get("text", ""))
+                        print(f"\n  {C['byellow']}[APPROVAL REQUIRED]{C['reset']} {_early_step_text[:160]}")
+                        print(f"  {_early_milestone_policy_summary()}")
+                        print("  I will not execute this from a bare confirmation.\n")
+                        continue
+            except Exception as _early_pending_err:
+                log("PENDING_INTENT_WARN", str(_early_pending_err))
+
         # Router-facing salience contract: ordinary non-command conversation
         # answers directly before channel, cognitive, or builder routing.
         if not user_input.startswith("/"):

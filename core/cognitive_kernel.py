@@ -226,6 +226,29 @@ def classify_input(
     if not lower:
         return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "empty input")
 
+    if is_quoted_context(text):
+        return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "quoted context is not an instruction")
+
+    if pending_intent and (
+        lower in _PROCEED_PHRASES
+        or (lower.startswith(("yes", "ok", "okay", "sure")) and any(w in lower for w in ("proceed", "continue", "do it")))
+    ):
+        step_text = str(pending_intent.get("text", ""))
+        policy = evaluate_action(step_text, in_approved_scope=in_approved_scope)
+        if pending_intent.get("approval_required") or policy.decision == "approval_required":
+            return KernelDecision(
+                INTENT_APPROVAL_REQUIRED,
+                KERNEL_ASK,
+                "pending intent crosses hard-approval boundary",
+                True,
+                pending_intent,
+                getattr(policy, "category", ""),
+            )
+        return KernelDecision(INTENT_PROCEED_PENDING, KERNEL_ACT, "confirmation resolves pending intent", False, pending_intent)
+
+    if lower in _PROCEED_PHRASES:
+        return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "bare affirmation without pending intent")
+
     salience = classify_salience(text)
     if salience.source_class != SOURCE_NOAH_DIRECT and not salience.handoff_allowed:
         return KernelDecision(
@@ -250,31 +273,11 @@ def classify_input(
     if is_chatgpt_relay_conversation(text):
         return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "ChatGPT relay without explicit action")
 
-    if is_quoted_context(text):
-        return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "quoted context is not an instruction")
-
     if is_social_checkin(text):
         return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "social check-in")
 
     if lower in _STATUS_PHRASES or lower.startswith("show status"):
         return KernelDecision(INTENT_STATUS, KERNEL_REPORT, "status phrase")
-
-    if pending_intent and (
-        lower in _PROCEED_PHRASES
-        or (lower.startswith(("yes", "ok", "okay", "sure")) and any(w in lower for w in ("proceed", "continue", "do it")))
-    ):
-        step_text = str(pending_intent.get("text", ""))
-        policy = evaluate_action(step_text, in_approved_scope=in_approved_scope)
-        if pending_intent.get("approval_required") or policy.decision == "approval_required":
-            return KernelDecision(
-                INTENT_APPROVAL_REQUIRED,
-                KERNEL_ASK,
-                "pending intent crosses hard-approval boundary",
-                True,
-                pending_intent,
-                getattr(policy, "category", ""),
-            )
-        return KernelDecision(INTENT_PROCEED_PENDING, KERNEL_ACT, "confirmation resolves pending intent", False, pending_intent)
 
     if (pending_intent or has_pending_items) and any(phrase in lower for phrase in _SHOW_PENDING_PHRASES):
         return KernelDecision(INTENT_SHOW_PENDING, KERNEL_REPORT, "pending item display requested")
@@ -542,7 +545,7 @@ def run_smoke_tests() -> int:
         check("HELP_REQUEST preempts Codex/work routing", help_request.intent == INTENT_CONVERSATION and help_request.needed_capability == "")
         check("explicit Codex patch question can hand off", decide_next("Ask Codex if the patches worked").needed_capability == "Codex local file backed bridge")
         check("explicit Codex file inspect can hand off", decide_next("Use Codex to inspect the patch files").needed_capability == "Codex local file backed bridge")
-        check("conversation outranks pending queue", decide_next("how are you doing?", pending_intent=pending).intent == INTENT_CONVERSATION)
+        check("pending affirmation outranks conversation routing", decide_next("sure", pending_intent=pending).intent == INTENT_PROCEED_PENDING)
         check("quoted approval is not approval", decide_next('"yes please proceed"', pending_intent=pending).intent == INTENT_CONVERSATION)
         check("question is not a command", decide_next("should we commit this later?").intent == INTENT_CONVERSATION)
         check("continuity question returns report", decide_next("what were we working on").intent == INTENT_STATUS)

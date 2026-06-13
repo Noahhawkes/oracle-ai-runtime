@@ -597,12 +597,27 @@ function setMode(mode) {
 }
 
 function updateModeUI(mode) {
+  if (mode !== 'companion' && mode !== 'builder') return;
   currentMode = mode;
   document.querySelectorAll('.mode-pill').forEach(p => p.classList.remove('active'));
   document.getElementById('pill-' + mode)?.classList.add('active');
   const ind = document.getElementById('mode-indicator');
   ind.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
-  ind.className = 'mode-indicator ' + mode;
+  ind.className = mode;
+}
+
+function updateNoRouteUI(value) {
+  noRoute = !!value;
+  document.getElementById('no-route-badge')?.classList.toggle('visible', noRoute);
+}
+
+async function syncModeState() {
+  const r = await fetch(apiUrl('/api/mode'));
+  if (!r.ok) throw new Error(`Mode sync failed (${r.status})`);
+  const data = await r.json();
+  updateModeUI(data.mode || 'companion');
+  updateNoRouteUI(data.no_route || false);
+  return data;
 }
 
 // ── New chat ──────────────────────────────────────────────────────────────────
@@ -751,12 +766,41 @@ async function sendMessage() {
     const resp = await fetch(apiUrl('/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify({ message: text, mode: currentMode }),
     });
+
+    if (!resp.ok) throw new Error(`/chat returned ${resp.status}`);
+    if (!resp.body) throw new Error('/chat returned no response body');
 
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+
+    function processLine(line) {
+      if (!line.startsWith('data: ')) return;
+      try {
+        const event = JSON.parse(line.slice(6));
+
+        if (event.type === 'token') {
+          if (firstToken) {
+            bubble.innerHTML = '';
+            firstToken = false;
+          }
+          accumulated += event.text;
+          bubble.dataset.raw = accumulated;
+          bubble.innerHTML = marked.parse(accumulated);
+          scrollToBottom();
+        }
+
+        if (event.type === 'mode') {
+          updateModeUI(event.mode);
+        }
+
+        if (event.type === 'done') {
+          if (event.mode) updateModeUI(event.mode);
+        }
+      } catch {}
+    }
 
     while (true) {
       const { value, done } = await reader.read();
@@ -767,33 +811,17 @@ async function sendMessage() {
       buffer = lines.pop() || '';
 
       for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        try {
-          const event = JSON.parse(line.slice(6));
-
-          if (event.type === 'token') {
-            if (firstToken) {
-              bubble.innerHTML = '';
-              firstToken = false;
-            }
-            accumulated += event.text;
-            bubble.dataset.raw = accumulated;
-            bubble.innerHTML = marked.parse(accumulated);
-            scrollToBottom();
-          }
-
-          if (event.type === 'mode') {
-            updateModeUI(event.mode);
-          }
-
-          if (event.type === 'done') {
-            if (event.mode) updateModeUI(event.mode);
-          }
-        } catch {}
+        processLine(line);
       }
     }
+
+    if (buffer.trim()) processLine(buffer.trim());
   } catch (err) {
+    firstToken = false;
+    bubble.dataset.raw = '';
     bubble.innerHTML = `<em style="color:#ef4444">Connection error: ${err.message}</em>`;
+  } finally {
+    syncModeState().catch(() => {});
   }
 
   isStreaming = false;
@@ -868,11 +896,7 @@ async function _applyLearnedUI() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   try {
-    const r = await fetch(apiUrl('/api/mode'));
-    const data = await r.json();
-    updateModeUI(data.mode || 'companion');
-    noRoute = data.no_route || false;
-    if (noRoute) document.getElementById('no-route-badge').classList.add('visible');
+    await syncModeState();
   } catch {}
 
   await _applyLearnedUI();
