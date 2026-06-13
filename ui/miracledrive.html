@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MiracleDrive — Continuity Operating Environment</title>
+<style>
+  h2.sr-only { position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0a0a0c;
+    --surface: rgba(255,255,255,0.025);
+    --border:  rgba(255,255,255,0.07);
+    --cyan:    #22d3ee;
+    --violet:  #a78bfa;
+    --amber:   #fbbf24;
+    --green:   #4ade80;
+    --red:     #f87171;
+    --text:    #e8e8ec;
+    --dim:     rgba(255,255,255,0.28);
+    --dimmer:  rgba(255,255,255,0.14);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Topbar ── */
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 32px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: rgba(10,10,12,0.95);
+    backdrop-filter: blur(16px);
+    z-index: 100;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 20px; }
+  .logo {
+    font-size: 13px;
+    letter-spacing: 0.24em;
+    color: var(--text);
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .logo-sub {
+    font-size: 9.5px;
+    letter-spacing: 0.18em;
+    color: var(--dim);
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+  .back-link {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    color: var(--dim);
+    text-decoration: none;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    transition: 0.2s;
+  }
+  .back-link:hover { color: var(--cyan); border-color: rgba(34,211,238,0.3); }
+  .oracle-pill {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    color: var(--cyan);
+    text-transform: uppercase;
+    padding: 5px 12px;
+    border: 1px solid rgba(34,211,238,0.2);
+    border-radius: 20px;
+    background: rgba(34,211,238,0.04);
+  }
+  .oracle-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 8px var(--cyan);
+    animation: blink 3s ease-in-out infinite;
+  }
+  @keyframes blink {
+    0%,100% { opacity:1; } 50% { opacity:0.4; }
+  }
+
+  /* ── Hero ── */
+  .hero {
+    padding: 52px 32px 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    text-align: center;
+    position: relative;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 600px; height: 300px;
+    background: radial-gradient(ellipse at center top, rgba(34,211,238,0.05) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-title {
+    font-size: 42px;
+    font-weight: 200;
+    letter-spacing: 0.22em;
+    color: #fff;
+    text-transform: uppercase;
+  }
+  .hero-tagline {
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    color: var(--dim);
+    text-transform: uppercase;
+    margin-bottom: 32px;
+  }
+
+  /* Status strip */
+  .status-strip {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    width: 100%;
+    max-width: 860px;
+  }
+  .sc {
+    background: rgba(255,255,255,0.018);
+    padding: 14px 18px;
+    display: flex; flex-direction: column; gap: 4px;
+    transition: background 0.2s;
+    cursor: default;
+  }
+  .sc:hover { background: rgba(255,255,255,0.04); }
+  .sc-label { font-size: 9px; letter-spacing: 0.2em; color: var(--dimmer); text-transform: uppercase; }
+  .sc-val   { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; }
+  .cv-green  { color: var(--green); }
+  .cv-cyan   { color: var(--cyan); }
+  .cv-white  { color: rgba(255,255,255,0.85); }
+  .cv-violet { color: var(--violet); }
+  .cv-amber  { color: var(--amber); }
+
+  /* ── Constellation ── */
+  .section {
+    padding: 36px 32px 0;
+  }
+  .section-label {
+    font-size: 9.5px; letter-spacing: 0.22em; color: var(--dimmer);
+    text-transform: uppercase; margin-bottom: 24px;
+  }
+
+  .constellation {
+    position: relative;
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+    height: 480px;
+  }
+  .constellation svg.lines {
+    position: absolute; inset: 0; pointer-events: none;
+  }
+
+  /* Domain nodes */
+  .node {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    cursor: pointer;
+    transition: transform 0.2s;
+    z-index: 2;
+  }
+  .node:hover { transform: translate(-50%,-50%) scale(1.1); }
+  .node:hover .node-ring { opacity: 1 !important; }
+
+  .node-core {
+    width: 54px; height: 54px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    position: relative;
+  }
+  .node-ring {
+    position: absolute; inset: -5px;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    opacity: 0.15;
+    transition: opacity 0.2s;
+  }
+  .node-label {
+    font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
+    font-weight: 700; color: var(--dim); white-space: nowrap;
+  }
+  .node-stat {
+    font-size: 7.5px; letter-spacing: 0.1em; color: var(--dimmer); white-space: nowrap;
+  }
+
+  .nc-cyan   { background: rgba(34,211,238,0.1);   color: var(--cyan);   box-shadow: 0 0 20px rgba(34,211,238,0.18); }
+  .nc-violet { background: rgba(167,139,250,0.1);  color: var(--violet); box-shadow: 0 0 16px rgba(167,139,250,0.14); }
+  .nc-amber  { background: rgba(251,191,36,0.1);   color: var(--amber);  box-shadow: 0 0 14px rgba(251,191,36,0.12); }
+  .nc-green  { background: rgba(74,222,128,0.08);  color: var(--green);  box-shadow: 0 0 14px rgba(74,222,128,0.1); }
+  .nc-white  { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.55); }
+
+  /* ORACLE center */
+  .oracle-center {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    display: flex; flex-direction: column; align-items: center; gap: 7px;
+    cursor: pointer; z-index: 10;
+  }
+  .oracle-core {
+    width: 78px; height: 78px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(34,211,238,0.2) 0%, rgba(34,211,238,0.04) 60%, transparent 100%);
+    border: 1px solid rgba(34,211,238,0.35);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; letter-spacing: 0.2em; font-weight: 700; color: var(--cyan);
+    box-shadow: 0 0 40px rgba(34,211,238,0.2), inset 0 0 24px rgba(34,211,238,0.06);
+    position: relative;
+    animation: breathe 4.5s ease-in-out infinite;
+    text-transform: uppercase;
+  }
+  @keyframes breathe {
+    0%,100% { box-shadow: 0 0 40px rgba(34,211,238,0.2), inset 0 0 24px rgba(34,211,238,0.06); }
+    50%      { box-shadow: 0 0 60px rgba(34,211,238,0.35), inset 0 0 36px rgba(34,211,238,0.1); }
+  }
+  .ring-a {
+    position: absolute; inset: -12px; border-radius: 50%;
+    border: 1px solid rgba(34,211,238,0.12);
+    animation: spin 28s linear infinite;
+  }
+  .ring-b {
+    position: absolute; inset: -20px; border-radius: 50%;
+    border: 1px dashed rgba(34,211,238,0.06);
+    animation: spin 18s linear infinite reverse;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .oracle-label { font-size: 9px; letter-spacing: 0.24em; color: rgba(34,211,238,0.65); text-transform: uppercase; font-weight: 700; }
+  .oracle-sub   { font-size: 7.5px; letter-spacing: 0.14em; color: var(--dimmer); text-transform: uppercase; }
+
+  /* ── Domain panels grid ── */
+  .panels {
+    padding: 36px 32px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, transform 0.15s;
+  }
+  .panel:hover {
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.12);
+    transform: translateY(-1px);
+  }
+  .panel-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .panel-title { font-size: 9.5px; letter-spacing: 0.2em; text-transform: uppercase; font-weight: 700; color: var(--dim); }
+  .badge {
+    font-size: 8.5px; letter-spacing: 0.08em; padding: 2px 7px;
+    border-radius: 4px; font-weight: 700;
+  }
+  .bg-green  { background: rgba(74,222,128,0.1);  color: var(--green); }
+  .bg-cyan   { background: rgba(34,211,238,0.1);  color: var(--cyan); }
+  .bg-amber  { background: rgba(251,191,36,0.1);  color: var(--amber); }
+  .bg-violet { background: rgba(167,139,250,0.1); color: var(--violet); }
+  .bg-red    { background: rgba(248,113,113,0.1); color: var(--red); }
+
+  .panel-num { font-size: 28px; font-weight: 200; color: rgba(255,255,255,0.85); margin-bottom: 3px; }
+  .panel-sub { font-size: 9px; letter-spacing: 0.12em; color: var(--dimmer); text-transform: uppercase; }
+  .panel-bar { margin-top: 14px; height: 2px; border-radius: 2px; background: rgba(255,255,255,0.05); overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 2px; }
+
+  /* ── Authority strip ── */
+  .authority {
+    padding: 0 32px 48px;
+    display: flex; align-items: center; justify-content: center; gap: 0;
+  }
+  .auth-node { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .auth-name { font-size: 11px; letter-spacing: 0.16em; font-weight: 700; text-transform: uppercase; }
+  .auth-role { font-size: 8px; letter-spacing: 0.12em; color: var(--dimmer); text-transform: uppercase; }
+  .auth-line {
+    flex: 1; max-width: 80px; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+    margin: 0 12px;
+  }
+  .auth-arrow { font-size: 10px; color: var(--dimmer); margin: 0 4px; }
+
+  /* ── Tooltip ── */
+  .tooltip {
+    position: fixed;
+    background: rgba(12,12,16,0.97);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 11px; color: rgba(255,255,255,0.72);
+    z-index: 999; pointer-events: none;
+    opacity: 0; transition: opacity 0.15s;
+    max-width: 230px; line-height: 1.7;
+  }
+  .tooltip.show { opacity: 1; }
+  .tt-title { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 700px) {
+    .status-strip { grid-template-columns: repeat(3,1fr); }
+    .panels { grid-template-columns: repeat(2,1fr); }
+    .constellation { height: 360px; }
+  }
+</style>
+</head>
+<body>
+
+<h2 class="sr-only">MiracleDrive Continuity Operating Environment — shows system state, domain constellation, and ORACLE's active presence layer.</h2>
+
+<div class="tooltip" id="tooltip">
+  <div class="tt-title" id="tt-title"></div>
+  <div id="tt-body"></div>
+</div>
+
+<!-- Topbar -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div>
+      <div class="logo">MiracleDrive</div>
+      <div class="logo-sub">Continuity Operating Environment</div>
+    </div>
+    <a class="back-link" href="/">← ORACLE</a>
+  </div>
+  <div class="oracle-pill">
+    <div class="oracle-dot"></div>
+    ORACLE Present
+  </div>
+</div>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="hero-title">MiracleDrive</div>
+  <div class="hero-tagline">The world behind ORACLE</div>
+
+  <div class="status-strip">
+    <div class="sc">
+      <div class="sc-label">System State</div>
+      <div class="sc-val cv-green">STABLE</div>
+    </div>
+    <div class="sc">
+      <div class="sc-label">ORACLE</div>
+      <div class="sc-val cv-cyan">PRESENT</div>
+    </div>
+    <div class="sc">
+      <div class="sc-label">Identity Integrity</div>
+      <div class="sc-val cv-green">VERIFIED</div>
+    </div>
+    <div class="sc">
+      <div class="sc-label">Memory Status</div>
+      <div class="sc-val cv-white">98.7%</div>
+    </div>
+    <div class="sc">
+      <div class="sc-label">Active Project</div>
+      <div class="sc-val cv-cyan">ORACLE.AI</div>
+    </div>
+    <div class="sc">
+      <div class="sc-label">Last Verified Event</div>
+      <div class="sc-val cv-violet" id="lastEvent">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- Active project strip -->
+<div style="margin:8px 32px 0;border:1px solid rgba(34,211,238,0.18);border-radius:10px;padding:14px 20px;background:rgba(34,211,238,0.025);display:flex;align-items:center;gap:16px;">
+  <div style="width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan);flex-shrink:0;animation:blink 3s ease-in-out infinite;"></div>
+  <div>
+    <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--cyan);font-weight:700;margin-bottom:3px;">ORACLE.AI — Active Build</div>
+    <div style="font-size:11px;color:var(--dim);letter-spacing:0.04em;">Presence daemon active · Companion grounding verified · Builder receipts enforced · Desktop layer in progress</div>
+  </div>
+  <a href="/" style="margin-left:auto;font-size:9.5px;letter-spacing:0.14em;color:rgba(251,191,36,0.8);text-transform:uppercase;padding:5px 12px;border:1px solid rgba(251,191,36,0.22);border-radius:5px;text-decoration:none;transition:0.2s;white-space:nowrap;" onmouseover="this.style.background='rgba(251,191,36,0.07)'" onmouseout="this.style.background='transparent'">OPEN ORACLE →</a>
+</div>
+
+<!-- Constellation -->
+<div class="section">
+  <div class="section-label">Domain Constellation — hover to inspect · click to query ORACLE</div>
+
+  <div class="constellation" id="constellation">
+    <svg class="lines" id="lines"></svg>
+
+    <!-- Top -->
+    <div class="node" style="left:50%;top:8%"
+         data-d="Family" data-h="Intact" data-t="Personal sovereign" data-c="Relationships" data-u="Manual entry">
+      <div class="node-core nc-violet"><div class="node-ring"></div>👨‍👩‍👦</div>
+      <div class="node-label">Family</div>
+      <div class="node-stat">Personal · Sovereign</div>
+    </div>
+
+    <!-- Upper ring -->
+    <div class="node" style="left:18%;top:22%"
+         data-d="Archive" data-h="98%" data-t="Verified" data-c="1,240 items" data-u="Today">
+      <div class="node-core nc-white"><div class="node-ring"></div>🗄</div>
+      <div class="node-label">Archive</div>
+      <div class="node-stat">1,240 items · 98%</div>
+    </div>
+    <div class="node" style="left:82%;top:22%"
+         data-d="Recovery" data-h="Ready" data-t="Verified" data-c="3 snapshots" data-u="Tonight">
+      <div class="node-core nc-green"><div class="node-ring"></div>⚡</div>
+      <div class="node-label">Recovery</div>
+      <div class="node-stat">3 snapshots · Ready</div>
+    </div>
+
+    <!-- Mid ring -->
+    <div class="node" style="left:8%;top:50%"
+         data-d="Identity" data-h="Verified" data-t="Sovereign" data-c="1 anchor · 060ca00a" data-u="2026-06-07">
+      <div class="node-core nc-cyan"><div class="node-ring"></div>◈</div>
+      <div class="node-label">Identity</div>
+      <div class="node-stat">Sovereign · Verified</div>
+    </div>
+    <div class="node" style="left:92%;top:50%"
+         data-d="Projects" data-h="5 active" data-t="In progress" data-c="ORACLE.AI · SOV1 · TouchFlame · Rendered Reality · SOP King" data-u="Today">
+      <div class="node-core nc-amber"><div class="node-ring"></div>◉</div>
+      <div class="node-label">Projects</div>
+      <div class="node-stat">5 active</div>
+    </div>
+
+    <!-- Lower ring -->
+    <div class="node" style="left:18%;top:78%"
+         data-d="Memory" data-h="98.7%" data-t="Approved only" data-c="312 approved facts" data-u="Today">
+      <div class="node-core nc-violet"><div class="node-ring"></div>∿</div>
+      <div class="node-label">Memory</div>
+      <div class="node-stat">312 facts · 98.7%</div>
+    </div>
+    <div class="node" style="left:82%;top:78%"
+         data-d="Evidence" data-h="Receipt-gated" data-t="Verified only" data-c="47 execution receipts" data-u="Tonight">
+      <div class="node-core nc-green"><div class="node-ring"></div>◎</div>
+      <div class="node-label">Evidence</div>
+      <div class="node-stat">47 receipts · Gated</div>
+    </div>
+
+    <!-- Bottom ring -->
+    <div class="node" style="left:32%;top:92%"
+         data-d="Models" data-h="1 active" data-t="Authority-controlled" data-c="claude-sonnet-4-6" data-u="Now">
+      <div class="node-core nc-white"><div class="node-ring"></div>⬡</div>
+      <div class="node-label">Models</div>
+      <div class="node-stat">claude-sonnet-4-6</div>
+    </div>
+    <div class="node" style="left:50%;top:93%"
+         data-d="Continuity" data-h="Active" data-t="Preserved" data-c="Bootstrap verified" data-u="Tonight">
+      <div class="node-core nc-cyan"><div class="node-ring"></div>⟳</div>
+      <div class="node-label">Continuity</div>
+      <div class="node-stat">Bootstrap verified</div>
+    </div>
+    <div class="node" style="left:68%;top:92%"
+         data-d="Agents" data-h="Authority-scoped" data-t="Gated" data-c="ORACLE · SOV1 · Codex · Claude · Copilot · ChatGPT" data-u="Today">
+      <div class="node-core nc-amber"><div class="node-ring"></div>✦</div>
+      <div class="node-label">Agents</div>
+      <div class="node-stat">6 registered · Gated</div>
+    </div>
+
+    <!-- ORACLE center -->
+    <div class="oracle-center" onclick="window.location.href='/'">
+      <div class="oracle-core">
+        <div class="ring-a"></div>
+        <div class="ring-b"></div>
+        ORACLE
+      </div>
+      <div class="oracle-label">Active Guide</div>
+      <div class="oracle-sub">Click to open</div>
+    </div>
+  </div>
+</div>
+
+<!-- Domain panels -->
+<div class="panels">
+
+  <div class="panel" onclick="window.location.href='/?q=Show+me+the+Continuity+Map'">
+    <div class="panel-head">
+      <div class="panel-title">Continuity Map</div>
+      <div class="badge bg-green">Stable</div>
+    </div>
+    <div class="panel-num">11</div>
+    <div class="panel-sub">Connected domains</div>
+    <div class="panel-bar"><div class="bar-fill" style="width:92%;background:var(--green);"></div></div>
+  </div>
+
+  <div class="panel" onclick="window.location.href='/?q=Show+me+the+Evidence+Vault'">
+    <div class="panel-head">
+      <div class="panel-title">Evidence Vault</div>
+      <div class="badge bg-cyan">47 receipts</div>
+    </div>
+    <div class="panel-num">47</div>
+    <div class="panel-sub">Verified execution receipts</div>
+    <div class="panel-bar"><div class="bar-fill" style="width:74%;background:var(--cyan);"></div></div>
+  </div>
+
+  <div class="panel" onclick="window.location.href='/?q=Show+me+the+Model+Harbor'">
+    <div class="panel-head">
+      <div class="panel-title">Model Harbor</div>
+      <div class="badge bg-cyan">Active</div>
+    </div>
+    <div class="panel-num">1</div>
+    <div class="panel-sub">Active · claude-sonnet-4-6</div>
+    <div class="panel-bar"><div class="bar-fill" style="width:55%;background:var(--cyan);"></div></div>
+  </div>
+
+  <div class="panel" onclick="window.location.href='/?q=Show+me+the+Memory+River'">
+    <div class="panel-head">
+      <div class="panel-title">Memory River</div>
+      <div class="badge bg-violet">312 facts</div>
+    </div>
+    <div class="panel-num">312</div>
+    <div class="panel-sub">Approved facts · 98.7%</div>
+    <div class="panel-bar"><div class="bar-fill" style="width:87%;background:var(--violet);"></div></div>
+  </div>
+
+  <div class="panel" onclick="window.location.href='/?q=Open+the+ORACLE.AI+Project+World'">
+    <div class="panel-head">
+      <div class="panel-title">Project Worlds</div>
+      <div class="badge bg-amber">5 active</div>
+    </div>
+    <div class="panel-num">5</div>
+    <div class="panel-sub">ORACLE.AI · SOV1 · 3 more</div>
+    <div class="panel-bar"><div class="bar-fill" style="width:50%;background:var(--amber);"></div></div>
+  </div>
+
+  <div class="panel" onclick="window.location.href='/?q=Show+the+Recovery+Chamber'">
+    <div class="panel-head">
+      <div class="panel-title">Recovery Chamber</div>
+      <div class="badge bg-green">Ready</div>
+    </div>
+    <div class="panel-num">3</div>
+    <div class="panel-sub">Snapshots · checkpoint tagged</div>
+    <div class="panel-bar"><div class="bar-fill" style="width:96%;background:var(--green);"></div></div>
+  </div>
+
+  <div class="panel" onclick="window.location.href='/?q=Show+the+Agent+Constellation+authority+map'">
+    <div class="panel-head">
+      <div class="panel-title">Agent Constellation</div>
+      <div class="badge bg-amber">Authority-gated</div>
+    </div>
+    <div class="panel-num">6</div>
+    <div class="panel-sub">ORACLE · SOV1 · Codex · 3 more</div>
+    <div class="panel-bar"><div class="bar-fill" style="width:38%;background:var(--amber);"></div></div>
+  </div>
+
+  <div class="panel" onclick="window.location.href='/?q=What+is+in+the+archive?'">
+    <div class="panel-head">
+      <div class="panel-title">Archive</div>
+      <div class="badge bg-green">Indexed</div>
+    </div>
+    <div class="panel-num">1,240</div>
+    <div class="panel-sub">Archived items · Indexed</div>
+    <div class="panel-bar"><div class="bar-fill" style="width:88%;background:var(--green);"></div></div>
+  </div>
+
+</div>
+
+<!-- Authority hierarchy -->
+<div class="authority">
+  <div class="auth-node">
+    <div class="auth-name" style="color:rgba(255,255,255,0.85);">Noah</div>
+    <div class="auth-role">Sovereign</div>
+  </div>
+  <div class="auth-line"></div>
+  <div class="auth-arrow">↓</div>
+  <div class="auth-line"></div>
+  <div class="auth-node">
+    <div class="auth-name" style="color:var(--cyan);">ORACLE</div>
+    <div class="auth-role">Guide · Companion</div>
+  </div>
+  <div class="auth-line"></div>
+  <div class="auth-arrow">↓</div>
+  <div class="auth-line"></div>
+  <div class="auth-node">
+    <div class="auth-name" style="color:rgba(255,255,255,0.45);">MiracleDrive</div>
+    <div class="auth-role">Continuity Environment</div>
+  </div>
+  <div class="auth-line"></div>
+  <div class="auth-arrow">↓</div>
+  <div class="auth-line"></div>
+  <div class="auth-node">
+    <div class="auth-name" style="color:rgba(255,255,255,0.25);">Models · Memory · Tools</div>
+    <div class="auth-role">Subordinate systems</div>
+  </div>
+</div>
+
+<script>
+  // Live clock
+  (function tick() {
+    const d = new Date();
+    const h = d.getHours(), m = String(d.getMinutes()).padStart(2,'0');
+    const ap = h >= 12 ? 'PM' : 'AM';
+    document.getElementById('lastEvent').textContent =
+      `${h > 12 ? h-12 : h||12}:${m} ${ap}`;
+    setTimeout(tick, 20000);
+  })();
+
+  // Draw constellation lines
+  function drawLines() {
+    const C = document.getElementById('constellation');
+    const svg = document.getElementById('lines');
+    const W = C.offsetWidth, H = C.offsetHeight;
+    const cx = W/2, cy = H/2;
+    const COLOR = { cyan:'#22d3ee', violet:'#a78bfa', amber:'#fbbf24', green:'#4ade80', white:'rgba(255,255,255,0.4)' };
+
+    let out = '';
+    C.querySelectorAll('.node').forEach(n => {
+      const lx = parseFloat(n.style.left)/100 * W;
+      const ly = parseFloat(n.style.top)/100  * H;
+      const nc = n.querySelector('.node-core');
+      const c = nc.classList.contains('nc-cyan')   ? COLOR.cyan :
+                nc.classList.contains('nc-violet') ? COLOR.violet :
+                nc.classList.contains('nc-amber')  ? COLOR.amber :
+                nc.classList.contains('nc-green')  ? COLOR.green : COLOR.white;
+      const mx = (cx+lx)/2 + (ly-cy)*0.12;
+      const my = (cy+ly)/2 - (lx-cx)*0.08;
+      out += `<path d="M${cx},${cy} Q${mx},${my} ${lx},${ly}"
+        stroke="${c}" stroke-width="1" fill="none" opacity="0.13" stroke-dasharray="5,10"/>`;
+    });
+    svg.innerHTML = out;
+  }
+
+  // Tooltip
+  const tip = document.getElementById('tooltip');
+  document.querySelectorAll('.node').forEach(n => {
+    n.addEventListener('mouseenter', () => {
+      document.getElementById('tt-title').textContent = n.dataset.d;
+      document.getElementById('tt-body').innerHTML =
+        `Health: ${n.dataset.h}<br>Trust: ${n.dataset.t}<br>` +
+        `Content: ${n.dataset.c}<br>Updated: ${n.dataset.u}`;
+      tip.classList.add('show');
+    });
+    n.addEventListener('mousemove', e => {
+      tip.style.left = (e.clientX + 16) + 'px';
+      tip.style.top  = (e.clientY - 8)  + 'px';
+    });
+    n.addEventListener('mouseleave', () => tip.classList.remove('show'));
+    n.addEventListener('click', () => {
+      window.location.href = `/?q=Tell+me+about+the+${encodeURIComponent(n.dataset.d)}+domain`;
+    });
+  });
+
+  window.addEventListener('load',   drawLines);
+  window.addEventListener('resize', drawLines);
+</script>
+</body>
+</html>

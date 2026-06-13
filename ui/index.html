@@ -440,6 +440,7 @@
     <button id="toggle-sidebar" onclick="toggleSidebar()" title="Toggle sidebar">☰</button>
     <span id="topbar-title">ORACLE</span>
     <div id="mode-indicator" class="companion">Companion</div>
+    <a href="/miracledrive" id="md-link" title="MiracleDrive OS" style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.28);text-decoration:none;padding:4px 10px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;transition:0.2s;" onmouseover="this.style.color='#22d3ee';this.style.borderColor='rgba(34,211,238,0.35)'" onmouseout="this.style.color='rgba(255,255,255,0.28)';this.style.borderColor='rgba(255,255,255,0.1)'">MiracleDrive ↗</a>
   </div>
 
   <div id="messages">
@@ -475,6 +476,17 @@
 </div>
 
 <script>
+// ── Pre-fill from MiracleDrive ?q= param ──────────────────────────────────────
+(function() {
+  const q = new URLSearchParams(window.location.search).get('q');
+  if (q) {
+    window.addEventListener('DOMContentLoaded', () => {
+      const inp = document.getElementById('user-input');
+      if (inp) { inp.value = decodeURIComponent(q); inp.focus(); }
+    });
+  }
+})();
+
 // ── State ─────────────────────────────────────────────────────────────────────
 let currentMode = 'companion';
 let noRoute = false;

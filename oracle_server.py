@@ -665,6 +665,12 @@ async def root():
     return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
 
+@app.get("/miracledrive", response_class=HTMLResponse)
+async def miracledrive():
+    html_path = ROOT / "ui" / "miracledrive.html"
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
 @app.post("/chat")
 async def chat(request: Request):
     body = await request.json()
