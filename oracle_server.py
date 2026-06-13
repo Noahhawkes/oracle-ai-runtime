@@ -243,7 +243,20 @@ def _strip_routing_artifacts(reply: str) -> str:
             continue
         cleaned.append(line)
     result = "\n".join(cleaned).strip()
-    return result if result else reply
+    if result:
+        return result
+    # Everything was a routing artifact (e.g. reply was exactly "Routing to
+    # Claude Code."). Returning the original would re-surface the phantom phrase,
+    # so substitute an honest companion line instead. The web UI has no Claude
+    # Code bridge — Companion mode is local-only by design.
+    original_low = reply.strip().lower()
+    if original_low in _ROUTING_PHRASES:
+        return (
+            "I can't hand off to Claude Code from here — this web view is "
+            "local-only. Switch to Builder mode for tool-backed work, or tell "
+            "me what you'd like and I'll answer directly."
+        )
+    return reply
 
 
 def _core_status_frame(user_text: str) -> str:
@@ -640,6 +653,11 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 _grounded_reply = _source_disciplined_response(user_text, _bootstrap, _history[-12:])
                 if _grounded_reply:
                     reply = _apply_authority_gate(_grounded_reply, effective_mode, user_text)
+                    # Strip hallucinated "Routing to Claude Code." artifacts — the
+                    # web UI has no Claude Code bridge, so the phrase is never a
+                    # real action. (The fallback path below already strips; this
+                    # grounded path previously skipped it.)
+                    reply = _strip_routing_artifacts(reply)
                     yield _sse({"type": "token", "text": reply})
                     _history.append({"role": "assistant", "content": reply})
                     if len(_history) > 40:
