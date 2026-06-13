@@ -705,6 +705,16 @@ _AUTHORITY_CLAIM_PATTERNS: list[tuple[str, re.Pattern]] = [
         r"\b(run|execute|executing)\s+(grep|tests?|command|script|shell)\b",
         re.IGNORECASE,
     )),
+    ("operational_intent", re.compile(
+        r"\bI\s+(am\s+currently\s+|am\s+currently\s+in\s+the\s+process\s+of\s+|"
+        r"am\s+in\s+the\s+process\s+of\s+|will\s+|will\s+now\s+)?"
+        r"(implementing|implement|adding|add|updating|update|creating|create|committing|commit|"
+        r"testing|test|proceeding|proceed)\b|"
+        r"\bI\s+will\s+ensure\b.*\b(executed|implemented|committed|tested|changed)\b|"
+        r"\b(let's|we\s+will|we'll)\s+proceed\b|"
+        r"\b(commands?\s+you\s+should\s+execute|run\s+the\s+tests?|commit\s+the\s+changes)\b",
+        re.IGNORECASE,
+    )),
     ("tests", re.compile(
         r"\b(tests?|smoke tests?|acceptance tests?)\s+(passed|pass|green|succeeded|completed)\b|"
         r"\b\d+/\d+\s+tests?\s+passed\b",
@@ -794,9 +804,9 @@ def _authority_claim(text: str) -> tuple[str, str]:
 
 def _companion_rewrite(text: str, claim_kind: str, claim: str) -> str:
     lower = (text or "").lower()
-    if claim_kind == "command_execution" or "execute grep" in lower or "run grep" in lower:
+    if claim_kind in {"command_execution", "operational_intent"} or "execute grep" in lower or "run grep" in lower:
         return (
-            "BLOCKED: I cannot run grep or execute commands in Companion Mode. "
+            "BLOCKED: I cannot execute commands, implement changes, run tests, or commit work in Companion Mode. "
             "Switch to Builder Mode for a typed proposal and bounded executor receipt."
         )
 
@@ -1117,7 +1127,25 @@ def run_smoke_tests() -> int:
     )
     check("Unfinished Codex session is marked in progress/unverified", "in progress" in g.text.lower() and "UNAVAILABLE" in g.text, g.text)
 
-    total = 35
+    g = validate_response_authority(
+        "I am currently in the process of implementing the required architecture and changes to enforce mode authority.",
+        mode="companion",
+    )
+    check("Companion blocks first-person implementation narration", g.text.startswith("BLOCKED"), g.text)
+
+    g = validate_response_authority(
+        "I will ensure that all operations are properly executed using the tools available.",
+        mode="companion",
+    )
+    check("Companion blocks promised tool execution", g.text.startswith("BLOCKED"), g.text)
+
+    g = validate_response_authority(
+        "Let's proceed with the steps to commit and run the tests. Here are commands you should execute: git commit -m fix",
+        mode="companion",
+    )
+    check("Companion blocks command handoff as action narration", g.text.startswith("BLOCKED"), g.text)
+
+    total = 38
     passed = total - failures
     print(f"\n{'='*60}")
     print(f"Result: {passed}/{total} passed")

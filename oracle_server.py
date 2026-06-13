@@ -764,6 +764,12 @@ def _source_discipline_smoke_test() -> int:
     grep_claim = _apply_authority_gate("I will execute grep now.", "companion")
     check("authority gate blocks Companion grep execution", grep_claim.startswith("BLOCKED") and "Companion Mode" in grep_claim, grep_claim)
 
+    implementation_narration = _apply_authority_gate(
+        "I am currently in the process of implementing the required architecture and changes to enforce mode authority.",
+        "companion",
+    )
+    check("authority gate blocks Companion implementation narration", implementation_narration.startswith("BLOCKED"), implementation_narration)
+
     builder_claim = _apply_authority_gate("COMPLETED: I wrote the file.", "builder")
     check("authority gate prevents Builder completed without receipt", not builder_claim.startswith("COMPLETED"), builder_claim)
     check("authority gate rewrites Builder write as proposal", builder_claim.startswith("PROPOSED") or builder_claim.startswith("APPROVAL_REQUIRED"), builder_claim)
@@ -815,7 +821,7 @@ def _source_discipline_smoke_test() -> int:
     check("Companion route has no shallow LLM fallback", companion_llm < 0 or (builder_pos > companion_pos and companion_llm > builder_pos))
     check("Builder route has no shallow LLM fallback", builder_llm < 0)
 
-    total = 41
+    total = 42
     passed = total - failures
     print(f"{'='*60}")
     print(f"Result: {passed}/{total} passed")
