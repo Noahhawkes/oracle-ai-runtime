@@ -707,6 +707,39 @@ async function sendMessage() {
   scrollToBottom();
 }
 
+// ── Chip label → sendSuggestion text map ─────────────────────────────────────
+const _CHIP_MAP = {
+  "Are you there?":           "Are you there?",
+  "What are you working on?": "What are you working on?",
+  "/self-patch":              "/self-patch",
+  "/focus":                   "/focus",
+  "/help":                    "/help",
+  "/review-learned":          "/review-learned",
+  "/pending":                 "/pending",
+};
+const _CHIP_LABELS = {
+  "/self-patch":       "Propose a self-improvement",
+  "/focus":            "Show current focus",
+  "/help":             "Show commands",
+  "/review-learned":   "What have you learned?",
+  "/pending":          "Review pending items",
+};
+
+function _renderChips(order) {
+  const container = document.querySelector('.suggestion-chips');
+  if (!container) return;
+  container.innerHTML = '';
+  (order || Object.keys(_CHIP_MAP)).slice(0, 5).forEach(key => {
+    const label = _CHIP_LABELS[key] || key;
+    const send  = _CHIP_MAP[key] || key;
+    const el = document.createElement('div');
+    el.className = 'chip';
+    el.textContent = label;
+    el.onclick = () => sendSuggestion(send);
+    container.appendChild(el);
+  });
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   try {
@@ -716,6 +749,13 @@ async function init() {
     noRoute = data.no_route || false;
     if (noRoute) document.getElementById('no-route-badge').classList.add('visible');
   } catch {}
+
+  try {
+    const lr = await fetch(apiUrl('/api/learned-ui'));
+    const ld = await lr.json();
+    if (ld.chip_order && ld.chip_order.length) _renderChips(ld.chip_order);
+  } catch {}
+
   document.getElementById('input').focus();
 }
 

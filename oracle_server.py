@@ -141,6 +141,13 @@ def _boot():
         print("[Boot] MiracleDrive index build started in background")
     except Exception as e:
         print(f"[Boot] MiracleDrive index not available: {e}")
+    # Initialize learning ledger
+    try:
+        from learning import get_ui_hints as _lrn_ping
+        _lrn_ping()
+        print("[Boot] Learning ledger ready")
+    except Exception as e:
+        print(f"[Boot] Learning ledger not available: {e}")
 
 _boot()
 
@@ -587,6 +594,20 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
 
     _history.append({"role": "user", "content": user_text})
 
+    # ── /review-learned — instant local response, no model needed ────────────
+    if user_text.strip().lower() in ("/review-learned", "/review-learned"):
+        try:
+            from learning import get_review
+            review_text = get_review()
+        except Exception as e:
+            review_text = f"Learning ledger unavailable: {e}"
+        yield _sse({"type": "token", "text": review_text})
+        yield _sse({"type": "done", "mode": effective_mode})
+        _history.append({"role": "assistant", "content": review_text})
+        return
+
+    _t_start = time.time()
+
     # ── Companion path — local, direct, no tools ──────────────────────────────
     if effective_mode == "companion" or _no_route:
         try:
@@ -607,6 +628,12 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                     try:
                         from memory import save_message
                         save_message(_session_id, "assistant", reply)
+                    except Exception:
+                        pass
+                    try:
+                        from learning import record_interaction
+                        record_interaction(user_text, "companion_grounded", effective_mode,
+                                           reply_len=len(reply), latency=time.time() - _t_start)
                     except Exception:
                         pass
                     yield _sse({"type": "done", "mode": effective_mode})
@@ -635,6 +662,12 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 reply = _apply_authority_gate(reply, effective_mode, user_text)
                 _history = engine_history[-40:]
                 reply = _strip_routing_artifacts(reply)
+                try:
+                    from learning import record_interaction
+                    record_interaction(user_text, "companion_engine", effective_mode,
+                                       reply_len=len(reply), latency=time.time() - _t_start)
+                except Exception:
+                    pass
                 yield _sse({"type": "token", "text": reply})
                 yield _sse({"type": "done", "mode": effective_mode})
                 return
@@ -688,6 +721,12 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             reply = _apply_authority_gate(reply, effective_mode, user_text)
             _history = engine_history[-40:]
             reply = _strip_routing_artifacts(reply)
+            try:
+                from learning import record_interaction
+                record_interaction(user_text, "builder_engine", effective_mode,
+                                   reply_len=len(reply), latency=time.time() - _t_start)
+            except Exception:
+                pass
             yield _sse({"type": "token", "text": reply})
             yield _sse({"type": "done", "mode": effective_mode})
             return
@@ -804,6 +843,18 @@ async def clear():
     except Exception:
         _session_id = uuid.uuid4().hex[:8]
     return JSONResponse({"ok": True, "session_id": _session_id})
+
+
+@app.get("/api/learned-ui")
+async def learned_ui():
+    """Personalized UI hints derived from Noah's interaction history."""
+    try:
+        from learning import get_ui_hints, get_chip_order
+        hints = get_ui_hints()
+        hints["chip_order"] = get_chip_order()
+        return JSONResponse(hints)
+    except Exception as e:
+        return JSONResponse({"error": str(e), "chip_order": []}, status_code=500)
 
 
 # ── Daemon/Hotkey integration endpoints ────────────────────────────────────────
