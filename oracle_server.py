@@ -180,6 +180,27 @@ def _source_disciplined_response(user_text: str, bootstrap: Any, history: list[d
 
     return None
 
+
+_SOURCE_LABEL_PATTERN = _re.compile(
+    r"\b(VERIFIED|INFERENCE|UNAVAILABLE)\b"
+    r"(?!\s*\[(?:IDENTITY|LIVE_CONTEXT|LATEST_REFLECTION|CURRENT_SESSION)"
+    r"(?:\s*,\s*(?:IDENTITY|LIVE_CONTEXT|LATEST_REFLECTION|CURRENT_SESSION))*\])"
+)
+
+
+def _enforce_companion_source_labels(reply: str) -> str:
+    """Reject model-produced source labels that do not name exact source sections."""
+    if not reply:
+        return reply
+    if _SOURCE_LABEL_PATTERN.search(reply):
+        return (
+            "UNAVAILABLE [IDENTITY, LIVE_CONTEXT, LATEST_REFLECTION, CURRENT_SESSION]: "
+            "The draft response used a source-discipline label without exact source-section support, "
+            "so I cannot present it as verified. Ask for the specific fact again, or use `/grounding-status` "
+            "to inspect loaded source payloads."
+        )
+    return reply
+
 # ── Stream a reply ─────────────────────────────────────────────────────────────
 
 async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
@@ -435,7 +456,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             system = (_grounding_block + "\n\n" + _lcl_base) if _grounding_block else _lcl_base
 
             if local_mode:
-                # Streaming from local Ollama
+                # Collect first so source-label discipline can be enforced before UI output.
                 loop = asyncio.get_event_loop()
                 messages = [{"role": "system", "content": system}] + _history[-12:]
 
@@ -455,11 +476,11 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                     delta = chunk.choices[0].delta.content or ""
                     if delta:
                         reply_parts.append(delta)
-                        yield _sse({"type": "token", "text": delta})
-                reply = "".join(reply_parts)
+                reply = _enforce_companion_source_labels("".join(reply_parts))
+                yield _sse({"type": "token", "text": reply})
 
             else:
-                # Claude API streaming
+                # Collect first so source-label discipline can be enforced before UI output.
                 import anthropic as _ant
                 ant_client = _ant.Anthropic()
                 reply_parts = []
@@ -471,8 +492,8 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 ) as stream:
                     for text in stream.text_stream:
                         reply_parts.append(text)
-                        yield _sse({"type": "token", "text": text})
-                reply = "".join(reply_parts)
+                reply = _enforce_companion_source_labels("".join(reply_parts))
+                yield _sse({"type": "token", "text": reply})
 
         except Exception as e:
             reply = f"I'm here, Noah. (Local model error: {e})"
@@ -684,6 +705,14 @@ def _source_discipline_smoke_test() -> int:
     check("combined prompt includes active project", "VERIFIED [LIVE_CONTEXT]" in r6 and "ORACLE.AI" in r6, r6)
     check("combined prompt includes unavailable unsupported item", "UNAVAILABLE" in r6 and "unsupported claim" in r6, r6)
 
+    bad_model_reply = "VERIFIED:\nThe changes implemented in the code address the routing issue."
+    guarded = _enforce_companion_source_labels(bad_model_reply)
+    check("bare VERIFIED label is blocked", guarded.startswith("UNAVAILABLE [IDENTITY, LIVE_CONTEXT, LATEST_REFLECTION, CURRENT_SESSION]"), guarded)
+
+    good_model_reply = "VERIFIED [LIVE_CONTEXT]: The active project is ORACLE.AI."
+    allowed = _enforce_companion_source_labels(good_model_reply)
+    check("bracketed source label is allowed", allowed == good_model_reply, allowed)
+
     block = bootstrap.system_context_block(current_session=history)
     check("grounding block has IDENTITY section", "SOURCE SECTION: IDENTITY" in block)
     check("grounding block has LIVE_CONTEXT section", "SOURCE SECTION: LIVE_CONTEXT" in block)
@@ -693,7 +722,7 @@ def _source_discipline_smoke_test() -> int:
     check("identity selection includes family/continuity fact", "Sons (continuity targets):" in block, block)
     check("identity selection includes known boundaries", "known_boundary:" in block, block)
 
-    total = 19
+    total = 21
     passed = total - failures
     print(f"{'='*60}")
     print(f"Result: {passed}/{total} passed")
