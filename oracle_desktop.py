@@ -560,10 +560,53 @@ class OracleDesktopApp:
 
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _crash_log_path() -> Path:
+    return ROOT / "Logs" / "oracle_desktop_crash.log"
+
+
+def _write_crash_log(exc: BaseException) -> None:
+    import traceback, datetime
+    path = _crash_log_path()
+    path.parent.mkdir(exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(f"\n[{datetime.datetime.now().isoformat()}] oracle_desktop.py crash\n")
+        traceback.print_exc(file=f)
+        f.write(f"Exception: {exc}\n")
+
+
 def main():
-    root = tk.Tk()
-    app = OracleDesktopApp(root)
-    root.mainloop()
+    try:
+        root = tk.Tk()
+    except Exception as exc:
+        _write_crash_log(exc)
+        # Tkinter unavailable — fall back to a message box via ctypes if possible
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(
+                0,
+                f"ORACLE failed to open the window:\n{exc}\n\nDetails written to:\n{_crash_log_path()}",
+                "ORACLE Startup Error",
+                0x10,  # MB_ICONERROR
+            )
+        except Exception:
+            pass
+        raise
+
+    try:
+        app = OracleDesktopApp(root)
+
+        def _on_tk_error(exc, val, tb):
+            import traceback, datetime
+            path = _crash_log_path()
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(f"\n[{datetime.datetime.now().isoformat()}] Tkinter callback error\n")
+                traceback.print_exception(exc, val, tb, file=f)
+
+        root.report_callback_exception = _on_tk_error
+        root.mainloop()
+    except Exception as exc:
+        _write_crash_log(exc)
+        raise
 
 
 if __name__ == "__main__":
