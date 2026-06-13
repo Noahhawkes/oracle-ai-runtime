@@ -64,6 +64,25 @@ def init_db():
                 created_at  TEXT NOT NULL,
                 FOREIGN KEY (person_id) REFERENCES people(id)
             );
+            CREATE TABLE IF NOT EXISTS durable_facts (
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                fact_text            TEXT NOT NULL,
+                source_type          TEXT NOT NULL,
+                source_id            TEXT NOT NULL,
+                observed_at          TEXT NOT NULL,
+                confidence           REAL NOT NULL,
+                transformation_history TEXT NOT NULL DEFAULT '[]',
+                canonical_status     TEXT NOT NULL DEFAULT 'staged',
+                approval_status      TEXT NOT NULL DEFAULT 'pending',
+                created_at           TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS audit_chain (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id   TEXT NOT NULL,
+                event        TEXT NOT NULL,
+                detail       TEXT NOT NULL DEFAULT '{}',
+                recorded_at  TEXT NOT NULL
+            );
         """)
 
 
@@ -206,3 +225,114 @@ def recall_person(name):
         "role": row["role"],
         "notes": [{"note": n["note"], "date": n["created_at"][:10]} for n in notes]
     }
+
+
+# ── Durable Facts (provenance-tagged, governance-gated) ──────────────────────
+
+_REQUIRED_PROVENANCE_FIELDS = {
+    "source_type", "source_id", "observed_at", "confidence",
+    "transformation_history", "canonical_status", "approval_status",
+}
+
+_VALID_SOURCE_TYPES = {"human_stated", "inferred", "observed", "generated"}
+
+
+def _validate_provenance(provenance: dict) -> None:
+    """Raise ValueError if any required provenance field is absent or invalid."""
+    missing = _REQUIRED_PROVENANCE_FIELDS - set(provenance.keys())
+    if missing:
+        raise ValueError(f"Missing required provenance fields: {sorted(missing)}")
+    if provenance["source_type"] not in _VALID_SOURCE_TYPES:
+        raise ValueError(
+            f"Invalid source_type {provenance['source_type']!r}. "
+            f"Must be one of: {sorted(_VALID_SOURCE_TYPES)}"
+        )
+    confidence = provenance["confidence"]
+    if not (isinstance(confidence, (int, float)) and 0.0 <= confidence <= 1.0):
+        raise ValueError(f"confidence must be 0.0–1.0, got {confidence!r}")
+    if not isinstance(provenance["transformation_history"], list):
+        raise ValueError("transformation_history must be a list")
+
+
+def insert_durable_fact(fact_text: str, provenance: dict) -> int:
+    """
+    Insert a provenance-tagged durable fact.
+    Raises ValueError if provenance is incomplete.
+    Returns the row id.
+    """
+    _validate_provenance(provenance)
+    now = datetime.now().isoformat()
+    with get_conn() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO durable_facts
+              (fact_text, source_type, source_id, observed_at, confidence,
+               transformation_history, canonical_status, approval_status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                fact_text,
+                provenance["source_type"],
+                provenance["source_id"],
+                provenance["observed_at"],
+                float(provenance["confidence"]),
+                json.dumps(provenance["transformation_history"]),
+                provenance["canonical_status"],
+                provenance["approval_status"],
+                now,
+            ),
+        )
+        return cur.lastrowid
+
+
+def search_durable_facts(query: str, limit: int = 10) -> list[dict]:
+    """
+    Full-text keyword search over durable facts.
+    Returns records as dicts with full provenance.
+    """
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM durable_facts WHERE fact_text LIKE ? ORDER BY id DESC LIMIT ?",
+            (f"%{query}%", limit),
+        ).fetchall()
+        results = []
+        for row in rows:
+            r = dict(row)
+            try:
+                r["transformation_history"] = json.loads(r.get("transformation_history") or "[]")
+            except Exception:
+                r["transformation_history"] = []
+            results.append(r)
+        return results
+
+
+def append_audit_chain(session_id: str, event: str, detail: dict | None = None) -> None:
+    """Write a structured audit chain entry."""
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO audit_chain (session_id, event, detail, recorded_at) VALUES (?, ?, ?, ?)",
+            (
+                session_id,
+                event,
+                json.dumps(detail or {}),
+                datetime.now().isoformat(),
+            ),
+        )
+
+
+def get_audit_chain(session_id: str) -> list[dict]:
+    """Return ordered audit events for a session."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT event, detail, recorded_at FROM audit_chain WHERE session_id = ? ORDER BY id",
+            (session_id,),
+        ).fetchall()
+        results = []
+        for row in rows:
+            r = dict(row)
+            try:
+                r["detail"] = json.loads(r.get("detail") or "{}")
+            except Exception:
+                r["detail"] = {}
+            results.append(r)
+        return results
