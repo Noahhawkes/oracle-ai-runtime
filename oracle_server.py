@@ -148,6 +148,13 @@ def _boot():
         print("[Boot] Learning ledger ready")
     except Exception as e:
         print(f"[Boot] Learning ledger not available: {e}")
+    # Start ambient context watchers (clipboard + screenshots + OBS)
+    try:
+        from ambient_watch import start as _aw_start
+        _aw_start()
+        print("[Boot] Ambient watch active (clipboard + screenshots + OBS)")
+    except Exception as e:
+        print(f"[Boot] Ambient watch not available: {e}")
 
 _boot()
 
@@ -644,6 +651,13 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             except Exception:
                 _grounding_block = ""
             try:
+                from ambient_watch import get_context_block as _amb_block
+                _amb = _amb_block(limit=6)
+                if _amb:
+                    _grounding_block = (_grounding_block + "\n\n" + _amb).strip()
+            except Exception:
+                pass
+            try:
                 from oracle import web_engine_response
                 loop = asyncio.get_event_loop()
                 reply, engine_history, engine_mode = await loop.run_in_executor(
@@ -843,6 +857,16 @@ async def clear():
     except Exception:
         _session_id = uuid.uuid4().hex[:8]
     return JSONResponse({"ok": True, "session_id": _session_id})
+
+
+@app.get("/api/ambient")
+async def api_ambient(limit: int = 20):
+    """Recent ambient captures — clipboard, screenshots, OBS recordings."""
+    try:
+        from ambient_watch import get_recent
+        return JSONResponse({"events": get_recent(limit=limit)})
+    except Exception as e:
+        return JSONResponse({"events": [], "error": str(e)})
 
 
 @app.get("/api/learned-ui")
