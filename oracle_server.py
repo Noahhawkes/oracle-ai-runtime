@@ -25,6 +25,44 @@ ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "core"))
 
+import re as _re
+
+# ── Simulation guard ──────────────────────────────────────────────────────────
+# Detects when a user pastes an implementation directive into Builder Mode
+# instead of submitting an actual task.
+
+_DIRECTIVE_SIGNALS = [
+    "required behavior", "suggested commit", "acceptance test",
+    "definition of done", "exact files changed", "test results",
+    "remaining risks", "inspect the live path", "run all relevant",
+]
+
+_SIMULATION_GUARD_REPLY = (
+    "I have not executed this yet.\n\n"
+    "I can:\n"
+    "- Create a bounded **proposal** (status: PENDING, awaiting your approval)\n"
+    "- Run the **approved builder workflow** for a specific named task\n"
+    "- Answer questions about what the implementation would require\n\n"
+    "Which would you like?"
+)
+
+def _is_pasted_directive(text: str) -> bool:
+    if len(text) < 200:
+        return False
+    lower = text.lower()
+    return sum(1 for s in _DIRECTIVE_SIGNALS if s in lower) >= 2
+
+
+# ── Operational claim guard ───────────────────────────────────────────────────
+# Blocks LLM text that contains operational claims not backed by a receipt.
+
+def _first_operational_claim(text: str) -> str | None:
+    try:
+        from execution_receipt import find_operational_claim
+        return find_operational_claim(text)
+    except Exception:
+        return None
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -188,6 +226,21 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         yield _sse({"type": "done"})
         return
 
+    if lower in ("/grounding-status", "/grounding"):
+        # Deterministic Python — never routed through the LLM.
+        try:
+            from grounding import format_grounding_status
+            text = format_grounding_status()
+        except Exception as e:
+            text = (
+                "GROUNDING STATUS: UNAVAILABLE\n"
+                f"Reason: {e}\n"
+                "No runtime evidence was generated."
+            )
+        yield _sse({"type": "token", "text": f"```\n{text}\n```"})
+        yield _sse({"type": "done"})
+        return
+
     if lower in ("/status", "/mode"):
         state = _get_mode_state()
         yield _sse({"type": "token", "text": (
@@ -309,6 +362,14 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
 
     # ── Builder path — tools, full capability ────────────────────────────────
     else:
+        # Simulation guard: pasted directives must not produce fake narration
+        if _is_pasted_directive(user_text):
+            yield _sse({"type": "token", "text": _SIMULATION_GUARD_REPLY})
+            yield _sse({"type": "done"})
+            reply = _SIMULATION_GUARD_REPLY
+            _history.append({"role": "assistant", "content": reply})
+            return
+
         try:
             from llm import make_client, get_model, is_local
             from tools.definitions import TOOL_DEFINITIONS
@@ -319,7 +380,10 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
 
             system = (
                 "You are ORACLE, Noah's AI system. Builder mode active.\n"
-                "You have access to tools. Use them precisely and report what you do."
+                "You have access to tools. Use them precisely.\n"
+                "CRITICAL: Do not narrate operations you have not executed via a tool call.\n"
+                "Do not invent file paths, hashes, PIDs, timestamps, or process states.\n"
+                "If you cannot verify something with a tool, say so explicitly."
             )
 
             messages = [{"role": "system", "content": system}] + _history[-12:]
@@ -336,6 +400,12 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                     stream=False,
                 ))
                 reply = resp.choices[0].message.content or ""
+                claim = _first_operational_claim(reply)
+                if claim:
+                    reply = (
+                        f"[BLOCKED] Operational claim without execution receipt: `{claim}`\n"
+                        "No operation was executed. Submit a specific task or use a tool."
+                    )
                 yield _sse({"type": "token", "text": reply})
             else:
                 import anthropic as _ant
@@ -358,8 +428,17 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 )
                 for block in response.content:
                     if hasattr(block, "text"):
-                        reply_parts.append(block.text)
-                        yield _sse({"type": "token", "text": block.text})
+                        claim = _first_operational_claim(block.text)
+                        if claim:
+                            blocked = (
+                                f"\n[BLOCKED] Operational claim without execution receipt: `{claim}`\n"
+                                "No operation was executed. Submit a specific task or use a tool.\n"
+                            )
+                            reply_parts.append(blocked)
+                            yield _sse({"type": "token", "text": blocked})
+                        else:
+                            reply_parts.append(block.text)
+                            yield _sse({"type": "token", "text": block.text})
                     elif block.type == "tool_use":
                         tool_calls_made.append(block.name)
                         yield _sse({"type": "token", "text": f"\n\n*Calling tool: `{block.name}`...*\n"})
