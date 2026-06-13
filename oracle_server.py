@@ -82,6 +82,12 @@ def _boot():
     from memory import init_db, new_session
     init_db()
     _session_id = new_session()
+    # Run companion grounding bootstrap at startup (deterministic, no LLM)
+    try:
+        import companion_bootstrap
+        companion_bootstrap.get(force_refresh=True)
+    except Exception:
+        pass
 
 _boot()
 
@@ -229,8 +235,13 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     if lower in ("/grounding-status", "/grounding"):
         # Deterministic Python — never routed through the LLM.
         try:
+            import companion_bootstrap
+            bootstrap = companion_bootstrap.get(force_refresh=True)
+            text = bootstrap.grounding_status_text()
+            # Append runtime grounding status below
             from grounding import format_grounding_status
-            text = format_grounding_status()
+            runtime = format_grounding_status()
+            text = text + "\n\n--- RUNTIME ---\n" + runtime
         except Exception as e:
             text = (
                 "GROUNDING STATUS: UNAVAILABLE\n"
@@ -312,9 +323,16 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             model = get_model(vision=False)
             local_mode = is_local()
 
-            system = _lcl_prompt or (
-                "You are ORACLE, Noah's resident AI. Speak directly. Be brief."
-            )
+            # Inject verified identity and continuity context (deterministic, pre-LLM)
+            try:
+                import companion_bootstrap as _cb
+                _bootstrap = _cb.get()
+                _grounding_block = _bootstrap.system_context_block()
+            except Exception:
+                _grounding_block = ""
+
+            _lcl_base = _lcl_prompt or "You are ORACLE, Noah's resident AI. Speak directly. Be brief."
+            system = (_grounding_block + "\n\n" + _lcl_base) if _grounding_block else _lcl_base
 
             if local_mode:
                 # Streaming from local Ollama
