@@ -40,6 +40,26 @@ ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "core"))
 
+# Under pythonw.exe (the desktop launcher), sys.stdout/sys.stderr are None.
+# uvicorn calls sys.stdout.isatty() during logging setup and crashes on None,
+# so the detached server never binds. Route them to a runtime log file so the
+# pythonw-launched server boots reliably and stays diagnosable.
+if sys.stdout is None or sys.stderr is None:
+    try:
+        _log_dir = ROOT / "Logs"
+        _log_dir.mkdir(exist_ok=True)
+        _runtime_log = open(_log_dir / "oracle_runtime.log", "a", encoding="utf-8", buffering=1)
+        if sys.stdout is None:
+            sys.stdout = _runtime_log
+        if sys.stderr is None:
+            sys.stderr = _runtime_log
+    except Exception:
+        _null = open(os.devnull, "w", encoding="utf-8")
+        if sys.stdout is None:
+            sys.stdout = _null
+        if sys.stderr is None:
+            sys.stderr = _null
+
 import re as _re
 
 # ── Simulation guard ──────────────────────────────────────────────────────────
@@ -1157,6 +1177,54 @@ async def api_obs_context():
             "raw_audio_stored": False,
             "write_permissions": False,
         })
+
+
+@app.get("/api/see/status")
+async def api_see_status():
+    """Honest status of ORACLE's webcam vision. No camera is opened server-side."""
+    try:
+        from oracle_sight import sight_available
+        return JSONResponse(sight_available())
+    except Exception as exc:
+        return JSONResponse({
+            "available": False,
+            "model": None,
+            "error": f"{type(exc).__name__}: {exc}",
+            "raw_frame_stored": False,
+            "observed_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+
+@app.post("/api/see")
+async def api_see(request: Request):
+    """
+    ORACLE looks at one webcam frame and describes it in her own voice.
+    The frame is analyzed in memory and discarded — never written to disk.
+    The browser drives continuous watching by posting frames one at a time.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"available": False, "error": "invalid JSON body"}, status_code=400)
+
+    image = (body.get("image") or "").strip()
+    if not image:
+        return JSONResponse({"available": False, "error": "no image supplied"}, status_code=400)
+
+    prompt = body.get("prompt") or None
+    try:
+        from oracle_sight import describe_image
+        # Run the (slow, blocking) vision call off the event loop.
+        result = await asyncio.to_thread(describe_image, image, prompt=prompt)
+        return JSONResponse(result)
+    except Exception as exc:
+        return JSONResponse({
+            "available": False,
+            "observation": None,
+            "error": f"{type(exc).__name__}: {exc}",
+            "raw_frame_stored": False,
+            "observed_at": datetime.now(timezone.utc).isoformat(),
+        }, status_code=500)
 
 
 @app.get("/api/continuity/frame")
