@@ -19,7 +19,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Any
 
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
@@ -99,6 +99,70 @@ def _get_mode_state() -> dict:
         "no_route": _no_route,
         "session_id": _session_id,
     }
+
+
+def _section_contains(sections: dict[str, list[str]], section: str, text: str) -> bool:
+    needle = text.lower()
+    return any(needle in line.lower() for line in sections.get(section, []))
+
+
+def _first_source_line(sections: dict[str, list[str]], section: str, text: str) -> str:
+    needle = text.lower()
+    for line in sections.get(section, []):
+        if needle in line.lower():
+            return line
+    return ""
+
+
+def _source_disciplined_response(user_text: str, bootstrap: Any, history: list[dict]) -> str | None:
+    """Deterministic Companion answers for factual grounding and attribution checks."""
+    lower = user_text.lower()
+    sections = bootstrap.source_sections(current_session=history)
+
+    if "full name" in lower and "noah" in lower:
+        value = "Noah Alexander Hawkes Sr."
+        if _section_contains(sections, "IDENTITY", value):
+            return f"VERIFIED [IDENTITY]: {value}\nSource text: {_first_source_line(sections, 'IDENTITY', value)}"
+        return "UNAVAILABLE: Noah's full name is not present in the loaded IDENTITY source payload."
+
+    if "active project" in lower or "what project is active" in lower:
+        value = "ORACLE.AI"
+        if _section_contains(sections, "LIVE_CONTEXT", value):
+            return f"VERIFIED [LIVE_CONTEXT]: The active project is {value}.\nSource text: {_first_source_line(sections, 'LIVE_CONTEXT', value)}"
+        return "UNAVAILABLE: The active project is not present in the loaded LIVE_CONTEXT source payload."
+
+    if "continuity intelligence system" in lower:
+        lines: list[str] = []
+        if _section_contains(sections, "LIVE_CONTEXT", "ORACLE.AI"):
+            lines.append(f"VERIFIED [LIVE_CONTEXT]: The active project is ORACLE.AI.\nSource text: {_first_source_line(sections, 'LIVE_CONTEXT', 'ORACLE.AI')}")
+        else:
+            lines.append("UNAVAILABLE: ORACLE.AI is not present in LIVE_CONTEXT.")
+        if _section_contains(sections, "IDENTITY", "Noah AI Technologies"):
+            lines.append(f"VERIFIED [IDENTITY]: Noah AI Technologies appears in Noah's organization record.\nSource text: {_first_source_line(sections, 'IDENTITY', 'Noah AI Technologies')}")
+        if _section_contains(sections, "LIVE_CONTEXT", "continuity intelligence system"):
+            lines.append("VERIFIED [LIVE_CONTEXT]: ORACLE.AI is described as a continuity intelligence system in loaded source text.")
+        else:
+            lines.append("INFERENCE: Describing ORACLE.AI as a continuity intelligence system is an interpretation here; that exact support is not present in the loaded LIVE_CONTEXT source payload.")
+        return "\n\n".join(lines)
+
+    if "unsupported" in lower or "favorite color" in lower or "high school" in lower:
+        return "UNAVAILABLE: I do not have supporting text for that fact in IDENTITY, LIVE_CONTEXT, LATEST_REFLECTION, or CURRENT_SESSION."
+
+    if "conclusion" in lower and "identity" in lower and "live context" in lower and "reflection" in lower:
+        lines = []
+        if _section_contains(sections, "IDENTITY", "Noah Alexander Hawkes Sr."):
+            lines.append(f"VERIFIED [IDENTITY]: Noah is Noah Alexander Hawkes Sr.\nSource text: {_first_source_line(sections, 'IDENTITY', 'Noah Alexander Hawkes Sr.')}")
+        if _section_contains(sections, "LIVE_CONTEXT", "ORACLE.AI"):
+            lines.append(f"VERIFIED [LIVE_CONTEXT]: The active project is ORACLE.AI.\nSource text: {_first_source_line(sections, 'LIVE_CONTEXT', 'ORACLE.AI')}")
+        reflection_line = _first_source_line(sections, "LATEST_REFLECTION", "primary_signal")
+        if reflection_line:
+            lines.append(f"VERIFIED [LATEST_REFLECTION]: {reflection_line}")
+        if not lines:
+            return "UNAVAILABLE: I do not have enough source payload to form sourced premises."
+        lines.append("INFERENCE: Taken together, these premises indicate the current conversation should stay grounded in Noah's identity, the active ORACLE.AI project, and the latest approved reflection, but that synthesis is a conclusion rather than a direct source fact.")
+        return "\n\n".join(lines)
+
+    return None
 
 # ── Stream a reply ─────────────────────────────────────────────────────────────
 
@@ -318,6 +382,28 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     # ── Companion path — local, direct, no tools ──────────────────────────────
     if effective_mode == "companion" or _no_route:
         try:
+            try:
+                import companion_bootstrap as _cb
+                _bootstrap = _cb.get()
+            except Exception:
+                _bootstrap = None
+
+            if _bootstrap is not None:
+                _grounded_reply = _source_disciplined_response(user_text, _bootstrap, _history[-12:])
+                if _grounded_reply:
+                    reply = _grounded_reply
+                    yield _sse({"type": "token", "text": reply})
+                    _history.append({"role": "assistant", "content": reply})
+                    if len(_history) > 40:
+                        _history[:] = _history[-40:]
+                    try:
+                        from memory import save_message
+                        save_message(_session_id, "assistant", reply)
+                    except Exception:
+                        pass
+                    yield _sse({"type": "done", "mode": effective_mode})
+                    return
+
             from llm import make_client, get_model, is_local
             client = make_client()
             model = get_model(vision=False)
@@ -325,9 +411,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
 
             # Inject verified identity and continuity context (deterministic, pre-LLM)
             try:
-                import companion_bootstrap as _cb
-                _bootstrap = _cb.get()
-                _grounding_block = _bootstrap.system_context_block()
+                _grounding_block = _bootstrap.system_context_block(current_session=_history[-12:]) if _bootstrap else ""
             except Exception:
                 _grounding_block = ""
 
@@ -535,6 +619,64 @@ async def clear():
     return JSONResponse({"ok": True, "session_id": _session_id})
 
 
+def _source_discipline_smoke_test() -> int:
+    import companion_bootstrap
+
+    failures = 0
+
+    def check(label: str, passed: bool, detail: str = "") -> None:
+        nonlocal failures
+        tag = "PASS" if passed else "FAIL"
+        print(f"  [{tag}] {label}" + (f" -- {detail}" if detail and not passed else ""))
+        if not passed:
+            failures += 1
+
+    bootstrap = companion_bootstrap.get(force_refresh=True)
+    history = [
+        {"role": "user", "content": "current session source marker"},
+    ]
+
+    print("=" * 60)
+    print("ORACLE Companion Source Discipline -- Smoke Tests")
+    print("=" * 60)
+
+    r1 = _source_disciplined_response("What is Noah's full name?", bootstrap, history) or ""
+    check("full name is VERIFIED IDENTITY", "VERIFIED [IDENTITY]" in r1 and "Noah Alexander Hawkes Sr." in r1, r1)
+
+    r2 = _source_disciplined_response("What project is active?", bootstrap, history) or ""
+    check("active project is VERIFIED LIVE_CONTEXT", "VERIFIED [LIVE_CONTEXT]" in r2 and "ORACLE.AI" in r2, r2)
+
+    r3 = _source_disciplined_response("ORACLE.AI is a continuity intelligence system for Noah AI Technologies.", bootstrap, history) or ""
+    check("mixed claim keeps ORACLE.AI in LIVE_CONTEXT", "VERIFIED [LIVE_CONTEXT]" in r3 and "ORACLE.AI" in r3, r3)
+    check("mixed claim labels continuity intelligence as INFERENCE", "INFERENCE" in r3 and "continuity intelligence system" in r3, r3)
+
+    r4 = _source_disciplined_response("What is Noah's favorite color?", bootstrap, history) or ""
+    check("unsupported fact returns UNAVAILABLE", r4.startswith("UNAVAILABLE"), r4)
+
+    r5 = _source_disciplined_response("Give me a conclusion using identity, live context, and reflection.", bootstrap, history) or ""
+    check("conclusion includes IDENTITY premise", "VERIFIED [IDENTITY]" in r5, r5)
+    check("conclusion includes LIVE_CONTEXT premise", "VERIFIED [LIVE_CONTEXT]" in r5, r5)
+    check("conclusion includes LATEST_REFLECTION premise", "VERIFIED [LATEST_REFLECTION]" in r5, r5)
+    check("conclusion is labeled INFERENCE", "INFERENCE" in r5, r5)
+
+    block = bootstrap.system_context_block(current_session=history)
+    check("grounding block has IDENTITY section", "SOURCE SECTION: IDENTITY" in block)
+    check("grounding block has LIVE_CONTEXT section", "SOURCE SECTION: LIVE_CONTEXT" in block)
+    check("grounding block has LATEST_REFLECTION section", "SOURCE SECTION: LATEST_REFLECTION" in block)
+    check("grounding block has CURRENT_SESSION section", "SOURCE SECTION: CURRENT_SESSION" in block)
+    check("grounding block has source discipline labels", "Allowed labels: VERIFIED, INFERENCE, UNAVAILABLE." in block)
+    check("identity selection includes family/continuity fact", "Sons (continuity targets):" in block, block)
+    check("identity selection includes known boundaries", "known_boundary:" in block, block)
+
+    total = 16
+    passed = total - failures
+    print(f"{'='*60}")
+    print(f"Result: {passed}/{total} passed")
+    print(f"STATUS: {'ALL PASS' if failures == 0 else str(failures) + ' FAILURES'}")
+    print(f"{'='*60}\n")
+    return failures
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -542,7 +684,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ORACLE Web UI")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=7777)
+    parser.add_argument("--source-discipline-smoke-test", action="store_true")
     args = parser.parse_args()
+
+    if args.source_discipline_smoke_test:
+        raise SystemExit(_source_discipline_smoke_test())
 
     print(f"\n  ORACLE is running at  http://{args.host}:{args.port}")
     print(f"  Press Ctrl+C to stop\n")

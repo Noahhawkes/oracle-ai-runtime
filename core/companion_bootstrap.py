@@ -27,6 +27,78 @@ LIVE_CONTEXT_PATH = MEMORY / "live_context.json"
 # The approved sovereign identity ID (Noah Alexander Hawkes Sr.)
 SOVEREIGN_ID = "060ca00a-c703-4f49-874e-2a2b2291b350"
 
+_IDENTITY_FACT_KEYWORDS = (
+    "full name",
+    "entities",
+    "children",
+    "family",
+    "co-sovereign",
+    "sons",
+    "continuity",
+)
+
+
+def _identity_source_lines(data: dict) -> list[str]:
+    lines: list[str] = []
+    for key in ("name", "sov_id", "organization", "role", "trust_tier", "source", "confidence", "status"):
+        if data.get(key) is not None:
+            lines.append(f"{key}: {data.get(key)}")
+
+    aliases = data.get("aliases") or []
+    if aliases:
+        lines.append(f"aliases: {', '.join(str(a) for a in aliases)}")
+
+    important_facts = [str(fact) for fact in data.get("important_facts", []) if fact]
+    selected: list[str] = []
+    for fact in important_facts:
+        lower = fact.lower()
+        if any(keyword in lower for keyword in _IDENTITY_FACT_KEYWORDS):
+            selected.append(fact)
+    for fact in important_facts:
+        if len(selected) >= 14:
+            break
+        if fact not in selected:
+            selected.append(fact)
+    for fact in selected:
+        lines.append(f"important_fact: {fact}")
+
+    for boundary in data.get("known_boundaries", []) or []:
+        lines.append(f"known_boundary: {boundary}")
+
+    return lines
+
+
+def _live_context_source_lines(data: dict) -> list[str]:
+    keys = ("sovereign", "active_project", "active_tool", "active_repo", "current_task", "memory_policy", "last_updated")
+    return [f"{key}: {data.get(key)}" for key in keys if data.get(key) is not None]
+
+
+def _reflection_source_lines(data: dict) -> list[str]:
+    lines: list[str] = []
+    for key in ("schema_version", "reflection_id", "session_id", "approval_status", "generated_by"):
+        if data.get(key) is not None:
+            lines.append(f"{key}: {data.get(key)}")
+    salience = data.get("salience") or {}
+    if salience.get("primary_signal"):
+        lines.append(f"primary_signal: {salience.get('primary_signal')}")
+    for item in salience.get("sovereign_decisions", []) or []:
+        lines.append(f"sovereign_decision: {item}")
+    for item in salience.get("trajectory_arc", []) or []:
+        lines.append(f"trajectory_arc: {item}")
+    continuity = data.get("continuity_state") or {}
+    if continuity.get("stance"):
+        lines.append(f"stance: {continuity.get('stance')}")
+    for item in continuity.get("high_mass_anchors", []) or []:
+        lines.append(f"high_mass_anchor: {item}")
+    for item in continuity.get("unresolved_loops", []) or []:
+        lines.append(f"unresolved_loop: {item}")
+    routing = data.get("exocortex_routing") or {}
+    for item in routing.get("continuity_hooks", []) or []:
+        lines.append(f"continuity_hook: {item}")
+    for item in routing.get("ledger_updates", []) or []:
+        lines.append(f"ledger_update: {item}")
+    return lines
+
 
 # ── Data model ────────────────────────────────────────────────────────────────
 
@@ -54,14 +126,72 @@ class BootstrapResult:
     def fully_grounded(self) -> bool:
         return self.identity.exists and not self.identity.load_error
 
-    def system_context_block(self) -> str:
+    def source_sections(self, current_session: Optional[list[dict]] = None) -> dict[str, list[str]]:
+        """Return structured source payloads for Companion Mode grounding."""
+        sections: dict[str, list[str]] = {
+            "IDENTITY": [],
+            "LIVE_CONTEXT": [],
+            "LATEST_REFLECTION": [],
+            "CURRENT_SESSION": [],
+        }
+
+        if self.identity.exists and self.identity.content:
+            sections["IDENTITY"].extend(_identity_source_lines(self.identity.content))
+            sections["IDENTITY"].append(f"source_path: {self.identity.resolved}")
+            if self.identity.sha256:
+                sections["IDENTITY"].append(f"source_sha256: {self.identity.sha256}")
+
+        if self.live_context.exists and self.live_context.content:
+            sections["LIVE_CONTEXT"].extend(_live_context_source_lines(self.live_context.content))
+            sections["LIVE_CONTEXT"].append(f"source_path: {self.live_context.resolved}")
+
+        if self.latest_reflection.exists and self.latest_reflection.content:
+            sections["LATEST_REFLECTION"].extend(_reflection_source_lines(self.latest_reflection.content))
+            sections["LATEST_REFLECTION"].append(f"source_path: {self.latest_reflection.resolved}")
+
+        for turn in (current_session or [])[-8:]:
+            role = str(turn.get("role", "unknown")).strip() or "unknown"
+            content = str(turn.get("content", "")).strip()
+            if content:
+                sections["CURRENT_SESSION"].append(f"{role}: {content[:600]}")
+
+        return sections
+
+    def system_context_block(self, current_session: Optional[list[dict]] = None) -> str:
         """
         Build the sealed context block for injection into the companion system prompt.
         Every fact comes from a file read — nothing is invented.
         """
+        sections = self.source_sections(current_session=current_session)
         lines = ["[ORACLE COMPANION GROUNDING — verified from local files]"]
         lines.append(f"grounded_at: {self.grounded_at}")
+        lines.append("SOURCE DISCIPLINE:")
+        lines.append("  Allowed labels: VERIFIED, INFERENCE, UNAVAILABLE.")
+        lines.append("  A factual claim may use IDENTITY, LIVE_CONTEXT, LATEST_REFLECTION, or CURRENT_SESSION only when its supporting text appears in that source section.")
+        lines.append("  Mixed statements must be split into sourced premises and a separately labeled inference.")
+        lines.append("  Do not present inferred language as verified source content.")
+        lines.append("  If support is absent from the source sections, answer UNAVAILABLE instead of guessing.")
         lines.append("")
+
+        for label in ("IDENTITY", "LIVE_CONTEXT", "LATEST_REFLECTION", "CURRENT_SESSION"):
+            lines.append(f"SOURCE SECTION: {label}")
+            payload = sections.get(label) or []
+            if payload:
+                for item in payload:
+                    lines.append(f"  - {item}")
+            else:
+                lines.append("  - UNAVAILABLE")
+            lines.append("")
+
+        lines.append("ORACLE IDENTITY REMINDER:")
+        lines.append("  You are ORACLE — built specifically for Noah.")
+        lines.append("  You know who he is from the verified local record above.")
+        lines.append("  Do not introduce yourself as a generic assistant.")
+        lines.append("  Do not say 'Hello, it's nice to meet you' — you already know him.")
+        lines.append("  If a source failed, say so honestly. Do not invent replacements.")
+        lines.append("[END GROUNDING BLOCK]")
+
+        return "\n".join(lines)
 
         # Identity
         if self.identity.exists and self.identity.content:
