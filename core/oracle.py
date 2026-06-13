@@ -1471,6 +1471,79 @@ def chat_local(client, session_id, system_prompt, history, user_input, model):
         return reply, history
 
 
+def web_engine_response(
+    user_input: str,
+    *,
+    history: list[dict] | None = None,
+    session_id: str | None = None,
+    mode: str = MODE_COMPANION,
+    no_route: bool = False,
+    grounding_block: str = "",
+) -> tuple[str, list[dict], str]:
+    """
+    Callable core-engine path for oracle_server.py.
+
+    The web server is transport; response generation stays here with the same
+    routing, Companion direct path, salience context, and model/tool loops used
+    by the CLI engine.
+    """
+    init_db()
+    session_id = session_id or new_session()
+    engine_history = list(history or [])
+    if engine_history and engine_history[-1].get("role") == "user" and engine_history[-1].get("content") == user_input:
+        engine_history = engine_history[:-1]
+
+    local = is_local()
+    client = make_client()
+    model = get_model(vision=False)
+    system_prompt = build_system_prompt(local=local)
+    if grounding_block:
+        system_prompt = grounding_block + "\n\n" + system_prompt
+    try:
+        from salience_filter import focus_report
+        focus = focus_report()
+        if focus:
+            system_prompt += "\n\n[ORACLE SALIENCE FOCUS]\n" + focus
+    except Exception:
+        pass
+
+    route_decision = classify_conversation_route(
+        user_input,
+        current_mode=mode,
+        no_route=no_route,
+    )
+    if route_decision.route == MODE_COMPANION:
+        begin_debug_turn(user_input, route_decision, current_mode=mode, no_route=no_route)
+        direct = direct_response(
+            user_input,
+            history=engine_history,
+            model=model,
+            timeout_s=4.5,
+            base_prompt=system_prompt,
+        )
+        reply = direct.text
+        engine_history.append({"role": "user", "content": user_input})
+        engine_history.append({"role": "assistant", "content": reply})
+        save_message(session_id, "user", user_input)
+        save_message(session_id, "assistant", reply)
+        if direct.timed_out:
+            log("COMPANION_TIMEOUT", f"web local model timeout for: {user_input[:80]}")
+        return reply, engine_history, MODE_COMPANION
+
+    if local:
+        reply, engine_history = chat_local(client, session_id, system_prompt, engine_history, user_input, model)
+        blocked = _detect_hallucination(reply, [])
+        if blocked:
+            log("HALLUCINATION_DETECTED", f"web reply: {reply[:120]}")
+            reply = blocked
+            if engine_history and engine_history[-1].get("role") == "assistant":
+                engine_history[-1]["content"] = reply
+    else:
+        reply, engine_history = chat(client, session_id, system_prompt, engine_history, user_input, model)
+
+    return reply, engine_history, MODE_BUILDER
+
+
 def main():
     os.chdir(Path(__file__).parent)
     init_db()

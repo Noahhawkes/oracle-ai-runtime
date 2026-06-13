@@ -128,6 +128,22 @@ def _verified_active_project_line(sections: dict[str, list[str]]) -> str:
     return "UNAVAILABLE [LIVE_CONTEXT]: The active project is not present in the loaded LIVE_CONTEXT source payload."
 
 
+def _core_status_frame(user_text: str) -> str:
+    parts: list[str] = []
+    try:
+        from attention_filter import attention_filter, format_attention_frame
+        frame = attention_filter(user_text)
+        parts.append("[ATTENTION FILTER]\n" + format_attention_frame(frame))
+    except Exception as exc:
+        parts.append(f"[ATTENTION FILTER]\nUNAVAILABLE: {exc}")
+    try:
+        from salience_filter import focus_report
+        parts.append("[ORACLE FOCUS]\n" + focus_report())
+    except Exception as exc:
+        parts.append(f"[ORACLE FOCUS]\nUNAVAILABLE: {exc}")
+    return "\n\n".join(parts)
+
+
 def _source_record_manifest(source_type: str, record: Any) -> dict[str, Any]:
     content = record.content if getattr(record, "content", None) else {}
     return {
@@ -504,6 +520,36 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                     yield _sse({"type": "done", "mode": effective_mode})
                     return
 
+            try:
+                _grounding_block = _bootstrap.system_context_block(current_session=_history[-12:]) if _bootstrap else ""
+            except Exception:
+                _grounding_block = ""
+            try:
+                from oracle import web_engine_response
+                loop = asyncio.get_event_loop()
+                reply, engine_history, engine_mode = await loop.run_in_executor(
+                    None,
+                    lambda: web_engine_response(
+                        user_text,
+                        history=_history[-12:],
+                        session_id=_session_id,
+                        mode=effective_mode,
+                        no_route=_no_route,
+                        grounding_block=_grounding_block,
+                    ),
+                )
+                effective_mode = engine_mode
+                reply = _enforce_companion_source_labels(reply)
+                _history = engine_history[-40:]
+                yield _sse({"type": "token", "text": _core_status_frame(user_text) + "\n\n" + reply})
+                yield _sse({"type": "done", "mode": effective_mode})
+                return
+            except Exception as core_err:
+                reply = f"Core engine error: {core_err}"
+                yield _sse({"type": "token", "text": reply})
+                yield _sse({"type": "done", "mode": effective_mode})
+                return
+
             from llm import make_client, get_model, is_local
             client = make_client()
             model = get_model(vision=False)
@@ -570,6 +616,43 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             yield _sse({"type": "done"})
             reply = _SIMULATION_GUARD_REPLY
             _history.append({"role": "assistant", "content": reply})
+            return
+
+        try:
+            try:
+                import companion_bootstrap as _cb
+                _bootstrap = _cb.get()
+                _grounding_block = _bootstrap.system_context_block(current_session=_history[-12:])
+            except Exception:
+                _grounding_block = ""
+            from oracle import web_engine_response
+            loop = asyncio.get_event_loop()
+            reply, engine_history, engine_mode = await loop.run_in_executor(
+                None,
+                lambda: web_engine_response(
+                    user_text,
+                    history=_history[-12:],
+                    session_id=_session_id,
+                    mode=effective_mode,
+                    no_route=_no_route,
+                    grounding_block=_grounding_block,
+                ),
+            )
+            effective_mode = engine_mode
+            claim = _first_operational_claim(reply)
+            if claim:
+                reply = (
+                    f"[BLOCKED] Operational claim without execution receipt: `{claim}`\n"
+                    "No operation was executed. Submit a specific task or use a tool."
+                )
+            _history = engine_history[-40:]
+            yield _sse({"type": "token", "text": _core_status_frame(user_text) + "\n\n" + reply})
+            yield _sse({"type": "done", "mode": effective_mode})
+            return
+        except Exception as core_err:
+            reply = f"Core engine error: {core_err}"
+            yield _sse({"type": "token", "text": reply})
+            yield _sse({"type": "done", "mode": effective_mode})
             return
 
         try:
@@ -804,7 +887,20 @@ def _source_discipline_smoke_test() -> int:
     check("identity selection includes family/continuity fact", "Sons (continuity targets):" in block, block)
     check("identity selection includes known boundaries", "known_boundary:" in block, block)
 
-    total = 27
+    source = Path(__file__).read_text(encoding="utf-8", errors="replace")
+    check("server imports core oracle response bridge", "from oracle import web_engine_response" in source)
+    check("server imports attention_filter", "from attention_filter import attention_filter" in source)
+    check("server imports salience_filter", "from salience_filter import focus_report" in source)
+    companion_pos = source.find("# ── Companion path")
+    builder_pos = source.find("# ── Builder path")
+    companion_bridge = source.find("from oracle import web_engine_response", companion_pos)
+    companion_llm = source.find("from llm import make_client", companion_pos)
+    builder_bridge = source.find("from oracle import web_engine_response", builder_pos)
+    builder_llm = source.find("from llm import make_client", builder_pos)
+    check("Companion bridge precedes shallow LLM fallback", companion_pos >= 0 and companion_bridge > companion_pos and (companion_llm < 0 or companion_bridge < companion_llm))
+    check("Builder bridge precedes shallow LLM fallback", builder_pos >= 0 and builder_bridge > builder_pos and (builder_llm < 0 or builder_bridge < builder_llm))
+
+    total = 33
     passed = total - failures
     print(f"{'='*60}")
     print(f"Result: {passed}/{total} passed")
