@@ -550,59 +550,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 yield _sse({"type": "done", "mode": effective_mode})
                 return
 
-            from llm import make_client, get_model, is_local
-            client = make_client()
-            model = get_model(vision=False)
-            local_mode = is_local()
-
-            # Inject verified identity and continuity context (deterministic, pre-LLM)
-            try:
-                _grounding_block = _bootstrap.system_context_block(current_session=_history[-12:]) if _bootstrap else ""
-            except Exception:
-                _grounding_block = ""
-
-            _lcl_base = _lcl_prompt or "You are ORACLE, Noah's resident AI. Speak directly. Be brief."
-            system = (_grounding_block + "\n\n" + _lcl_base) if _grounding_block else _lcl_base
-
-            if local_mode:
-                # Collect first so source-label discipline can be enforced before UI output.
-                loop = asyncio.get_event_loop()
-                messages = [{"role": "system", "content": system}] + _history[-12:]
-
-                def _local_stream():
-                    return client.chat.completions.create(
-                        model=model,
-                        messages=messages,
-                        max_tokens=1024,
-                        temperature=0.7,
-                        stream=True,
-                        extra_body={"num_ctx": 8192},
-                    )
-
-                stream = await loop.run_in_executor(None, _local_stream)
-                reply_parts: list[str] = []
-                for chunk in stream:
-                    delta = chunk.choices[0].delta.content or ""
-                    if delta:
-                        reply_parts.append(delta)
-                reply = _enforce_companion_source_labels("".join(reply_parts))
-                yield _sse({"type": "token", "text": reply})
-
-            else:
-                # Collect first so source-label discipline can be enforced before UI output.
-                import anthropic as _ant
-                ant_client = _ant.Anthropic()
-                reply_parts = []
-                with ant_client.messages.stream(
-                    model="claude-sonnet-4-6",
-                    max_tokens=1024,
-                    system=system,
-                    messages=_history[-12:],
-                ) as stream:
-                    for text in stream.text_stream:
-                        reply_parts.append(text)
-                reply = _enforce_companion_source_labels("".join(reply_parts))
-                yield _sse({"type": "token", "text": reply})
+            raise RuntimeError("core engine bridge returned unexpectedly")
 
         except Exception as e:
             reply = f"I'm here, Noah. (Local model error: {e})"
@@ -655,86 +603,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             yield _sse({"type": "done", "mode": effective_mode})
             return
 
-        try:
-            from llm import make_client, get_model, is_local
-            from tools.definitions import TOOL_DEFINITIONS
-            from tools.executor import execute_tool
-            client = make_client()
-            model = get_model(vision=False)
-            local_mode = is_local()
-
-            system = (
-                "You are ORACLE, Noah's AI system. Builder mode active.\n"
-                "You have access to tools. Use them precisely.\n"
-                "CRITICAL: Do not narrate operations you have not executed via a tool call.\n"
-                "Do not invent file paths, hashes, PIDs, timestamps, or process states.\n"
-                "If you cannot verify something with a tool, say so explicitly."
-            )
-
-            messages = [{"role": "system", "content": system}] + _history[-12:]
-            reply_parts = []
-            tool_calls_made: list[str] = []
-
-            if local_mode:
-                loop = asyncio.get_event_loop()
-                resp = await loop.run_in_executor(None, lambda: client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    max_tokens=1024,
-                    temperature=0.3,
-                    stream=False,
-                ))
-                reply = resp.choices[0].message.content or ""
-                claim = _first_operational_claim(reply)
-                if claim:
-                    reply = (
-                        f"[BLOCKED] Operational claim without execution receipt: `{claim}`\n"
-                        "No operation was executed. Submit a specific task or use a tool."
-                    )
-                yield _sse({"type": "token", "text": reply})
-            else:
-                import anthropic as _ant
-                ant_client = _ant.Anthropic()
-                tools_ant = [
-                    {
-                        "name": t["name"],
-                        "description": t["description"],
-                        "input_schema": t["input_schema"],
-                    }
-                    for t in TOOL_DEFINITIONS
-                ]
-                ant_messages = [m for m in _history[-12:] if m["role"] in ("user", "assistant")]
-                response = ant_client.messages.create(
-                    model="claude-sonnet-4-6",
-                    max_tokens=2048,
-                    system=system,
-                    tools=tools_ant,
-                    messages=ant_messages,
-                )
-                for block in response.content:
-                    if hasattr(block, "text"):
-                        claim = _first_operational_claim(block.text)
-                        if claim:
-                            blocked = (
-                                f"\n[BLOCKED] Operational claim without execution receipt: `{claim}`\n"
-                                "No operation was executed. Submit a specific task or use a tool.\n"
-                            )
-                            reply_parts.append(blocked)
-                            yield _sse({"type": "token", "text": blocked})
-                        else:
-                            reply_parts.append(block.text)
-                            yield _sse({"type": "token", "text": block.text})
-                    elif block.type == "tool_use":
-                        tool_calls_made.append(block.name)
-                        yield _sse({"type": "token", "text": f"\n\n*Calling tool: `{block.name}`...*\n"})
-                        result = execute_tool(block.name, block.input)
-                        yield _sse({"type": "token", "text": f"\n```\n{result[:800]}\n```\n"})
-                        reply_parts.append(result)
-                reply = "\n".join(reply_parts)
-
-        except Exception as e:
-            reply = f"Builder path error: {e}"
-            yield _sse({"type": "token", "text": reply})
+        raise RuntimeError("core engine bridge returned unexpectedly")
 
     # ── "do it" → switch to builder so next turn has tools ready ─────────────
     if _action_intent and effective_mode == "companion":
@@ -893,14 +762,19 @@ def _source_discipline_smoke_test() -> int:
     check("server imports salience_filter", "from salience_filter import focus_report" in source)
     companion_pos = source.find("# ── Companion path")
     builder_pos = source.find("# ── Builder path")
+    route_end = source.find('"do it"', builder_pos)
+    route_source = source[companion_pos:(route_end if route_end > builder_pos else len(source))]
+    builder_route_source = route_source[(builder_pos - companion_pos) if builder_pos > companion_pos else 0:]
     companion_bridge = source.find("from oracle import web_engine_response", companion_pos)
-    companion_llm = source.find("from llm import make_client", companion_pos)
+    companion_llm = route_source.find("from llm import make_client")
     builder_bridge = source.find("from oracle import web_engine_response", builder_pos)
-    builder_llm = source.find("from llm import make_client", builder_pos)
-    check("Companion bridge precedes shallow LLM fallback", companion_pos >= 0 and companion_bridge > companion_pos and (companion_llm < 0 or companion_bridge < companion_llm))
-    check("Builder bridge precedes shallow LLM fallback", builder_pos >= 0 and builder_bridge > builder_pos and (builder_llm < 0 or builder_bridge < builder_llm))
+    builder_llm = builder_route_source.find("from llm import make_client")
+    check("Companion bridge exists after route marker", companion_pos >= 0 and companion_bridge > companion_pos)
+    check("Builder bridge exists after route marker", builder_pos >= 0 and builder_bridge > builder_pos)
+    check("Companion route has no shallow LLM fallback", companion_llm < 0 or (builder_pos > companion_pos and companion_llm > builder_pos))
+    check("Builder route has no shallow LLM fallback", builder_llm < 0)
 
-    total = 33
+    total = 35
     passed = total - failures
     print(f"{'='*60}")
     print(f"Result: {passed}/{total} passed")
