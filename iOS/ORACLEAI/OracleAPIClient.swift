@@ -28,6 +28,8 @@ final class OracleAPIClient: NSObject, ObservableObject, URLSessionDataDelegate 
     @Published var currentMode: String = "companion"
     @Published var error: String? = nil
 
+    var authToken: String = ""
+
     private var session: URLSession!
     private var streamingIndex: Int? = nil
     private var buffer = ""
@@ -61,6 +63,9 @@ final class OracleAPIClient: NSObject, ObservableObject, URLSessionDataDelegate 
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        if !authToken.isEmpty {
+            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        }
 
         let body = try? JSONEncoder().encode(["message": text])
         request.httpBody = body

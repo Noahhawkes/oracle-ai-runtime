@@ -1101,16 +1101,60 @@ def _source_discipline_smoke_test() -> int:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    import argparse
+    import argparse, os, secrets
     parser = argparse.ArgumentParser(description="ORACLE Web UI")
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--host", default=None,
+                        help="Bind address. Defaults to 127.0.0.1; use --remote to bind 0.0.0.0.")
     parser.add_argument("--port", type=int, default=7777)
+    parser.add_argument("--remote", action="store_true",
+                        help="Bind to 0.0.0.0 for LAN/Tailscale access. Requires --token or ORACLE_TOKEN.")
+    parser.add_argument("--token", default=None,
+                        help="Bearer token required on every request when --remote is set.")
     parser.add_argument("--source-discipline-smoke-test", action="store_true")
     args = parser.parse_args()
 
     if args.source_discipline_smoke_test:
         raise SystemExit(_source_discipline_smoke_test())
 
-    print(f"\n  ORACLE is running at  http://{args.host}:{args.port}")
+    # Resolve host
+    if args.host is None:
+        bind_host = "0.0.0.0" if args.remote else "127.0.0.1"
+    else:
+        bind_host = args.host
+
+    # Auth middleware — only active when remote is enabled
+    if args.remote:
+        token = args.token or os.environ.get("ORACLE_TOKEN", "")
+        if not token:
+            token = secrets.token_urlsafe(32)
+            print(f"\n  [Auth] No --token supplied. Generated one-time token:")
+            print(f"         {token}")
+            print(f"  [Auth] Set ORACLE_TOKEN env var or pass --token to make it permanent.\n")
+        else:
+            print(f"\n  [Auth] Remote access enabled. Bearer token authentication active.")
+
+        from starlette.middleware.base import BaseHTTPMiddleware
+        from starlette.responses import Response as StarletteResponse
+
+        class BearerAuthMiddleware(BaseHTTPMiddleware):
+            _token: str = token
+
+            async def dispatch(self, request: Request, call_next):
+                # Allow health check without auth
+                if request.url.path in ("/health", "/favicon.ico"):
+                    return await call_next(request)
+                auth = request.headers.get("Authorization", "")
+                if auth == f"Bearer {self._token}":
+                    return await call_next(request)
+                # Also accept token as query param for WebView convenience
+                if request.query_params.get("token") == self._token:
+                    return await call_next(request)
+                return StarletteResponse("Unauthorized", status_code=401)
+
+        app.add_middleware(BearerAuthMiddleware)
+    else:
+        print(f"\n  [Auth] Local-only mode — no authentication required.")
+
+    print(f"  ORACLE is running at  http://{bind_host}:{args.port}")
     print(f"  Press Ctrl+C to stop\n")
-    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    uvicorn.run(app, host=bind_host, port=args.port, log_level="warning")

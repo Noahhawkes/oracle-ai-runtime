@@ -14,6 +14,7 @@
 		A6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B6; };
 		A7 /* NativeChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8; };
 		A8 /* OracleAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9; };
+		A9 /* VoiceInputManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -26,16 +27,27 @@
 		B7 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B8 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeChatView.swift; sourceTree = "<group>"; };
 		B9 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OracleAPIClient.swift; sourceTree = "<group>"; };
+		BA = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceInputManager.swift; sourceTree = "<group>"; };
 		C1 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ORACLEAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileReference section (frameworks) */
+		FR1 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
+		FR2 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+/* End PBXFileReference section (frameworks) */
+
+/* Begin PBXBuildFile section (frameworks) */
+		AF1 /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FR1; };
+		AF2 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FR2; };
+/* End PBXBuildFile section (frameworks) */
+
 /* Begin PBXFrameworksBuildPhase section */
-		D1 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		D1 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (AF1,AF2); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		E1 = {isa = PBXGroup; children = (E2, E3); sourceTree = "<group>"; };
-		E2 = {isa = PBXGroup; path = ORACLEAI; sourceTree = "<group>"; children = (B1,B2,B3,B4,B5,B6,B7,B8,B9); };
+		E2 = {isa = PBXGroup; path = ORACLEAI; sourceTree = "<group>"; children = (B1,B2,B3,B4,B5,B6,B7,B8,B9,BA); };
 		E3 = {isa = PBXGroup; name = Products; sourceTree = "<group>"; children = (C1); };
 /* End PBXGroup section */
 
@@ -52,7 +64,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		H1 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A1,A2,A3,A4,A5,A7,A8); runOnlyForDeploymentPostprocessing = 0; };
+		H1 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A1,A2,A3,A4,A5,A7,A8,A9); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
