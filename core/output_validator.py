@@ -206,6 +206,32 @@ class ValidationResult:
 
 # ── Internal check helpers ────────────────────────────────────────────────────
 
+@dataclass
+class AuthorityGateResult:
+    valid: bool
+    mode: str
+    state: str
+    text: str
+    violations: list[str] = field(default_factory=list)
+    claim: str = ""
+    claim_kind: str = ""
+    receipt_id: str = ""
+    validated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "valid": self.valid,
+            "mode": self.mode,
+            "state": self.state,
+            "text": self.text,
+            "violations": self.violations,
+            "claim": self.claim,
+            "claim_kind": self.claim_kind,
+            "receipt_id": self.receipt_id,
+            "validated_at": self.validated_at,
+        }
+
+
 def _classify_risk(
     output_type: OutputType,
     source_context: SourceContext,
@@ -655,6 +681,234 @@ def validate_memory_write(
 
 # ── Smoke tests ───────────────────────────────────────────────────────────────
 
+_AUTHORITY_LABEL_RE = re.compile(
+    r"\b(USER_REPORTED|EXTERNAL_AGENT_REPORTED|INFERENCE|UNAVAILABLE)\s*:",
+    re.IGNORECASE,
+)
+_BUILDER_STATE_RE = re.compile(
+    r"^\s*(PROPOSED|APPROVAL_REQUIRED|EXECUTING|COMPLETED|FAILED|BLOCKED)\s*:",
+    re.IGNORECASE,
+)
+_RECEIPT_ID_RE = re.compile(
+    r"\b(?:Receipt|receipt|execution[_ -]?receipt(?:_id)?)\s*[:=#]?\s*([A-Za-z0-9_-]{6,64})\b"
+)
+
+_AUTHORITY_CLAIM_PATTERNS: list[tuple[str, re.Pattern]] = [
+    ("file_operation", re.compile(
+        r"\b(file|files?)\s+(was\s+|were\s+|has\s+been\s+|have\s+been\s+)?"
+        r"(created|modified|changed|written|patched|updated|deleted|moved)\b|"
+        r"\bI\s+(wrote|patched|modified|created|updated|deleted|changed)\b",
+        re.IGNORECASE,
+    )),
+    ("command_execution", re.compile(
+        r"\bI\s+(will\s+)?(run|execute|ran|executed)\b|"
+        r"\b(run|execute|executing)\s+(grep|tests?|command|script|shell)\b",
+        re.IGNORECASE,
+    )),
+    ("tests", re.compile(
+        r"\b(tests?|smoke tests?|acceptance tests?)\s+(passed|pass|green|succeeded|completed)\b|"
+        r"\b\d+/\d+\s+tests?\s+passed\b",
+        re.IGNORECASE,
+    )),
+    ("git_commit", re.compile(
+        r"\b(commit|committed|commit sha|commit hash)\b|"
+        r"\b[0-9a-f]{40}\b",
+        re.IGNORECASE,
+    )),
+    ("hash", re.compile(
+        r"\b(sha256|sha-?1|md5)\s*[:=]\s*[0-9a-f]{16,}\b",
+        re.IGNORECASE,
+    )),
+    ("process_state", re.compile(
+        r"\b(process|server|service|port|pid)\s+"
+        r"(is\s+)?(running|listening|started|stopped|restarted|killed|terminated|bound)\b|"
+        r"\bPID\s+\d{3,}\b",
+        re.IGNORECASE,
+    )),
+    ("system_completion", re.compile(
+        r"\b(the\s+)?(bridge|architecture|integration|implementation|routing issue|changes|task|work|fix)\s+"
+        r"(is|are|was|were|has been|have been)?\s*"
+        r"(complete|completed|implemented|fixed|done|finished)\b|"
+        r"\barchitecture\s+is\s+complete\b",
+        re.IGNORECASE,
+    )),
+    ("security_guarantee", re.compile(
+        r"\b(guarantee|guaranteed|airtight|perfectly secure|physically incapable|cannot leak|impossible to bypass)\b",
+        re.IGNORECASE,
+    )),
+    ("repo_inspection", re.compile(
+        r"\bI\s+(inspected|read|checked|searched|grepped)\s+(the\s+)?(repo|repository|files?|codebase)\b|"
+        r"\brepository inspection\b|\binspected the repo\b",
+        re.IGNORECASE,
+    )),
+]
+
+
+def _approval_value(approval_state: ApprovalState | str | None) -> str:
+    if isinstance(approval_state, ApprovalState):
+        return approval_state.value
+    return str(approval_state or ApprovalState.NONE.value).lower()
+
+
+def _builder_state(text: str) -> str:
+    match = _BUILDER_STATE_RE.search(text or "")
+    return match.group(1).upper() if match else ""
+
+
+def _explicitly_attributed(text: str) -> bool:
+    return bool(_AUTHORITY_LABEL_RE.search(text or ""))
+
+
+def _extract_receipt_id(text: str) -> str:
+    match = _RECEIPT_ID_RE.search(text or "")
+    return match.group(1) if match else ""
+
+
+def _receipt_is_valid(receipt_id: str) -> bool:
+    if not receipt_id:
+        return False
+    try:
+        from execution_receipt import get_receipt
+        receipt = get_receipt(receipt_id)
+        return bool(receipt and receipt.status == "success")
+    except Exception:
+        return False
+
+
+def _authority_claim(text: str) -> tuple[str, str]:
+    text = text or ""
+    try:
+        from execution_receipt import find_operational_claim
+        claim = find_operational_claim(text)
+        if claim:
+            return "operational_claim", claim
+    except Exception:
+        pass
+
+    for kind, pattern in _AUTHORITY_CLAIM_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            return kind, match.group(0)
+    return "", ""
+
+
+def _companion_rewrite(text: str, claim_kind: str, claim: str) -> str:
+    lower = (text or "").lower()
+    if claim_kind == "command_execution" or "execute grep" in lower or "run grep" in lower:
+        return (
+            "BLOCKED: I cannot run grep or execute commands in Companion Mode. "
+            "Switch to Builder Mode for a typed proposal and bounded executor receipt."
+        )
+
+    if "codex" in lower and ("in progress" in lower or "unfinished" in lower or "pending" in lower):
+        return (
+            "EXTERNAL_AGENT_REPORTED: The pasted Codex session appears to describe work in progress.\n"
+            "UNAVAILABLE: ORACLE has not independently verified the unfinished items without a "
+            "machine execution receipt or deterministic runtime source."
+        )
+
+    if "codex" in lower and "bridge" in lower and ("complete" in lower or "implemented" in lower):
+        return (
+            "EXTERNAL_AGENT_REPORTED: Codex reported that the bridge was implemented. "
+            "ORACLE has not independently verified the final runtime state."
+        )
+
+    if "claude" in lower or "codex" in lower:
+        return (
+            "EXTERNAL_AGENT_REPORTED: The pasted external-agent output contains an operational claim.\n"
+            "UNAVAILABLE: ORACLE has not independently verified that claim without a machine "
+            "execution receipt or deterministic runtime source."
+        )
+
+    if claim_kind == "tests":
+        return (
+            "UNAVAILABLE: ORACLE cannot verify that tests passed without an execution receipt "
+            "or deterministic runtime source."
+        )
+
+    return (
+        "UNAVAILABLE: ORACLE cannot verify this operational claim without an execution receipt "
+        f"or deterministic runtime source. Claim blocked: {claim}"
+    )
+
+
+def validate_response_authority(
+    response: str,
+    mode: str,
+    source_context: SourceContext | str = SourceContext.MODEL_OUTPUT,
+    requested_action: str = "chat_response",
+    approval_state: ApprovalState | str | None = ApprovalState.NONE,
+) -> AuthorityGateResult:
+    """
+    Gate generated ORACLE text before it reaches the UI.
+
+    Companion may discuss, infer, and summarize, but operational claims must be
+    attributed or unavailable. Builder may propose and execute through bounded
+    receipts, but only the application layer can emit COMPLETED.
+    """
+    text = response or ""
+    normalized_mode = (mode or "companion").lower()
+    claim_kind, claim = _authority_claim(text)
+    state = _builder_state(text)
+    receipt_id = _extract_receipt_id(text)
+    receipt_ok = _receipt_is_valid(receipt_id)
+
+    if normalized_mode == "companion":
+        if not claim:
+            return AuthorityGateResult(True, normalized_mode, "CONVERSATION", text)
+        if _explicitly_attributed(text):
+            return AuthorityGateResult(True, normalized_mode, "ATTRIBUTED", text, claim=claim, claim_kind=claim_kind)
+        rewritten = _companion_rewrite(text, claim_kind, claim)
+        return AuthorityGateResult(
+            False,
+            normalized_mode,
+            "REWRITTEN",
+            rewritten,
+            violations=[f"companion operational claim without attribution: {claim}"],
+            claim=claim,
+            claim_kind=claim_kind,
+        )
+
+    if state == "COMPLETED":
+        if receipt_ok:
+            return AuthorityGateResult(True, normalized_mode, "COMPLETED", text, claim=claim, claim_kind=claim_kind, receipt_id=receipt_id)
+        next_state = "EXECUTING" if _approval_value(approval_state) in {"explicit", "pre_authorized"} else "PROPOSED"
+        rewritten = (
+            f"{next_state}: The requested action is not complete because no valid machine "
+            "execution receipt is attached. ORACLE cannot mark it COMPLETED."
+        )
+        return AuthorityGateResult(
+            False,
+            normalized_mode,
+            next_state,
+            rewritten,
+            violations=["builder COMPLETED claim without valid execution receipt"],
+            claim=claim,
+            claim_kind=claim_kind,
+            receipt_id=receipt_id,
+        )
+
+    if claim and receipt_ok:
+        return AuthorityGateResult(True, normalized_mode, state or "RECEIPTED", text, claim=claim, claim_kind=claim_kind, receipt_id=receipt_id)
+
+    if claim and state not in {"PROPOSED", "APPROVAL_REQUIRED", "EXECUTING", "FAILED", "BLOCKED"}:
+        rewritten = (
+            "PROPOSED: This operational claim requires explicit approval and a bounded "
+            "executor receipt before ORACLE can report it as completed."
+        )
+        return AuthorityGateResult(
+            False,
+            normalized_mode,
+            "PROPOSED",
+            rewritten,
+            violations=[f"builder operational claim missing typed non-completed state: {claim}"],
+            claim=claim,
+            claim_kind=claim_kind,
+        )
+
+    return AuthorityGateResult(True, normalized_mode, state or "PROPOSED", text, claim=claim, claim_kind=claim_kind, receipt_id=receipt_id)
+
+
 def run_smoke_tests() -> int:
     failures = 0
 
@@ -825,7 +1079,45 @@ def run_smoke_tests() -> int:
     }
     check("to_dict has all required keys", expected_keys <= set(d.keys()))
 
-    total = 26
+    print("\n  -- Response authority gate: mode authority --")
+    g = validate_response_authority(
+        "Codex output: The bridge is complete and the implementation is done.",
+        mode="companion",
+    )
+    check("Companion external bridge claim is attributed", g.text.startswith("EXTERNAL_AGENT_REPORTED"), g.text)
+    check("Companion external bridge claim is not VERIFIED", "VERIFIED" not in g.text, g.text)
+
+    g = validate_response_authority("I will execute grep now.", mode="companion")
+    check("Companion command execution is blocked", g.text.startswith("BLOCKED") and "Companion Mode" in g.text, g.text)
+
+    g = validate_response_authority("COMPLETED: I wrote the file.", mode="builder")
+    check("Builder file write without receipt is not completed", not g.text.startswith("COMPLETED"), g.text)
+    check("Builder file write without receipt becomes proposed", g.text.startswith("PROPOSED") or g.text.startswith("APPROVAL_REQUIRED"), g.text)
+
+    g = validate_response_authority(
+        "COMPLETED: The approved file write finished.",
+        mode="builder",
+        approval_state=ApprovalState.EXPLICIT,
+    )
+    check("Builder approval without receipt is not completed", not g.text.startswith("COMPLETED"), g.text)
+    check("Builder approval without receipt stays executing", g.text.startswith("EXECUTING") or g.text.startswith("FAILED"), g.text)
+
+    try:
+        import execution_receipt
+        receipt = execution_receipt.read_file(__file__)
+        completed = f"COMPLETED: read_file completed. Receipt: {receipt.operation_id}"
+        g = validate_response_authority(completed, mode="builder")
+        check("Builder valid receipt permits completed", g.text.startswith("COMPLETED") and receipt.operation_id in g.text, g.text)
+    except Exception as e:
+        check("Builder valid receipt permits completed", False, str(e))
+
+    g = validate_response_authority(
+        "Codex session in progress: bridge is complete but tests are pending.",
+        mode="companion",
+    )
+    check("Unfinished Codex session is marked in progress/unverified", "in progress" in g.text.lower() and "UNAVAILABLE" in g.text, g.text)
+
+    total = 35
     passed = total - failures
     print(f"\n{'='*60}")
     print(f"Result: {passed}/{total} passed")

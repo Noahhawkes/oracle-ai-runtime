@@ -63,6 +63,36 @@ def _first_operational_claim(text: str) -> str | None:
     except Exception:
         return None
 
+
+def _apply_authority_gate(
+    reply: str,
+    mode: str,
+    user_text: str = "",
+    approval_state: str = "none",
+) -> str:
+    try:
+        from output_validator import validate_response_authority
+        gated = validate_response_authority(
+            reply,
+            mode=mode,
+            requested_action="chat_response",
+            approval_state=approval_state,
+        )
+        return gated.text
+    except Exception:
+        claim = _first_operational_claim(reply)
+        if claim:
+            if (mode or "").lower() == "companion":
+                return (
+                    "UNAVAILABLE: ORACLE cannot verify this operational claim without "
+                    f"an execution receipt or deterministic runtime source. Claim blocked: {claim}"
+                )
+            return (
+                f"[BLOCKED] Operational claim without execution receipt: `{claim}`\n"
+                "No operation was executed. Submit a specific task or use a tool."
+            )
+        return reply
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -507,7 +537,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             if _bootstrap is not None:
                 _grounded_reply = _source_disciplined_response(user_text, _bootstrap, _history[-12:])
                 if _grounded_reply:
-                    reply = _grounded_reply
+                    reply = _apply_authority_gate(_grounded_reply, effective_mode, user_text)
                     yield _sse({"type": "token", "text": reply})
                     _history.append({"role": "assistant", "content": reply})
                     if len(_history) > 40:
@@ -540,6 +570,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 )
                 effective_mode = engine_mode
                 reply = _enforce_companion_source_labels(reply)
+                reply = _apply_authority_gate(reply, effective_mode, user_text)
                 _history = engine_history[-40:]
                 yield _sse({"type": "token", "text": _core_status_frame(user_text) + "\n\n" + reply})
                 yield _sse({"type": "done", "mode": effective_mode})
@@ -587,12 +618,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 ),
             )
             effective_mode = engine_mode
-            claim = _first_operational_claim(reply)
-            if claim:
-                reply = (
-                    f"[BLOCKED] Operational claim without execution receipt: `{claim}`\n"
-                    "No operation was executed. Submit a specific task or use a tool."
-                )
+            reply = _apply_authority_gate(reply, effective_mode, user_text)
             _history = engine_history[-40:]
             yield _sse({"type": "token", "text": _core_status_frame(user_text) + "\n\n" + reply})
             yield _sse({"type": "done", "mode": effective_mode})
@@ -728,6 +754,20 @@ def _source_discipline_smoke_test() -> int:
     allowed = _enforce_companion_source_labels(good_model_reply)
     check("bracketed source label is allowed", allowed == good_model_reply, allowed)
 
+    codex_claim = _apply_authority_gate(
+        "Codex output: The bridge is complete and the implementation is done.",
+        "companion",
+    )
+    check("authority gate attributes pasted Codex completion", codex_claim.startswith("EXTERNAL_AGENT_REPORTED"), codex_claim)
+    check("authority gate does not verify pasted Codex completion", "VERIFIED" not in codex_claim, codex_claim)
+
+    grep_claim = _apply_authority_gate("I will execute grep now.", "companion")
+    check("authority gate blocks Companion grep execution", grep_claim.startswith("BLOCKED") and "Companion Mode" in grep_claim, grep_claim)
+
+    builder_claim = _apply_authority_gate("COMPLETED: I wrote the file.", "builder")
+    check("authority gate prevents Builder completed without receipt", not builder_claim.startswith("COMPLETED"), builder_claim)
+    check("authority gate rewrites Builder write as proposal", builder_claim.startswith("PROPOSED") or builder_claim.startswith("APPROVAL_REQUIRED"), builder_claim)
+
     source_manifest = _source_disciplined_response(
         "Identify every real source loaded into this response.",
         bootstrap,
@@ -758,6 +798,7 @@ def _source_discipline_smoke_test() -> int:
 
     source = Path(__file__).read_text(encoding="utf-8", errors="replace")
     check("server imports core oracle response bridge", "from oracle import web_engine_response" in source)
+    check("server imports response authority gate", "validate_response_authority" in source)
     check("server imports attention_filter", "from attention_filter import attention_filter" in source)
     check("server imports salience_filter", "from salience_filter import focus_report" in source)
     companion_pos = source.find("# ── Companion path")
@@ -774,7 +815,7 @@ def _source_discipline_smoke_test() -> int:
     check("Companion route has no shallow LLM fallback", companion_llm < 0 or (builder_pos > companion_pos and companion_llm > builder_pos))
     check("Builder route has no shallow LLM fallback", builder_llm < 0)
 
-    total = 35
+    total = 41
     passed = total - failures
     print(f"{'='*60}")
     print(f"Result: {passed}/{total} passed")
