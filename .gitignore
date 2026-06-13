@@ -58,3 +58,4 @@ Messages/*.md
 state/
 .snapshots/
 Projects/patch_proposals/
+.aider*
