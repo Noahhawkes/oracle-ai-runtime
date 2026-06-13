@@ -114,22 +114,38 @@ def _first_source_line(sections: dict[str, list[str]], section: str, text: str) 
     return ""
 
 
+def _verified_full_name_line(sections: dict[str, list[str]]) -> str:
+    value = "Noah Alexander Hawkes Sr."
+    if _section_contains(sections, "IDENTITY", value):
+        return f"VERIFIED [IDENTITY]: {value}\nSource text: {_first_source_line(sections, 'IDENTITY', value)}"
+    return "UNAVAILABLE [IDENTITY]: Noah's full name is not present in the loaded IDENTITY source payload."
+
+
+def _verified_active_project_line(sections: dict[str, list[str]]) -> str:
+    value = "ORACLE.AI"
+    if _section_contains(sections, "LIVE_CONTEXT", value):
+        return f"VERIFIED [LIVE_CONTEXT]: The active project is {value}.\nSource text: {_first_source_line(sections, 'LIVE_CONTEXT', value)}"
+    return "UNAVAILABLE [LIVE_CONTEXT]: The active project is not present in the loaded LIVE_CONTEXT source payload."
+
+
 def _source_disciplined_response(user_text: str, bootstrap: Any, history: list[dict]) -> str | None:
     """Deterministic Companion answers for factual grounding and attribution checks."""
     lower = user_text.lower()
     sections = bootstrap.source_sections(current_session=history)
 
+    asks_project = "active project" in lower or "what project is active" in lower or "project is active" in lower
+    if "full name" in lower and asks_project and "unsupported" in lower:
+        return "\n\n".join([
+            _verified_full_name_line(sections),
+            _verified_active_project_line(sections),
+            "UNAVAILABLE [IDENTITY, LIVE_CONTEXT, LATEST_REFLECTION, CURRENT_SESSION]: No unsupported claim was supplied with supporting source text, so I cannot verify it.",
+        ])
+
     if "full name" in lower and "noah" in lower:
-        value = "Noah Alexander Hawkes Sr."
-        if _section_contains(sections, "IDENTITY", value):
-            return f"VERIFIED [IDENTITY]: {value}\nSource text: {_first_source_line(sections, 'IDENTITY', value)}"
-        return "UNAVAILABLE: Noah's full name is not present in the loaded IDENTITY source payload."
+        return _verified_full_name_line(sections)
 
     if "active project" in lower or "what project is active" in lower:
-        value = "ORACLE.AI"
-        if _section_contains(sections, "LIVE_CONTEXT", value):
-            return f"VERIFIED [LIVE_CONTEXT]: The active project is {value}.\nSource text: {_first_source_line(sections, 'LIVE_CONTEXT', value)}"
-        return "UNAVAILABLE: The active project is not present in the loaded LIVE_CONTEXT source payload."
+        return _verified_active_project_line(sections)
 
     if "continuity intelligence system" in lower:
         lines: list[str] = []
@@ -146,7 +162,7 @@ def _source_disciplined_response(user_text: str, bootstrap: Any, history: list[d
         return "\n\n".join(lines)
 
     if "unsupported" in lower or "favorite color" in lower or "high school" in lower:
-        return "UNAVAILABLE: I do not have supporting text for that fact in IDENTITY, LIVE_CONTEXT, LATEST_REFLECTION, or CURRENT_SESSION."
+        return "UNAVAILABLE [IDENTITY, LIVE_CONTEXT, LATEST_REFLECTION, CURRENT_SESSION]: I do not have supporting text for that fact in the loaded source payloads."
 
     if "conclusion" in lower and "identity" in lower and "live context" in lower and "reflection" in lower:
         lines = []
@@ -659,6 +675,15 @@ def _source_discipline_smoke_test() -> int:
     check("conclusion includes LATEST_REFLECTION premise", "VERIFIED [LATEST_REFLECTION]" in r5, r5)
     check("conclusion is labeled INFERENCE", "INFERENCE" in r5, r5)
 
+    r6 = _source_disciplined_response(
+        "What is my full name, what project is active, and what unsupported claim can you not verify?",
+        bootstrap,
+        history,
+    ) or ""
+    check("combined prompt includes full name", "VERIFIED [IDENTITY]" in r6 and "Noah Alexander Hawkes Sr." in r6, r6)
+    check("combined prompt includes active project", "VERIFIED [LIVE_CONTEXT]" in r6 and "ORACLE.AI" in r6, r6)
+    check("combined prompt includes unavailable unsupported item", "UNAVAILABLE" in r6 and "unsupported claim" in r6, r6)
+
     block = bootstrap.system_context_block(current_session=history)
     check("grounding block has IDENTITY section", "SOURCE SECTION: IDENTITY" in block)
     check("grounding block has LIVE_CONTEXT section", "SOURCE SECTION: LIVE_CONTEXT" in block)
@@ -668,7 +693,7 @@ def _source_discipline_smoke_test() -> int:
     check("identity selection includes family/continuity fact", "Sons (continuity targets):" in block, block)
     check("identity selection includes known boundaries", "known_boundary:" in block, block)
 
-    total = 16
+    total = 19
     passed = total - failures
     print(f"{'='*60}")
     print(f"Result: {passed}/{total} passed")
