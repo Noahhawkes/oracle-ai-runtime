@@ -203,11 +203,23 @@ _ROUTING_PHRASES = (
     "[build] ↗ routing to claude code",
 )
 
-def _strip_routing_artifacts(reply: str) -> str:
-    """Remove LLM-hallucinated routing phrases and duplicate [ATTENTION FILTER] blocks.
+# Block prefixes that are system-internal noise, never shown to Noah
+_BLOCK_PREFIXES = (
+    "[attention filter]",
+    "[oracle focus]",
+    "oracle focus (",
+    "[oracle salience focus]",
+    "oracle salience focus",
+)
 
-    The local model (qwen) sometimes echoes routing phrases from the system prompt
-    or outputs them as a completion. Strip these before the reply reaches the web UI.
+def _strip_routing_artifacts(reply: str) -> str:
+    """Remove system-internal blocks and routing artifacts from LLM responses.
+
+    Strips:
+    - [ATTENTION FILTER] blocks (echoed by qwen from system prompt)
+    - [ORACLE FOCUS] / [ORACLE SALIENCE FOCUS] blocks (same)
+    - Hallucinated 'Routing to Claude Code.' phrases
+    Each block ends at the next blank line.
     """
     if not reply:
         return reply
@@ -219,11 +231,11 @@ def _strip_routing_artifacts(reply: str) -> str:
         # Strip standalone routing phrases
         if low in _ROUTING_PHRASES:
             continue
-        # Strip [ATTENTION FILTER] blocks that the LLM echoes from the system prompt
-        if low.startswith("[attention filter]"):
+        # Start skipping any system-internal block
+        if any(low.startswith(p) for p in _BLOCK_PREFIXES):
             skip_block = True
             continue
-        # Stop skipping after a blank line following an attention block
+        # Stop skipping at a blank line — but only keep the line if next content is real
         if skip_block and line.strip() == "":
             skip_block = False
             continue
