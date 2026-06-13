@@ -1,0 +1,71 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A1 /* ORACLEAIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1; };
+		A2 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2; };
+		A3 /* OracleWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3; };
+		A4 /* OracleSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4; };
+		A5 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5; };
+		A6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B6; };
+		A7 /* NativeChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8; };
+		A8 /* OracleAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		B1 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ORACLEAIApp.swift; sourceTree = "<group>"; };
+		B2 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		B3 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OracleWebView.swift; sourceTree = "<group>"; };
+		B4 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OracleSettings.swift; sourceTree = "<group>"; };
+		B5 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		B6 = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B7 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B8 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeChatView.swift; sourceTree = "<group>"; };
+		B9 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OracleAPIClient.swift; sourceTree = "<group>"; };
+		C1 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ORACLEAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D1 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		E1 = {isa = PBXGroup; children = (E2, E3); sourceTree = "<group>"; };
+		E2 = {isa = PBXGroup; path = ORACLEAI; sourceTree = "<group>"; children = (B1,B2,B3,B4,B5,B6,B7,B8,B9); };
+		E3 = {isa = PBXGroup; name = Products; sourceTree = "<group>"; children = (C1); };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		F1 = {isa = PBXNativeTarget; buildConfigurationList = K2; buildPhases = (H1,D1,I1); buildRules = (); dependencies = (); name = ORACLEAI; productName = ORACLEAI; productReference = C1; productType = "com.apple.product-type.application"; };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		G1 = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = 1; LastSwiftUpdateCheck = 2600; LastUpgradeCheck = 2600; TargetAttributes = {F1 = {CreatedOnToolsVersion = 26.0; };};}; buildConfigurationList = K1; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = E1; productRefGroup = E3; projectDirPath = ""; projectRoot = ""; targets = (F1); };
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		I1 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A6); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		H1 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A1,A2,A3,A4,A5,A7,A8); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		L1 = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0;}; name = Debug; };
+		L2 = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0;}; name = Release; };
+		L3 = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = ORACLEAI/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = com.noahhawkes.oracleai; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_EMIT_LOC_STRINGS = YES; TARGETED_DEVICE_FAMILY = 1;}; name = Debug; };
+		L4 = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = ORACLEAI/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = com.noahhawkes.oracleai; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_EMIT_LOC_STRINGS = YES; TARGETED_DEVICE_FAMILY = 1; VALIDATE_PRODUCT = YES;}; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		K1 = {isa = XCConfigurationList; buildConfigurations = (L1,L2); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		K2 = {isa = XCConfigurationList; buildConfigurations = (L3,L4); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+	};
+	rootObject = G1;
+}
