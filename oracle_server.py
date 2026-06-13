@@ -125,6 +125,13 @@ def _boot():
         print("[Boot] Presence daemon started")
     except Exception as e:
         print(f"[Boot] Presence daemon not available: {e}")
+    # Start MiracleDrive index in background (non-blocking)
+    try:
+        from miracledrive_index import start_background_index
+        start_background_index()
+        print("[Boot] MiracleDrive index build started in background")
+    except Exception as e:
+        print(f"[Boot] MiracleDrive index not available: {e}")
 
 _boot()
 
@@ -669,6 +676,39 @@ async def root():
 async def miracledrive():
     html_path = ROOT / "ui" / "miracledrive.html"
     return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
+@app.get("/api/drive-state")
+async def api_drive_state():
+    """Real MiracleDrive filesystem state — no LLM, no fabrication."""
+    try:
+        from miracledrive_index import drive_state
+        return JSONResponse(drive_state())
+    except Exception as e:
+        return JSONResponse({"error": str(e), "total_files": 0}, status_code=500)
+
+
+@app.get("/api/drive-search")
+async def api_drive_search(q: str = "", limit: int = 20):
+    """Search the MiracleDrive index."""
+    try:
+        from miracledrive_index import query as md_query
+        results = md_query(q, limit=limit)
+        return JSONResponse({"results": results, "count": len(results)})
+    except Exception as e:
+        return JSONResponse({"error": str(e), "results": []}, status_code=500)
+
+
+@app.get("/api/drive-read")
+async def api_drive_read(path: str = ""):
+    """Read a specific file from MiracleDrive. ORACLE has full access."""
+    if not path:
+        return JSONResponse({"error": "path required"}, status_code=400)
+    try:
+        from miracledrive_index import read_file
+        return JSONResponse(read_file(path))
+    except Exception as e:
+        return JSONResponse({"error": str(e), "ok": False}, status_code=500)
 
 
 @app.post("/chat")

@@ -493,7 +493,7 @@
       <div class="panel-title">Continuity Map</div>
       <div class="badge bg-green">Stable</div>
     </div>
-    <div class="panel-num">11</div>
+    <div class="panel-num" id="panel-continuity">11</div>
     <div class="panel-sub">Connected domains</div>
     <div class="panel-bar"><div class="bar-fill" style="width:92%;background:var(--green);"></div></div>
   </div>
@@ -501,73 +501,82 @@
   <div class="panel" onclick="window.location.href='/?q=Show+me+the+Evidence+Vault'">
     <div class="panel-head">
       <div class="panel-title">Evidence Vault</div>
-      <div class="badge bg-cyan">47 receipts</div>
+      <div class="badge bg-cyan">Receipts</div>
     </div>
-    <div class="panel-num">47</div>
-    <div class="panel-sub">Verified execution receipts</div>
+    <div class="panel-num" id="panel-text">—</div>
+    <div class="panel-sub">Docs · PDFs · Text files</div>
     <div class="panel-bar"><div class="bar-fill" style="width:74%;background:var(--cyan);"></div></div>
   </div>
 
   <div class="panel" onclick="window.location.href='/?q=Show+me+the+Model+Harbor'">
     <div class="panel-head">
-      <div class="panel-title">Model Harbor</div>
+      <div class="panel-title">Code Files</div>
       <div class="badge bg-cyan">Active</div>
     </div>
-    <div class="panel-num">1</div>
-    <div class="panel-sub">Active · claude-sonnet-4-6</div>
+    <div class="panel-num" id="panel-code">—</div>
+    <div class="panel-sub">Scripts · notebooks · configs</div>
     <div class="panel-bar"><div class="bar-fill" style="width:55%;background:var(--cyan);"></div></div>
   </div>
 
-  <div class="panel" onclick="window.location.href='/?q=Show+me+the+Memory+River'">
+  <div class="panel" onclick="window.location.href='/?q=Show+me+recent+videos+and+OBS+recordings'">
     <div class="panel-head">
-      <div class="panel-title">Memory River</div>
-      <div class="badge bg-violet">312 facts</div>
+      <div class="panel-title">Video / OBS</div>
+      <div class="badge bg-violet">Recordings</div>
     </div>
-    <div class="panel-num">312</div>
-    <div class="panel-sub">Approved facts · 98.7%</div>
+    <div class="panel-num" id="panel-video">—</div>
+    <div class="panel-sub">Video files indexed</div>
     <div class="panel-bar"><div class="bar-fill" style="width:87%;background:var(--violet);"></div></div>
   </div>
 
   <div class="panel" onclick="window.location.href='/?q=Open+the+ORACLE.AI+Project+World'">
     <div class="panel-head">
-      <div class="panel-title">Project Worlds</div>
-      <div class="badge bg-amber">5 active</div>
+      <div class="panel-title">Audio Files</div>
+      <div class="badge bg-amber">Indexed</div>
     </div>
-    <div class="panel-num">5</div>
-    <div class="panel-sub">ORACLE.AI · SOV1 · 3 more</div>
+    <div class="panel-num" id="panel-audio">—</div>
+    <div class="panel-sub">Recordings · voice memos</div>
     <div class="panel-bar"><div class="bar-fill" style="width:50%;background:var(--amber);"></div></div>
   </div>
 
-  <div class="panel" onclick="window.location.href='/?q=Show+the+Recovery+Chamber'">
+  <div class="panel" onclick="window.location.href='/?q=Show+logs+and+OBS+session+logs'">
     <div class="panel-head">
-      <div class="panel-title">Recovery Chamber</div>
-      <div class="badge bg-green">Ready</div>
+      <div class="panel-title">Logs</div>
+      <div class="badge bg-green">Live</div>
     </div>
-    <div class="panel-num">3</div>
-    <div class="panel-sub">Snapshots · checkpoint tagged</div>
+    <div class="panel-num" id="panel-log">—</div>
+    <div class="panel-sub">Session · OBS · system logs</div>
     <div class="panel-bar"><div class="bar-fill" style="width:96%;background:var(--green);"></div></div>
   </div>
 
   <div class="panel" onclick="window.location.href='/?q=Show+the+Agent+Constellation+authority+map'">
     <div class="panel-head">
-      <div class="panel-title">Agent Constellation</div>
-      <div class="badge bg-amber">Authority-gated</div>
+      <div class="panel-title">Images</div>
+      <div class="badge bg-amber">Indexed</div>
     </div>
-    <div class="panel-num">6</div>
-    <div class="panel-sub">ORACLE · SOV1 · Codex · 3 more</div>
+    <div class="panel-num" id="panel-image">—</div>
+    <div class="panel-sub">Photos · screenshots · art</div>
     <div class="panel-bar"><div class="bar-fill" style="width:38%;background:var(--amber);"></div></div>
   </div>
 
-  <div class="panel" onclick="window.location.href='/?q=What+is+in+the+archive?'">
+  <div class="panel" onclick="window.location.href='/?q=What+archives+and+packages+are+stored?'">
     <div class="panel-head">
-      <div class="panel-title">Archive</div>
+      <div class="panel-title">Archives</div>
       <div class="badge bg-green">Indexed</div>
     </div>
-    <div class="panel-num">1,240</div>
-    <div class="panel-sub">Archived items · Indexed</div>
+    <div class="panel-num" id="panel-archive">—</div>
+    <div class="panel-sub">Zips · packages · exports</div>
     <div class="panel-bar"><div class="bar-fill" style="width:88%;background:var(--green);"></div></div>
   </div>
 
+</div>
+
+<!-- Recent files strip (populated from real index) -->
+<div style="margin:0 32px 32px;border:1px solid var(--border);border-radius:10px;padding:18px 20px;background:var(--surface);">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+    <div style="font-size:9.5px;letter-spacing:0.2em;text-transform:uppercase;color:var(--dim);font-weight:700;">Recently Modified</div>
+    <div style="font-size:9px;letter-spacing:0.12em;color:var(--dimmer);text-transform:uppercase;" id="index-age">loading index…</div>
+  </div>
+  <div id="recent-files" style="font-size:11px;color:var(--dim);">Scanning MiracleDrive…</div>
 </div>
 
 <!-- Authority hierarchy -->
@@ -657,6 +666,79 @@
 
   window.addEventListener('load',   drawLines);
   window.addEventListener('resize', drawLines);
+
+  // ── Live drive state from real index ──────────────────────────────────────
+  async function loadDriveState() {
+    try {
+      const res = await fetch('/api/drive-state');
+      if (!res.ok) return;
+      const d = await res.json();
+
+      // If still building, show progress and retry
+      if (d.building) {
+        const ageEl = document.getElementById('index-age');
+        if (ageEl) ageEl.textContent = 'indexing MiracleDrive…';
+        const rf = document.getElementById('recent-files');
+        if (rf) rf.innerHTML = '<span style="color:var(--dimmer)">Scanning Google Drive — this takes 30–60s on first load…</span>';
+        setTimeout(loadDriveState, 5000); // retry in 5s
+        return;
+      }
+
+      // Update status strip
+      if (d.total_files !== undefined) {
+        setStatus('files-count', d.total_files.toLocaleString() + ' files');
+        setStatus('files-mb', (d.total_mb || 0).toLocaleString() + ' MB indexed');
+      }
+
+      // Update panel numbers with real data
+      const cats = d.by_category || {};
+      setPanelNum('panel-continuity', Object.keys(cats).length || '—');
+      setPanelNum('panel-text',       (cats.text || 0) + (cats.document || 0) + (cats.pdf || 0));
+      setPanelNum('panel-code',       cats.code || 0);
+      setPanelNum('panel-video',      cats.video || 0);
+      setPanelNum('panel-audio',      cats.audio || 0);
+      setPanelNum('panel-log',        (cats.log || 0) + (cats.obs_log || 0));
+      setPanelNum('panel-image',      cats.image || 0);
+      setPanelNum('panel-archive',    cats.archive || 0);
+
+      // Update recent files list
+      if (d.recent_files && d.recent_files.length) {
+        const el = document.getElementById('recent-files');
+        if (el) {
+          el.innerHTML = d.recent_files.map(f =>
+            `<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+              <span style="font-size:9px;letter-spacing:0.12em;color:var(--dim);text-transform:uppercase;width:70px;flex-shrink:0">${f.category}</span>
+              <span style="font-size:11px;color:rgba(255,255,255,0.7);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.name}</span>
+              <span style="font-size:9px;color:var(--dimmer);white-space:nowrap">${f.mtime ? f.mtime.slice(0,10) : ''}</span>
+            </div>`
+          ).join('');
+        }
+      }
+
+      // Show index age
+      const ageEl = document.getElementById('index-age');
+      if (ageEl && d.index_age_seconds !== undefined) {
+        const age = Math.round(d.index_age_seconds);
+        ageEl.textContent = age < 60 ? `indexed ${age}s ago` : `indexed ${Math.round(age/60)}m ago`;
+      }
+
+    } catch (e) {
+      console.warn('drive-state fetch failed:', e);
+    }
+  }
+
+  function setStatus(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
+
+  function setPanelNum(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = typeof val === 'number' ? val.toLocaleString() : val;
+  }
+
+  loadDriveState();
+  setInterval(loadDriveState, 60000); // refresh every minute
 </script>
 </body>
 </html>
