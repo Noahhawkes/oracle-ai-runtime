@@ -217,11 +217,28 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         yield _sse({"type": "done"})
         return
 
+    # ── Light Compression Law — classify intent before routing ───────────────
+    try:
+        from lcl import classify as _lcl_classify, system_prompt as _lcl_system, is_explicit_route
+        _lcl_intent = _lcl_classify(user_text)
+        _lcl_prompt = _lcl_system(_lcl_intent)
+    except Exception:
+        _lcl_intent = "normal"
+        _lcl_prompt = None
+        is_explicit_route = lambda t: False  # type: ignore[assignment]
+
+    # "do it" in companion mode → queue a builder switch after this reply
+    _action_intent = (_lcl_intent == "action")
+
     # ── Classify route ────────────────────────────────────────────────────────
+    # External routing only if user explicitly requests it (LCL: no_route by default)
     try:
         from conversation_mode import classify_route, MODE_COMPANION, direct_response, load_mode_state
-        _route = classify_route(user_text, current_mode=_mode, no_route=_no_route)
-        effective_mode = _route.route
+        if _no_route or (_mode == "companion" and not is_explicit_route(user_text)):
+            effective_mode = "companion"
+        else:
+            _route = classify_route(user_text, current_mode=_mode, no_route=_no_route)
+            effective_mode = _route.route
     except Exception:
         effective_mode = _mode
 
@@ -242,10 +259,8 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             model = get_model(vision=False)
             local_mode = is_local()
 
-            system = (
-                "You are ORACLE, Noah's resident AI. You are speaking directly to Noah.\n"
-                "Respond as ORACLE — present, personal, direct. No routing, no delegation.\n"
-                "Keep responses concise unless depth is genuinely needed."
+            system = _lcl_prompt or (
+                "You are ORACLE, Noah's resident AI. Speak directly. Be brief."
             )
 
             if local_mode:
@@ -356,6 +371,11 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         except Exception as e:
             reply = f"Builder path error: {e}"
             yield _sse({"type": "token", "text": reply})
+
+    # ── "do it" → switch to builder so next turn has tools ready ─────────────
+    if _action_intent and effective_mode == "companion":
+        _mode = "builder"
+        yield _sse({"type": "mode", "mode": "builder"})
 
     # ── Save reply ────────────────────────────────────────────────────────────
     _history.append({"role": "assistant", "content": reply})
