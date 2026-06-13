@@ -476,14 +476,29 @@
 </div>
 
 <script>
+// ── Origin guard — ORACLE must be opened over HTTP, not file:// ───────────────
+(function() {
+  if (window.location.protocol === 'file:') {
+    document.body.innerHTML =
+      '<div style="font-family:monospace;color:#ef4444;padding:40px;background:#0a0a0c;height:100vh">' +
+      '<h2>ORACLE must be opened through http://127.0.0.1:7777</h2>' +
+      '<p>Run <code>oracle_desktop.bat</code> or start the server and navigate to that URL.<br>' +
+      'Opening <code>index.html</code> directly as a file:// URL breaks all fetch calls.</p></div>';
+    throw new Error('file:// origin — fetch calls would fail');
+  }
+})();
+
+// ── Safe API base — resolves fetch calls against the correct HTTP origin ──────
+const API_ORIGIN = window.location.origin;  // e.g. http://127.0.0.1:7777
+function apiUrl(path) { return API_ORIGIN + path; }
+
 // ── Pre-fill from MiracleDrive ?q= param ──────────────────────────────────────
 (function() {
   const q = new URLSearchParams(window.location.search).get('q');
   if (q) {
-    window.addEventListener('DOMContentLoaded', () => {
-      const inp = document.getElementById('user-input');
-      if (inp) { inp.value = decodeURIComponent(q); inp.focus(); }
-    });
+    // Script is at end of body — DOM is already parsed; no DOMContentLoaded needed.
+    const inp = document.getElementById('input');
+    if (inp) { inp.value = decodeURIComponent(q); inp.focus(); }
   }
 })();
 
@@ -518,7 +533,7 @@ function updateModeUI(mode) {
 
 // ── New chat ──────────────────────────────────────────────────────────────────
 async function newChat() {
-  await fetch('/api/clear', { method: 'POST' });
+  await fetch(apiUrl('/api/clear'), { method: 'POST' });
   document.getElementById('messages').innerHTML = `
     <div id="welcome">
       <div class="big-logo">O</div>
@@ -638,7 +653,7 @@ async function sendMessage() {
   let firstToken = true;
 
   try {
-    const resp = await fetch('/chat', {
+    const resp = await fetch(apiUrl('/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: text }),
@@ -695,7 +710,7 @@ async function sendMessage() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   try {
-    const r = await fetch('/api/mode');
+    const r = await fetch(apiUrl('/api/mode'));
     const data = await r.json();
     updateModeUI(data.mode || 'companion');
     noRoute = data.no_route || false;

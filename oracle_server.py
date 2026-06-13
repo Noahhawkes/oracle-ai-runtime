@@ -181,6 +181,45 @@ def _verified_active_project_line(sections: dict[str, list[str]]) -> str:
     return "UNAVAILABLE [LIVE_CONTEXT]: The active project is not present in the loaded LIVE_CONTEXT source payload."
 
 
+_ROUTING_PHRASES = (
+    "routing to claude code.",
+    "routing to claude code",
+    "sending to claude code.",
+    "sending to claude code",
+    "[build] ↗ routing to claude code",
+)
+
+def _strip_routing_artifacts(reply: str) -> str:
+    """Remove LLM-hallucinated routing phrases and duplicate [ATTENTION FILTER] blocks.
+
+    The local model (qwen) sometimes echoes routing phrases from the system prompt
+    or outputs them as a completion. Strip these before the reply reaches the web UI.
+    """
+    if not reply:
+        return reply
+    lines = reply.splitlines()
+    cleaned: list[str] = []
+    skip_block = False
+    for line in lines:
+        low = line.strip().lower()
+        # Strip standalone routing phrases
+        if low in _ROUTING_PHRASES:
+            continue
+        # Strip [ATTENTION FILTER] blocks that the LLM echoes from the system prompt
+        if low.startswith("[attention filter]"):
+            skip_block = True
+            continue
+        # Stop skipping after a blank line following an attention block
+        if skip_block and line.strip() == "":
+            skip_block = False
+            continue
+        if skip_block:
+            continue
+        cleaned.append(line)
+    result = "\n".join(cleaned).strip()
+    return result if result else reply
+
+
 def _core_status_frame(user_text: str) -> str:
     parts: list[str] = []
     try:
@@ -595,7 +634,8 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 reply = _enforce_companion_source_labels(reply)
                 reply = _apply_authority_gate(reply, effective_mode, user_text)
                 _history = engine_history[-40:]
-                yield _sse({"type": "token", "text": _core_status_frame(user_text) + "\n\n" + reply})
+                reply = _strip_routing_artifacts(reply)
+                yield _sse({"type": "token", "text": reply})
                 yield _sse({"type": "done", "mode": effective_mode})
                 return
             except Exception as core_err:
@@ -647,7 +687,8 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             effective_mode = engine_mode
             reply = _apply_authority_gate(reply, effective_mode, user_text)
             _history = engine_history[-40:]
-            yield _sse({"type": "token", "text": _core_status_frame(user_text) + "\n\n" + reply})
+            reply = _strip_routing_artifacts(reply)
+            yield _sse({"type": "token", "text": reply})
             yield _sse({"type": "done", "mode": effective_mode})
             return
         except Exception as core_err:
