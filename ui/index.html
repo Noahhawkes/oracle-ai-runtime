@@ -145,7 +145,48 @@
     border-top: 1px solid var(--border);
     font-size: 11px;
     color: var(--text-dim);
+    display: flex; flex-direction: column; gap: 6px;
+  }
+
+  .sidebar-footer-row {
     display: flex; align-items: center; gap: 8px;
+  }
+
+  #learn-link {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    font-size: 12px;
+    color: var(--text-dim);
+    cursor: pointer;
+    background: var(--surface);
+    transition: all 0.15s;
+    width: 100%;
+  }
+  #learn-link:hover { border-color: var(--accent); color: var(--text); }
+
+  #learn-count {
+    margin-left: auto;
+    font-size: 10px;
+    background: rgba(16,163,127,0.15);
+    color: var(--accent);
+    padding: 2px 7px;
+    border-radius: 20px;
+    font-weight: 600;
+  }
+
+  /* Learning pulse dot */
+  .learn-dot {
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    flex-shrink: 0;
+    animation: learn-pulse 3s ease-in-out infinite;
+  }
+  @keyframes learn-pulse {
+    0%,100% { opacity: 0.3; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.3); }
   }
 
   #no-route-badge {
@@ -429,8 +470,15 @@
   <div id="history-list"></div>
 
   <div class="sidebar-footer">
-    <span>ORACLE.AI</span>
-    <span id="no-route-badge">NO-ROUTE</span>
+    <div id="learn-link" onclick="sendSuggestion('/review-learned')" title="Review what ORACLE has learned">
+      <span class="learn-dot"></span>
+      <span>Learning</span>
+      <span id="learn-count">0</span>
+    </div>
+    <div class="sidebar-footer-row">
+      <span>ORACLE.AI</span>
+      <span id="no-route-badge">NO-ROUTE</span>
+    </div>
   </div>
 </aside>
 
@@ -446,9 +494,9 @@
   <div id="messages">
     <div id="welcome">
       <div class="big-logo">O</div>
-      <h1>Hi Noah, I'm ORACLE.</h1>
-      <p>Your resident AI — direct conversation, governed autonomy, and a self-improving architecture.</p>
-      <div class="suggestion-chips">
+      <h1>I'm here, Noah.</h1>
+      <p id="welcome-sub">Your resident intelligence — present, continuous, and learning.</p>
+      <div class="suggestion-chips" id="welcome-chips">
         <div class="chip" onclick="sendSuggestion('Are you there?')">Are you there?</div>
         <div class="chip" onclick="sendSuggestion('What are you working on?')">What are you working on?</div>
         <div class="chip" onclick="sendSuggestion('/self-patch')">Propose a self-improvement</div>
@@ -537,17 +585,12 @@ async function newChat() {
   document.getElementById('messages').innerHTML = `
     <div id="welcome">
       <div class="big-logo">O</div>
-      <h1>Hi Noah, I'm ORACLE.</h1>
-      <p>Your resident AI — direct conversation, governed autonomy, and a self-improving architecture.</p>
-      <div class="suggestion-chips">
-        <div class="chip" onclick="sendSuggestion('Are you there?')">Are you there?</div>
-        <div class="chip" onclick="sendSuggestion('What are you working on?')">What are you working on?</div>
-        <div class="chip" onclick="sendSuggestion('/self-patch')">Propose a self-improvement</div>
-        <div class="chip" onclick="sendSuggestion('/focus')">Show current focus</div>
-        <div class="chip" onclick="sendSuggestion('/help')">Show commands</div>
-      </div>
+      <h1>I'm here, Noah.</h1>
+      <p id="welcome-sub">Your resident intelligence — present, continuous, and learning.</p>
+      <div class="suggestion-chips" id="welcome-chips"></div>
     </div>`;
   conversationStarted = false;
+  _applyLearnedUI();
 }
 
 // ── Suggestions ───────────────────────────────────────────────────────────────
@@ -705,6 +748,7 @@ async function sendMessage() {
   document.getElementById('send-btn').disabled = false;
   input.focus();
   scrollToBottom();
+  _refreshLearnCount();
 }
 
 // ── Chip label → sendSuggestion text map ─────────────────────────────────────
@@ -740,6 +784,35 @@ function _renderChips(order) {
   });
 }
 
+// ── Shared learned-UI application ─────────────────────────────────────────────
+let _learnedData = null;
+
+async function _applyLearnedUI() {
+  try {
+    const lr = await fetch(apiUrl('/api/learned-ui'));
+    _learnedData = await lr.json();
+
+    // Update chip order on welcome screen
+    if (_learnedData.chip_order && _learnedData.chip_order.length) {
+      _renderChips(_learnedData.chip_order);
+    }
+
+    // Update learn counter in sidebar
+    const count = _learnedData.total_interactions || 0;
+    const el = document.getElementById('learn-count');
+    if (el) el.textContent = count;
+
+    // Update welcome subtitle once there's real history
+    const sub = document.getElementById('welcome-sub');
+    if (sub && count > 0) {
+      const dom = _learnedData.dominant_route
+        ? (_learnedData.learned_prefs && _learnedData.learned_prefs.dominant_route) || ''
+        : '';
+      sub.textContent = `${count} interaction${count !== 1 ? 's' : ''} recorded — adapting continuously.`;
+    }
+  } catch {}
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   try {
@@ -750,13 +823,20 @@ async function init() {
     if (noRoute) document.getElementById('no-route-badge').classList.add('visible');
   } catch {}
 
-  try {
-    const lr = await fetch(apiUrl('/api/learned-ui'));
-    const ld = await lr.json();
-    if (ld.chip_order && ld.chip_order.length) _renderChips(ld.chip_order);
-  } catch {}
+  await _applyLearnedUI();
 
   document.getElementById('input').focus();
+}
+
+// Refresh learning counter after each message completes
+function _refreshLearnCount() {
+  fetch(apiUrl('/api/learned-ui'))
+    .then(r => r.json())
+    .then(d => {
+      const el = document.getElementById('learn-count');
+      if (el) el.textContent = d.total_interactions || 0;
+    })
+    .catch(() => {});
 }
 
 init();
