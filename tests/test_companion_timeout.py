@@ -155,12 +155,14 @@ def test_sight_question_uses_accessor():
 
 
 # 7. A missing continuity source yields a bounded error, not a model fallback.
+#    (Presence uses the continuity frame; the active-task question uses the
+#    operational-state accessor, covered in test_operational_state.py.)
 def test_missing_continuity_source_bounded(monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("continuity provider down")
     monkeypatch.setattr(srv, "_continuity_frame", boom)
-    r = srv._deterministic_runtime_answer("what is the active task")
-    assert r is not None and r.startswith("UNAVAILABLE [CONTINUITY_FRAME]")
+    r = srv._deterministic_runtime_answer("are you there?")
+    assert r is not None and r.startswith("UNAVAILABLE [RUNTIME_STATE]")
 
 
 # 8. A missing sight source yields a bounded sight error.

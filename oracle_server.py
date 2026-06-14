@@ -715,12 +715,15 @@ def _deterministic_runtime_answer(user_text: str) -> str | None:
     if any(p in lower for p in (
         "what are we working on", "what are you working on",
         "active goal", "current goal", "active task", "what is the active task",
+        "what changed in your build", "what changed", "what have you changed",
+        "current state", "operational state", "what is your current state",
+        "what's your current state", "what is your state",
     )):
         try:
-            from runtime_continuity import summarize_active_goal
-            return summarize_active_goal(_continuity_frame(persist=False))
+            from operational_state import build_operational_state, summarize_operational_state
+            return summarize_operational_state(build_operational_state(mode_provider=_get_mode_state))
         except Exception as exc:
-            return f"UNAVAILABLE [CONTINUITY_FRAME]: Active goal lookup failed: {type(exc).__name__}: {exc}"
+            return f"UNAVAILABLE [OPERATIONAL_STATE]: State reconciliation failed: {type(exc).__name__}: {exc}"
 
     if any(p in lower for p in ("can you see me", "what do you see", "can you see")):
         try:
@@ -1298,6 +1301,24 @@ async def api_see(request: Request):
 async def api_continuity_frame():
     """Read-only restart-safe continuity frame. No persistence side effects."""
     return JSONResponse(_continuity_frame(persist=False))
+
+
+@app.get("/api/state")
+async def api_operational_state():
+    """
+    ORACLE's live operational world-model: VERIFIED (git/runtime/vision/pending)
+    reconciled now, with DECLARED narrative labeled and staleness-checked. No LLM.
+    """
+    try:
+        from operational_state import build_operational_state
+        # git/subprocess can be slow on Drive — run off the event loop.
+        state = await asyncio.to_thread(build_operational_state, mode_provider=_get_mode_state)
+        return JSONResponse(state)
+    except Exception as exc:
+        return JSONResponse({
+            "error": f"{type(exc).__name__}: {exc}",
+            "observed_at": datetime.now(timezone.utc).isoformat(),
+        }, status_code=500)
 
 
 @app.post("/chat")
