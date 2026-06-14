@@ -1770,10 +1770,31 @@ def main():
             "capability status", "/capability-status",
         ):
             try:
-                from capability_registry import format_registry_status
-                print("\n" + format_registry_status() + "\n")
+                from capability_broker import format_capabilities
+                print("\n" + format_capabilities(run_smokes=True) + "\n")
             except Exception as e:
                 print(f"\n[capability error: {e}]\n")
+            continue
+        if _cap_query in ("tool status", "tool-status", "/tool-status"):
+            try:
+                from capability_broker import format_tool_status
+                print("\n" + format_tool_status(run_smokes=False) + "\n")
+            except Exception as e:
+                print(f"\n[tool-status error: {e}]\n")
+            continue
+        if _cap_query in ("active tasks", "active-tasks", "/active-tasks"):
+            try:
+                from capability_broker import format_active_tasks
+                print("\n" + format_active_tasks() + "\n")
+            except Exception as e:
+                print(f"\n[active-tasks error: {e}]\n")
+            continue
+        if _cap_query in ("current observation", "current-observation", "/current-observation"):
+            try:
+                from current_observation import format_current_observation_response
+                print("\n" + format_current_observation_response() + "\n")
+            except Exception as e:
+                print(f"\n[current-observation error: {e}]\n")
             continue
         if _cap_query in (
             "what are you missing", "what tools are missing",
@@ -2542,6 +2563,44 @@ def main():
             _handle_lootdrop(user_input)
             continue
 
+        if user_input.lower() == "/mindcoin":
+            try:
+                from mindcoin import load_ledger, summarize_ledger
+                print("\n" + summarize_ledger(*load_ledger()) + "\n")
+            except Exception as e:
+                print(f"\n[mindcoin error: {e}]\n")
+            continue
+
+        if user_input.lower() == "/mindcoin-pending":
+            try:
+                from mindcoin import list_pending, load_ledger
+                _ledger, _events = load_ledger()
+                _pending = list_pending(_events)
+                print(f"\nPending MindCoin events: {len(_pending)}")
+                for _event in _pending:
+                    print("  " + _event.summary_line())
+                print()
+            except Exception as e:
+                print(f"\n[mindcoin-pending error: {e}]\n")
+            continue
+
+        if user_input.lower() in ("/mindcoin-drive", "mindcoin-drive"):
+            try:
+                from mindcoin_drive import format_drive_status
+                print("\n" + format_drive_status() + "\n")
+            except Exception as e:
+                print(f"\n[mindcoin-drive error: {e}]\n")
+            continue
+
+        if user_input.lower().startswith("/mindcoin-extract"):
+            try:
+                from mindcoin_drive import format_extraction
+                _apply_mc = user_input.lower().strip() in ("/mindcoin-extract apply", "/mindcoin-extract --apply")
+                print("\n" + format_extraction(apply=_apply_mc) + "\n")
+            except Exception as e:
+                print(f"\n[mindcoin-extract error: {e}]\n")
+            continue
+
         if user_input.lower() == "/propose-build":
             print("\n[propose-build] Starting read-only build recommendation...\n")
             try:
@@ -2907,7 +2966,9 @@ def main():
         if user_input.lower() in ("/doctor", "/audit-runtime", "/check-tools", "/health"):
             try:
                 from oracle_doctor import run_doctor
+                from capability_broker import format_doctor
                 print(run_doctor())
+                print("\n" + format_doctor(run_smokes=True) + "\n")
             except Exception as e:
                 print(f"\n[doctor error: {e}]\n")
             continue
@@ -3419,8 +3480,14 @@ def main():
             print(f"  {C['grey']}/autonomy{W}            — GREEN/YELLOW/RED zone table: what I can do without approval")
             print(f"  {C['grey']}/why-blocked [input]{W} — explain why the last action was blocked or deferred")
             print(f"  {C['grey']}/desktop-doctor{W}      — live desktop actuation probe")
-            print(f"  {C['grey']}/capabilities{W}        — list registered capabilities")
+            print(f"  {C['grey']}/capabilities{W}        — broker matrix with live smoke receipts")
+            print(f"  {C['grey']}/tool-status{W}         — concise broker status")
+            print(f"  {C['grey']}/active-tasks{W}        — broker background task progress")
+            print(f"  {C['grey']}/current-observation{W} — fresh visual/window receipt state")
             print(f"  {C['grey']}/missing-capabilities{W}— list degraded/unavailable capabilities")
+            print(f"  {C['grey']}/mindcoin{W}            — MindCoin ledger summary")
+            print(f"  {C['grey']}/mindcoin-drive{W}      — governed MindCoin aspiration view, MiracleDrive-grounded when indexed")
+            print(f"  {C['grey']}/mindcoin-extract{W}    — preview pending MindCoin evidence candidates")
             print(f"  {C['grey']}/project-state{W} /ps   — show current build phase + next step")
             print(f"  {C['grey']}/session{W}             — session state diagnostic")
             print()

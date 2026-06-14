@@ -147,11 +147,17 @@ def test_active_task_bypasses_model():
     assert r.startswith("VERIFIED") or r.startswith("UNAVAILABLE")
 
 
-# 6. "Can you see me?" returns the sight state via the accessor, no conversational model.
-def test_sight_question_uses_accessor():
+# 6. "Can you see me?" requires a fresh current-observation receipt, not just a
+#    usable vision model.
+def test_sight_question_uses_current_observation_receipt(monkeypatch, tmp_path):
+    import current_observation
+    monkeypatch.setattr(current_observation, "RECEIPT_PATH", tmp_path / "missing.json")
+    monkeypatch.setattr(current_observation, "RECEIPT_LOG_PATH", tmp_path / "missing.jsonl")
+
     r = srv._deterministic_runtime_answer("Can you see me?")
     assert r is not None
-    assert "[SIGHT]" in r
+    assert r.startswith("CURRENT_OBSERVATION")
+    assert "visual_observation: UNKNOWN" in r
 
 
 # 7. A missing continuity source yields a bounded error, not a model fallback.
@@ -165,13 +171,16 @@ def test_missing_continuity_source_bounded(monkeypatch):
     assert r is not None and r.startswith("UNAVAILABLE [RUNTIME_STATE]")
 
 
-# 8. A missing sight source yields a bounded sight error.
-def test_missing_sight_source_bounded(monkeypatch):
-    import oracle_sight
-    monkeypatch.setattr(oracle_sight, "sight_available",
-                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("sight down")))
+# 8. A missing current-observation receipt yields UNKNOWN, not a model fallback
+#    or historical visual inference.
+def test_missing_current_observation_source_bounded(monkeypatch, tmp_path):
+    import current_observation
+    monkeypatch.setattr(current_observation, "RECEIPT_PATH", tmp_path / "missing.json")
+    monkeypatch.setattr(current_observation, "RECEIPT_LOG_PATH", tmp_path / "missing.jsonl")
+
     r = srv._deterministic_runtime_answer("what do you see")
-    assert r is not None and r.startswith("UNAVAILABLE [SIGHT]")
+    assert r is not None and r.startswith("CURRENT_OBSERVATION")
+    assert "visual_observation: UNKNOWN" in r
 
 
 # Non-matching text must fall through (return None) so normal routing proceeds.

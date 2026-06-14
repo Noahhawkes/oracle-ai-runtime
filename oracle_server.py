@@ -128,6 +128,15 @@ def _apply_authority_gate(
             )
         return reply
 
+
+def _apply_current_observation_gate(reply: str, user_text: str) -> str:
+    """Current visual/window claims require a fresh typed observation receipt."""
+    try:
+        from current_observation import enforce_current_observation_boundary
+        return enforce_current_observation_boundary(user_text, reply)
+    except Exception:
+        return reply
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -725,6 +734,36 @@ def _deterministic_runtime_answer(user_text: str) -> str | None:
     """
     lower = user_text.lower().strip()
 
+    if lower in ("/current-observation", "current observation") or "current observation" in lower:
+        try:
+            from current_observation import format_current_observation_response
+            return format_current_observation_response()
+        except Exception as exc:
+            return (
+                "CURRENT_OBSERVATION\n"
+                "receipt_status: unavailable\n"
+                "application: UNKNOWN\n"
+                "window_title: UNKNOWN\n"
+                "visual_observation: UNKNOWN\n"
+                "screen_text: UNKNOWN\n"
+                f"blocker: {type(exc).__name__}: {exc}"
+            )
+
+    try:
+        from current_observation import asks_current_observation_question, format_current_observation_response
+        if asks_current_observation_question(user_text):
+            return format_current_observation_response()
+    except Exception as exc:
+        return (
+            "CURRENT_OBSERVATION\n"
+            "receipt_status: unavailable\n"
+            "application: UNKNOWN\n"
+            "window_title: UNKNOWN\n"
+            "visual_observation: UNKNOWN\n"
+            "screen_text: UNKNOWN\n"
+            f"blocker: {type(exc).__name__}: {exc}"
+        )
+
     if any(p in lower for p in ("are you there", "are you awake")):
         try:
             frame = _continuity_frame(persist=False)
@@ -807,6 +846,111 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
 
     if lower in ("/pending", "pending"):
         yield _sse({"type": "token", "text": _pending_list_text()})
+        yield _sse({"type": "done", "mode": _mode})
+        return
+
+    if lower in ("/capabilities", "capabilities"):
+        try:
+            from capability_broker import format_capabilities
+            txt = await asyncio.to_thread(format_capabilities, run_smokes=True)
+        except Exception as e:
+            txt = f"Capability broker unavailable: {e}"
+        yield _sse({"type": "token", "text": f"```\n{txt}\n```"})
+        yield _sse({"type": "done", "mode": _mode})
+        return
+
+    if lower in ("/tool-status", "tool-status"):
+        try:
+            from capability_broker import format_tool_status
+            txt = await asyncio.to_thread(format_tool_status, run_smokes=False)
+        except Exception as e:
+            txt = f"Tool status unavailable: {e}"
+        yield _sse({"type": "token", "text": f"```\n{txt}\n```"})
+        yield _sse({"type": "done", "mode": _mode})
+        return
+
+    if lower in ("/active-tasks", "active-tasks"):
+        try:
+            from capability_broker import format_active_tasks
+            txt = format_active_tasks()
+        except Exception as e:
+            txt = f"Active task status unavailable: {e}"
+        yield _sse({"type": "token", "text": f"```\n{txt}\n```"})
+        yield _sse({"type": "done", "mode": _mode})
+        return
+
+    if lower in ("/current-observation", "current-observation", "current observation"):
+        try:
+            from current_observation import format_current_observation_response
+            txt = format_current_observation_response()
+        except Exception as e:
+            txt = (
+                "CURRENT_OBSERVATION\n"
+                "receipt_status: unavailable\n"
+                "application: UNKNOWN\n"
+                "window_title: UNKNOWN\n"
+                "visual_observation: UNKNOWN\n"
+                "screen_text: UNKNOWN\n"
+                f"blocker: {e}"
+            )
+        yield _sse({"type": "token", "text": f"```\n{txt}\n```"})
+        yield _sse({"type": "done", "mode": _mode})
+        return
+
+    if lower in ("/doctor", "/audit-runtime", "/check-tools", "/health"):
+        try:
+            from capability_broker import format_doctor
+            txt = await asyncio.to_thread(format_doctor, run_smokes=True)
+        except Exception as e:
+            txt = f"Capability doctor unavailable: {e}"
+        yield _sse({"type": "token", "text": f"```\n{txt}\n```"})
+        yield _sse({"type": "done", "mode": _mode})
+        return
+
+    if lower in ("/mindcoin", "mindcoin"):
+        try:
+            from mindcoin import load_ledger, summarize_ledger
+            txt = await asyncio.to_thread(lambda: summarize_ledger(*load_ledger()))
+        except Exception as e:
+            txt = f"MindCoin unavailable: {e}"
+        yield _sse({"type": "token", "text": f"```\n{txt}\n```"})
+        yield _sse({"type": "done", "mode": _mode})
+        return
+
+    if lower in ("/mindcoin-pending", "mindcoin-pending"):
+        try:
+            from mindcoin import list_pending, load_ledger
+            def _pending_mc() -> str:
+                _ledger, events = load_ledger()
+                pending = list_pending(events)
+                if not pending:
+                    return "Pending MindCoin events: 0"
+                return "\n".join(["Pending MindCoin events: " + str(len(pending))] + ["  " + e.summary_line() for e in pending])
+            txt = await asyncio.to_thread(_pending_mc)
+        except Exception as e:
+            txt = f"MindCoin pending unavailable: {e}"
+        yield _sse({"type": "token", "text": f"```\n{txt}\n```"})
+        yield _sse({"type": "done", "mode": _mode})
+        return
+
+    if lower in ("/mindcoin-drive", "mindcoin-drive"):
+        try:
+            from mindcoin_drive import format_drive_status
+            txt = await asyncio.to_thread(format_drive_status)
+        except Exception as e:
+            txt = f"MindCoin drive unavailable: {e}"
+        yield _sse({"type": "token", "text": f"```\n{txt}\n```"})
+        yield _sse({"type": "done", "mode": _mode})
+        return
+
+    if lower.startswith("/mindcoin-extract"):
+        try:
+            from mindcoin_drive import format_extraction
+            apply_pending = lower in ("/mindcoin-extract apply", "/mindcoin-extract --apply")
+            txt = await asyncio.to_thread(format_extraction, apply=apply_pending)
+        except Exception as e:
+            txt = f"MindCoin extraction unavailable: {e}"
+        yield _sse({"type": "token", "text": f"```\n{txt}\n```"})
         yield _sse({"type": "done", "mode": _mode})
         return
 
@@ -968,6 +1112,14 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             "| `/builder` | Builder mode — code, patches, tools enabled |\n"
             "| `/no-route` | Force all conversation local |\n"
             "| `/route-on` | Restore external routing |\n"
+            "| `/capabilities` | Full broker matrix with live smoke receipts |\n"
+            "| `/doctor` | Capability doctor with degraded/blocked tools |\n"
+            "| `/tool-status` | Concise broker status from latest receipts |\n"
+            "| `/active-tasks` | Broker background task progress |\n"
+            "| `/current-observation` | Fresh visual/window receipt state |\n"
+            "| `/mindcoin` | MindCoin ledger summary |\n"
+            "| `/mindcoin-drive` | Governed MindCoin aspiration view, grounded by MiracleDrive when indexed |\n"
+            "| `/mindcoin-extract` | Preview eligible pending MindCoin candidates |\n"
             "| `/self-patch` | Detect and propose a fix for the top issue |\n"
             "| `/self-patch list` | List patch proposals |\n"
             "| `/self-patch approve <id>` | Approve a pending proposal |\n"
@@ -1078,6 +1230,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 _grounded_reply = _source_disciplined_response(user_text, _bootstrap, _history[-12:])
                 if _grounded_reply:
                     reply = _apply_authority_gate(_grounded_reply, effective_mode, user_text)
+                    reply = _apply_current_observation_gate(reply, user_text)
                     # Strip hallucinated "Routing to Claude Code." artifacts — the
                     # web UI has no Claude Code bridge, so the phrase is never a
                     # real action. (The fallback path below already strips; this
@@ -1129,6 +1282,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 effective_mode = engine_mode
                 reply = _enforce_companion_source_labels(reply)
                 reply = _apply_authority_gate(reply, effective_mode, user_text)
+                reply = _apply_current_observation_gate(reply, user_text)
                 _history = engine_history[-40:]
                 reply = _strip_routing_artifacts(reply)
                 try:
@@ -1188,6 +1342,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             )
             effective_mode = engine_mode
             reply = _apply_authority_gate(reply, effective_mode, user_text)
+            reply = _apply_current_observation_gate(reply, user_text)
             _history = engine_history[-40:]
             reply = _strip_routing_artifacts(reply)
             try:
@@ -1314,6 +1469,29 @@ async def api_see_status():
         })
 
 
+@app.get("/api/current-observation")
+async def api_current_observation():
+    """Fresh current visual/window observation receipt state. No LLM fallback."""
+    try:
+        from current_observation import current_observation_state
+        return JSONResponse(current_observation_state())
+    except Exception as exc:
+        return JSONResponse({
+            "schema_version": 1,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "receipt_id": None,
+            "receipt_status": "unavailable",
+            "fresh": False,
+            "fields": {
+                "application": {"value": None, "rendered_value": "UNKNOWN"},
+                "window_title": {"value": None, "rendered_value": "UNKNOWN"},
+                "visual_observation": {"value": None, "rendered_value": "UNKNOWN"},
+                "screen_text": {"value": None, "rendered_value": "UNKNOWN"},
+            },
+            "blocker": f"{type(exc).__name__}: {exc}",
+        }, status_code=500)
+
+
 @app.post("/api/see")
 async def api_see(request: Request):
     """
@@ -1335,6 +1513,18 @@ async def api_see(request: Request):
         from oracle_sight import describe_image
         # Run the (slow, blocking) vision call off the event loop.
         result = await asyncio.to_thread(describe_image, image, prompt=prompt)
+        try:
+            from current_observation import record_webcam_observation
+            receipt = record_webcam_observation(result)
+            if receipt:
+                result["current_observation_receipt"] = {
+                    "receipt_id": receipt.get("receipt_id"),
+                    "observed_at": receipt.get("observed_at"),
+                    "expires_at": receipt.get("expires_at"),
+                    "fields": sorted((receipt.get("fields") or {}).keys()),
+                }
+        except Exception as receipt_exc:
+            result["current_observation_receipt_error"] = f"{type(receipt_exc).__name__}: {receipt_exc}"
         return JSONResponse(result)
     except Exception as exc:
         return JSONResponse({

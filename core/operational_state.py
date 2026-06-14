@@ -86,7 +86,17 @@ def _ollama_loaded() -> list[str]:
 def _vision_state() -> dict[str, Any]:
     try:
         from oracle_sight import sight_available
-        return sight_available()
+        state = sight_available()
+        try:
+            from current_observation import current_observation_state
+            state["current_observation"] = current_observation_state()
+        except Exception as obs_exc:
+            state["current_observation"] = {
+                "receipt_status": "unavailable",
+                "fresh": False,
+                "error": f"{type(obs_exc).__name__}: {obs_exc}",
+            }
+        return state
     except Exception as exc:
         return {"available": False, "error": f"{type(exc).__name__}: {exc}"}
 
@@ -182,7 +192,11 @@ def summarize_operational_state(state: dict | None = None) -> str:
         f"- Runtime: localhost:7777 {rt.get('localhost_7777')}; "
         f"mode {rt.get('mode', 'UNKNOWN')}; model {rt.get('conversation_model')}"
     )
-    lines.append(f"- Vision: {'available' if vis.get('available') else 'unavailable'} ({vis.get('model')})")
+    current_obs = vis.get("current_observation") if isinstance(vis.get("current_observation"), dict) else {}
+    lines.append(
+        f"- Vision model: {'available' if vis.get('available') else 'unavailable'} ({vis.get('model')}); "
+        f"current observation receipt: {current_obs.get('receipt_status', 'UNKNOWN')}"
+    )
     lines.append(f"- Pending approvals: {v.get('pending_approvals', {}).get('count', 0)}")
     recent = v.get("recent_commits", [])
     if recent:

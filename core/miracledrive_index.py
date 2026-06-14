@@ -65,8 +65,20 @@ RICH_EXTENSIONS = {".docx", ".pdf"}
 # Max bytes to read for content indexing
 MAX_CONTENT_BYTES = 32_000   # ~8k tokens
 
+# Max bytes to hash during broad indexing. Full hashes remain available through
+# read_file(path), where the user asked for one specific file.
+MAX_HASH_BYTES = 1_000_000
+
 # Max files per scan to avoid runaway (expand as needed)
 MAX_FILES = 5_000
+
+SKIP_DIR_NAMES = {
+    "__pycache__",
+    "node_modules",
+    "dist",
+    "build",
+    ".pytest_cache",
+}
 
 # ── Data model ────────────────────────────────────────────────────────────────
 
@@ -212,6 +224,46 @@ def _sha256_prefix(path: Path) -> str:
         return "unreadable"
 
 
+def _iter_source_roots() -> list[Path]:
+    """Return configured roots without duplicate child paths."""
+    roots: list[Path] = []
+    for root in list(SOURCE_PATHS) + list(OBS_PATHS):
+        if not root.exists():
+            roots.append(root)
+            continue
+        try:
+            resolved = root.resolve()
+        except Exception:
+            resolved = root
+        duplicate_child = False
+        for existing in roots:
+            if not existing.exists():
+                continue
+            try:
+                existing_resolved = existing.resolve()
+                if resolved == existing_resolved or resolved.is_relative_to(existing_resolved):
+                    duplicate_child = True
+                    break
+            except Exception:
+                continue
+        if not duplicate_child:
+            roots.append(root)
+    return roots
+
+
+def _walk_files(root: Path):
+    """Yield files while pruning hidden/build/cache directories early."""
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            d for d in dirnames
+            if d not in SKIP_DIR_NAMES and not d.startswith(".")
+        ]
+        for name in filenames:
+            if name.startswith(".") or name == "desktop.ini" or name.endswith(".pyc"):
+                continue
+            yield Path(dirpath) / name
+
+
 # ── Scanner ───────────────────────────────────────────────────────────────────
 
 def _scan_path(root: Path, index: DriveIndex, file_count: list[int]) -> None:
@@ -222,18 +274,9 @@ def _scan_path(root: Path, index: DriveIndex, file_count: list[int]) -> None:
     index.source_paths_scanned.append(str(root.resolve()))
 
     try:
-        for path in root.rglob("*"):
+        for path in _walk_files(root):
             if file_count[0] >= MAX_FILES:
                 break
-            if not path.is_file():
-                continue
-
-            # Skip system/cache files
-            name = path.name
-            if name.startswith(".") or name == "desktop.ini" or name.endswith(".pyc"):
-                continue
-            if "__pycache__" in path.parts:
-                continue
 
             try:
                 stat = path.stat()
@@ -245,7 +288,7 @@ def _scan_path(root: Path, index: DriveIndex, file_count: list[int]) -> None:
 
             ext = path.suffix.lower()
             cat = _classify(path)
-            sha = _sha256_prefix(path) if size < 10_000_000 else "large_file"
+            sha = _sha256_prefix(path) if size <= MAX_HASH_BYTES else "large_file"
 
             # Content extraction
             content = None
@@ -265,7 +308,7 @@ def _scan_path(root: Path, index: DriveIndex, file_count: list[int]) -> None:
 
             record = FileRecord(
                 path=str(path.resolve()),
-                name=name,
+                name=path.name,
                 extension=ext,
                 size_bytes=size,
                 mtime_utc=mtime,
@@ -303,12 +346,72 @@ def build_index() -> DriveIndex:
         source_paths_missing=[],
     )
     file_count = [0]
-    for root in list(SOURCE_PATHS) + list(OBS_PATHS):
+    for root in _iter_source_roots():
         if file_count[0] >= MAX_FILES:
             break
         _scan_path(root, index, file_count)
     index.total_files = len(index.files)
     return index
+
+
+def search_filesystem(text: str, limit: int = 20, max_files: int = MAX_FILES) -> list[dict]:
+    """
+    Cold-search configured MiracleDrive roots without building the whole index.
+
+    This is for CLI/manual recovery paths. It avoids broad hashing and stops as
+    soon as enough matches are found.
+    """
+    q = text.lower().strip()
+    if not q:
+        return []
+    out: list[dict] = []
+    scanned = 0
+    for root in _iter_source_roots():
+        if not root.exists():
+            continue
+        for path in _walk_files(root):
+            if scanned >= max_files or len(out) >= limit:
+                return out
+            scanned += 1
+            haystack = f"{path.name}\n{path}".lower()
+            content = None
+            try:
+                stat = path.stat()
+                size = stat.st_size
+            except Exception:
+                continue
+            ext = path.suffix.lower()
+            if q not in haystack:
+                if size >= MAX_CONTENT_BYTES:
+                    continue
+                if ext in TEXT_EXTENSIONS:
+                    content = _read_text_content(path)
+                elif ext == ".docx":
+                    content = _read_docx_content(path)
+                elif ext == ".pdf":
+                    content = _read_pdf_content(path)
+                if not content or q not in content.lower():
+                    continue
+            elif q in haystack and size < MAX_CONTENT_BYTES and ext in TEXT_EXTENSIONS:
+                content = _read_text_content(path)
+
+            try:
+                mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat()
+            except Exception:
+                mtime = ""
+            out.append(asdict(FileRecord(
+                path=str(path.resolve()),
+                name=path.name,
+                extension=ext,
+                size_bytes=size,
+                mtime_utc=mtime,
+                sha256_prefix="not_hashed",
+                content_preview=(content[:500] if content else None),
+                content_available=content is not None,
+                source_root=str(root),
+                category=_classify(path),
+            )))
+    return out
 
 
 def _build_in_background() -> None:
@@ -346,9 +449,9 @@ def start_background_index() -> None:
     get_index()  # triggers background thread if not cached
 
 
-def query(text: str, limit: int = 20) -> list[dict]:
-    """Search the index. Returns [] if index not yet built."""
-    idx = get_index()
+def query(text: str, limit: int = 20, *, force_build: bool = False) -> list[dict]:
+    """Search the index. Returns [] if index not yet built unless force_build is set."""
+    idx = build_index() if force_build else get_index()
     if idx is None:
         return []
     return [asdict(r) for r in idx.search(text, limit=limit)]
@@ -522,14 +625,16 @@ if __name__ == "__main__":
     if args.smoke_test:
         sys.exit(_smoke_test())
     elif args.index:
-        ds = drive_state()
-        print(json.dumps(ds, indent=2, default=str))
+        idx = build_index()
+        print(json.dumps(idx.summary(), indent=2, default=str))
     elif args.search:
-        results = query(args.search)
+        results = search_filesystem(args.search)
         for r in results:
             print(f"  {r['category']:12} {r['mtime_utc'][:10]}  {r['name']}")
             if r.get('content_preview'):
                 print(f"             {r['content_preview'][:100]!r}")
+        if not results:
+            print("  no MiracleDrive matches")
     elif args.read:
         result = read_file(args.read)
         print(json.dumps(result, indent=2, default=str))
