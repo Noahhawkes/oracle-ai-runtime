@@ -691,6 +691,31 @@ if os.environ.get("ORACLE_SKIP_SERVER_BOOT") != "1":
 
 # ── Stream a reply ─────────────────────────────────────────────────────────────
 
+def _run_session_continuity(history: list[dict], session_id: str) -> dict:
+    """
+    Bounded continuity checkpoint: extract durable facts from the session via the
+    continuity pipeline. This wires the previously dormant pipeline into
+    production. Called at explicit/boundary checkpoints — never per turn.
+    """
+    try:
+        from continuity_pipeline import run_continuity_pipeline
+        session = [
+            {"speaker": "Noah" if m.get("role") == "user" else "Oracle",
+             "text": str(m.get("content", ""))}
+            for m in (history or []) if str(m.get("content", "")).strip()
+        ]
+        if not session:
+            return {"written": 0, "staged": 0, "discarded": 0, "empty": True}
+        result = run_continuity_pipeline(session, session_id=session_id)
+        return {
+            "written": len(result.get("written", [])),
+            "staged": len(result.get("staged", [])),
+            "discarded": len(result.get("discarded", [])),
+        }
+    except Exception as exc:
+        return {"error": f"{type(exc).__name__}: {exc}"}
+
+
 def _deterministic_runtime_answer(user_text: str) -> str | None:
     """
     Runtime/sight questions answered from canonical accessors WITHOUT the LLM and
@@ -782,6 +807,30 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
 
     if lower in ("/pending", "pending"):
         yield _sse({"type": "token", "text": _pending_list_text()})
+        yield _sse({"type": "done", "mode": _mode})
+        return
+
+    if lower in ("/remember", "/remember-session"):
+        res = await asyncio.to_thread(_run_session_continuity, list(_history), _session_id)
+        if "error" in res:
+            txt = f"Continuity pipeline error: {res['error']}"
+        else:
+            txt = (
+                f"Session continuity run — **{res.get('written', 0)} fact(s) written** to durable "
+                f"memory, {res.get('staged', 0)} staged for approval, {res.get('discarded', 0)} discarded."
+            )
+        yield _sse({"type": "token", "text": txt})
+        yield _sse({"type": "done", "mode": _mode})
+        return
+
+    if lower in ("/rebuild-memory-index", "/reindex"):
+        try:
+            from memory import migrate_memory_index
+            r = await asyncio.to_thread(migrate_memory_index, rebuild_if_stale=True)
+            txt = f"Memory index rebuilt: {r}"
+        except Exception as e:
+            txt = f"Reindex error: {e}"
+        yield _sse({"type": "token", "text": txt})
         yield _sse({"type": "done", "mode": _mode})
         return
 
@@ -1351,6 +1400,12 @@ async def mode():
 @app.post("/api/clear")
 async def clear():
     global _history, _session_id
+    # Session boundary: capture durable memory from the closing session first.
+    try:
+        if _history:
+            await asyncio.to_thread(_run_session_continuity, list(_history), _session_id)
+    except Exception:
+        pass
     _history = []
     try:
         from memory import new_session

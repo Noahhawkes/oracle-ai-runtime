@@ -84,6 +84,13 @@ def init_db():
                 recorded_at  TEXT NOT NULL
             );
         """)
+    # Ensure the L2 index schema exists on boot (cheap, additive). Does NOT
+    # rebuild the index here — rebuild is explicit (/rebuild-memory-index) to
+    # keep boot fast on slow (Drive-synced) storage.
+    try:
+        migrate_memory_index(rebuild_if_stale=False)
+    except Exception:
+        pass
 
 
 def new_session():
@@ -282,7 +289,14 @@ def insert_durable_fact(fact_text: str, provenance: dict) -> int:
                 now,
             ),
         )
-        return cur.lastrowid
+        row_id = cur.lastrowid
+    # Keep the FTS index current for live single inserts. Best-effort: indexing
+    # must never break a durable write.
+    try:
+        index_durable_fact(row_id)
+    except Exception:
+        pass
+    return row_id
 
 
 def search_durable_facts(query: str, limit: int = 10) -> list[dict]:
@@ -336,3 +350,201 @@ def get_audit_chain(session_id: str) -> list[dict]:
                 r["detail"] = {}
             results.append(r)
         return results
+
+
+# ── L2 indexed continuity memory (FTS5) ────────────────────────────────────────
+# Real recall over durable_facts: full-text (FTS5) + authority/confidence ranking,
+# supersession-aware. Additive and idempotent — never drops or rewrites facts.
+
+import re as _re
+
+_FTS_AVAILABLE: bool | None = None
+
+
+def _fts_available(conn) -> bool:
+    global _FTS_AVAILABLE
+    if _FTS_AVAILABLE is None:
+        try:
+            conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS _fts_probe USING fts5(x)")
+            conn.execute("DROP TABLE IF EXISTS _fts_probe")
+            _FTS_AVAILABLE = True
+        except Exception:
+            _FTS_AVAILABLE = False
+    return _FTS_AVAILABLE
+
+
+def _normalize(text: str) -> str:
+    return _re.sub(r"[^a-z0-9 ]+", " ", (text or "").lower()).strip()
+
+
+def _authority_rank(source_type: str, approval_status: str, canonical_status: str = "") -> int:
+    """Higher = more authoritative. Noah's approved words outrank external/inferred text."""
+    st = (source_type or "").lower()
+    ap = (approval_status or "").lower()
+    if st == "human_stated" and ap == "approved":
+        return 100
+    if st == "human_stated":
+        return 80
+    if st == "observed":
+        return 60
+    if st == "generated" and ap == "approved":
+        return 50
+    if st == "inferred":
+        return 40
+    if st == "generated":
+        return 20
+    return 30
+
+
+def _column_exists(conn, table: str, col: str) -> bool:
+    return any(r[1] == col for r in conn.execute(f"PRAGMA table_info({table})"))
+
+
+def migrate_memory_index(*, rebuild_if_stale: bool = True) -> dict:
+    """
+    Idempotent, additive migration:
+      * adds authority_rank / supersedes_id / superseded_by columns to durable_facts
+      * creates the durable_fts FTS5 index table
+      * rebuilds the index if it is empty or out of sync with durable_facts
+    Returns a summary dict. Never destroys durable_facts rows.
+    """
+    with get_conn() as conn:
+        if not _fts_available(conn):
+            return {"fts5": False, "indexed": 0, "reason": "FTS5 unavailable"}
+        for col, ddl in (("authority_rank", "INTEGER DEFAULT 0"),
+                         ("supersedes_id", "INTEGER"),
+                         ("superseded_by", "INTEGER")):
+            if not _column_exists(conn, "durable_facts", col):
+                conn.execute(f"ALTER TABLE durable_facts ADD COLUMN {col} {ddl}")
+        conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS durable_fts "
+            "USING fts5(memory_id UNINDEXED, fact_text, normalized_text)"
+        )
+        conn.commit()
+        fact_n = conn.execute("SELECT COUNT(*) AS n FROM durable_facts").fetchone()["n"]
+        idx_n = conn.execute("SELECT COUNT(*) AS n FROM durable_fts").fetchone()["n"]
+    if rebuild_if_stale and idx_n != fact_n:
+        indexed = rebuild_memory_index()
+        return {"fts5": True, "indexed": indexed, "rebuilt": True}
+    return {"fts5": True, "indexed": idx_n, "rebuilt": False}
+
+
+def rebuild_memory_index() -> int:
+    """Rebuild the FTS index + authority ranks from durable_facts in one transaction."""
+    with get_conn() as conn:
+        if not _fts_available(conn):
+            return 0
+        conn.execute("DELETE FROM durable_fts")
+        rows = conn.execute(
+            "SELECT id, fact_text, source_type, approval_status, canonical_status FROM durable_facts"
+        ).fetchall()
+        conn.executemany(
+            "INSERT INTO durable_fts(memory_id, fact_text, normalized_text) VALUES (?, ?, ?)",
+            [(r["id"], r["fact_text"], _normalize(r["fact_text"])) for r in rows],
+        )
+        conn.executemany(
+            "UPDATE durable_facts SET authority_rank=? WHERE id=?",
+            [(_authority_rank(r["source_type"], r["approval_status"], r["canonical_status"]), r["id"]) for r in rows],
+        )
+        conn.commit()
+        return len(rows)
+
+
+def index_durable_fact(row_id: int) -> None:
+    """Index/refresh a single durable fact (called after insert)."""
+    with get_conn() as conn:
+        if not _fts_available(conn):
+            return
+        r = conn.execute(
+            "SELECT id, fact_text, source_type, approval_status, canonical_status FROM durable_facts WHERE id=?",
+            (row_id,),
+        ).fetchone()
+        if not r:
+            return
+        conn.execute("DELETE FROM durable_fts WHERE memory_id=?", (row_id,))
+        conn.execute(
+            "INSERT INTO durable_fts(memory_id, fact_text, normalized_text) VALUES (?, ?, ?)",
+            (r["id"], r["fact_text"], _normalize(r["fact_text"])),
+        )
+        conn.execute(
+            "UPDATE durable_facts SET authority_rank=? WHERE id=?",
+            (_authority_rank(r["source_type"], r["approval_status"], r["canonical_status"]), r["id"]),
+        )
+        conn.commit()
+
+
+def search_memory_index(query: str, *, limit: int = 10, source_type: str | None = None,
+                        canonical_status: str | None = None, min_confidence: float = 0.0,
+                        min_authority: int = 0, order: str = "relevance",
+                        exclude_superseded: bool = True) -> list[dict]:
+    """
+    Indexed recall. order='relevance' (FTS bm25 + authority + confidence) or 'recent'.
+    Falls back to a LIKE scan if FTS5 is unavailable.
+    """
+    words = [w for w in _re.findall(r"[a-z0-9]+", (query or "").lower()) if len(w) > 1]
+    if not words:
+        return []
+    with get_conn() as conn:
+        if not _fts_available(conn):
+            rows = conn.execute(
+                "SELECT * FROM durable_facts WHERE lower(fact_text) LIKE ? ORDER BY id DESC LIMIT ?",
+                (f"%{words[0]}%", limit),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        match = " OR ".join(f'"{w}"' for w in words[:20])
+        sql = [
+            "SELECT f.*, bm25(durable_fts) AS bm25_rank",
+            "FROM durable_fts JOIN durable_facts f ON f.id = durable_fts.memory_id",
+            "WHERE durable_fts MATCH ?",
+        ]
+        params: list = [match]
+        if source_type:
+            sql.append("AND f.source_type=?"); params.append(source_type)
+        if canonical_status:
+            sql.append("AND f.canonical_status=?"); params.append(canonical_status)
+        if min_confidence:
+            sql.append("AND f.confidence>=?"); params.append(min_confidence)
+        if min_authority:
+            sql.append("AND COALESCE(f.authority_rank,0)>=?"); params.append(min_authority)
+        if exclude_superseded:
+            sql.append("AND f.superseded_by IS NULL")
+        if order == "recent":
+            sql.append("ORDER BY f.id DESC")
+        else:
+            # bm25 lower=better; subtract authority/confidence so authoritative, confident facts rank higher.
+            sql.append("ORDER BY (bm25(durable_fts) - COALESCE(f.authority_rank,0)/40.0 - f.confidence) ASC")
+        sql.append("LIMIT ?"); params.append(limit)
+        rows = conn.execute(" ".join(sql), params).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_memory_by_id(memory_id: int) -> dict | None:
+    with get_conn() as conn:
+        r = conn.execute("SELECT * FROM durable_facts WHERE id=?", (memory_id,)).fetchone()
+        return dict(r) if r else None
+
+
+def mark_superseded(old_id: int, by_id: int) -> None:
+    """Mark old_id as superseded by by_id (corrections/updates)."""
+    with get_conn() as conn:
+        conn.execute("UPDATE durable_facts SET superseded_by=? WHERE id=?", (by_id, old_id))
+        conn.execute("UPDATE durable_facts SET supersedes_id=? WHERE id=?", (old_id, by_id))
+        conn.commit()
+
+
+def find_contradictions(query: str, limit: int = 10) -> list[dict]:
+    """Surface candidate contradictions among matches: same topic, opposite negation polarity."""
+    hits = search_memory_index(query, limit=max(limit * 2, 12), exclude_superseded=False)
+    neg = _re.compile(r"\b(no|not|never|cannot|can't|won't|don't|isn't|aren't|false|wrong)\b")
+    seen: list[dict] = []
+    out: list[dict] = []
+    for h in hits:
+        polarity = bool(neg.search((h.get("fact_text") or "").lower()))
+        for prev in seen:
+            if prev["polarity"] != polarity:
+                out.append({"type": "negation_polarity",
+                            "a_id": prev["fact"]["id"], "b_id": h["id"],
+                            "a": prev["fact"]["fact_text"][:120], "b": h["fact_text"][:120]})
+                break
+        seen.append({"polarity": polarity, "fact": h})
+    return out[:limit]
