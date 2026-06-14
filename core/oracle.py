@@ -42,6 +42,7 @@ from tools.executor import execute_tool
 from llm import is_local, make_client, get_model, to_openai_tools, startup_status
 from voice import speak, set_voice_enabled, is_voice_enabled
 from conversation_mode import (
+    DEFAULT_TIMEOUT_SECONDS,
     MODE_BUILDER,
     MODE_COMPANION,
     begin_debug_turn,
@@ -1544,7 +1545,7 @@ def web_engine_response(
             user_input,
             history=engine_history,
             model=model,
-            timeout_s=4.5,
+            timeout_s=DEFAULT_TIMEOUT_SECONDS,
             base_prompt=system_prompt,
             policy=_policy,
         )
@@ -1908,7 +1909,7 @@ def main():
                         user_input,
                         history=history,
                         model=model,
-                        timeout_s=4.5,
+                        timeout_s=DEFAULT_TIMEOUT_SECONDS,
                         base_prompt=system_prompt,
                     )
                     reply = direct.text
@@ -3546,7 +3547,7 @@ def main():
                     user_input,
                     history=history,
                     model=model,
-                    timeout_s=4.5,
+                    timeout_s=DEFAULT_TIMEOUT_SECONDS,
                     base_prompt=system_prompt,
                 )
                 reply = direct.text

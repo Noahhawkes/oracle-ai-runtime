@@ -691,6 +691,57 @@ if os.environ.get("ORACLE_SKIP_SERVER_BOOT") != "1":
 
 # ── Stream a reply ─────────────────────────────────────────────────────────────
 
+def _deterministic_runtime_answer(user_text: str) -> str | None:
+    """
+    Runtime/sight questions answered from canonical accessors WITHOUT the LLM and
+    WITHOUT requiring companion_bootstrap. Works in any mode. Returns None if the
+    text is not one of these questions. A failing accessor returns a bounded
+    error (never falls through to the local-model fallback).
+    """
+    lower = user_text.lower().strip()
+
+    if any(p in lower for p in ("are you there", "are you awake")):
+        try:
+            frame = _continuity_frame(persist=False)
+            runtime = frame.get("runtime", {})
+            sid = (runtime.get("session_id") or {}).get("value") or _session_id
+            return (
+                "VERIFIED [RUNTIME_STATE]: I am here on the local ORACLE runtime. "
+                f"Session `{sid}` is active on `localhost:7777`."
+            )
+        except Exception as exc:
+            return f"UNAVAILABLE [RUNTIME_STATE]: Runtime accessor failed: {type(exc).__name__}: {exc}"
+
+    if any(p in lower for p in (
+        "what are we working on", "what are you working on",
+        "active goal", "current goal", "active task", "what is the active task",
+    )):
+        try:
+            from runtime_continuity import summarize_active_goal
+            return summarize_active_goal(_continuity_frame(persist=False))
+        except Exception as exc:
+            return f"UNAVAILABLE [CONTINUITY_FRAME]: Active goal lookup failed: {type(exc).__name__}: {exc}"
+
+    if any(p in lower for p in ("can you see me", "what do you see", "can you see")):
+        try:
+            from oracle_sight import sight_available
+            s = sight_available()
+        except Exception as exc:
+            return f"UNAVAILABLE [SIGHT]: Sight accessor failed: {type(exc).__name__}: {exc}"
+        if not s.get("available"):
+            return (
+                "UNAVAILABLE [SIGHT]: Webcam vision is not available right now "
+                f"(model: {s.get('model')}, ollama_reachable: {s.get('ollama_reachable')})."
+            )
+        return (
+            f"VERIFIED [SIGHT]: Webcam vision is available via local model `{s.get('model')}`.\n"
+            "BOUNDARY [SIGHT]: I read frames live from the camera panel and never store them. "
+            "Turn on the eye control and I'll describe what I see in the moment."
+        )
+
+    return None
+
+
 async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     global _mode, _no_route, _history
 
@@ -932,6 +983,22 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
 
     _history.append({"role": "user", "content": user_text})
 
+    # ── Deterministic runtime/sight answers (no LLM, both modes) ──────────────
+    # Presence, active task, and sight questions must never hit the slow model or
+    # depend on bootstrap. They answer from canonical accessors or a bounded error.
+    _det = _deterministic_runtime_answer(user_text)
+    if _det is not None:
+        _det = _strip_routing_artifacts(_det)
+        yield _sse({"type": "token", "text": _det})
+        yield _sse({"type": "done", "mode": _mode, "effective_route": "companion"})
+        _history.append({"role": "assistant", "content": _det})
+        try:
+            from memory import save_message
+            save_message(_session_id, "assistant", _det)
+        except Exception:
+            pass
+        return
+
     # ── /review-learned — instant local response, no model needed ────────────
     if user_text.strip().lower() in ("/review-learned", "/review-learned"):
         try:
@@ -940,7 +1007,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         except Exception as e:
             review_text = f"Learning ledger unavailable: {e}"
         yield _sse({"type": "token", "text": review_text})
-        yield _sse({"type": "done", "mode": effective_mode})
+        yield _sse({"type": "done", "mode": _mode, "effective_route": effective_mode})
         _history.append({"role": "assistant", "content": review_text})
         return
 
@@ -979,7 +1046,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                                            reply_len=len(reply), latency=time.time() - _t_start)
                     except Exception:
                         pass
-                    yield _sse({"type": "done", "mode": effective_mode})
+                    yield _sse({"type": "done", "mode": _mode, "effective_route": effective_mode})
                     return
 
             try:
@@ -1019,14 +1086,14 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 except Exception:
                     pass
                 yield _sse({"type": "token", "text": reply})
-                yield _sse({"type": "done", "mode": effective_mode})
+                yield _sse({"type": "done", "mode": _mode, "effective_route": effective_mode})
                 return
             except Exception as core_err:
                 import traceback as _tb
                 _tb.print_exc()  # full traceback to server stderr for diagnosis
                 reply = f"Core engine error: {type(core_err).__name__}: {core_err}"
                 yield _sse({"type": "token", "text": reply})
-                yield _sse({"type": "done", "mode": effective_mode})
+                yield _sse({"type": "done", "mode": _mode, "effective_route": effective_mode})
                 return
 
             raise RuntimeError("core engine bridge returned unexpectedly")
@@ -1078,14 +1145,14 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             except Exception:
                 pass
             yield _sse({"type": "token", "text": reply})
-            yield _sse({"type": "done", "mode": effective_mode})
+            yield _sse({"type": "done", "mode": _mode, "effective_route": effective_mode})
             return
         except Exception as core_err:
             import traceback as _tb
             _tb.print_exc()
             reply = f"Core engine error: {type(core_err).__name__}: {core_err}"
             yield _sse({"type": "token", "text": reply})
-            yield _sse({"type": "done", "mode": effective_mode})
+            yield _sse({"type": "done", "mode": _mode, "effective_route": effective_mode})
             return
 
         raise RuntimeError("core engine bridge returned unexpectedly")
@@ -1106,7 +1173,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     except Exception:
         pass
 
-    yield _sse({"type": "done", "mode": effective_mode})
+    yield _sse({"type": "done", "mode": _mode, "effective_route": effective_mode})
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────

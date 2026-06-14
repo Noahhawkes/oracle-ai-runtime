@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from dataclasses import dataclass
@@ -22,11 +24,23 @@ ROOT = Path(__file__).parent.parent
 STATE_FILE = ROOT / "Memory" / "conversation_mode_state.json"
 DEBUG_STATE_FILE = ROOT / "Memory" / "companion_debug_last.json"
 PERSONALITY_SEED_FILE = ROOT / "state" / "oracle_personality_seed.json"
-DEFAULT_TIMEOUT_SECONDS = 4.5
 
-# Singleton pool — prevents zombie thread accumulation on repeated qwen timeouts.
-# One worker: one outstanding local-model request at a time.
-_LOCAL_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="qwen_worker")
+# Realistic local-model timeouts. A local 7B on a laptop GPU needs far more than
+# the old 4.5s, especially after a cold load or a model swap. Env-overridable.
+DEFAULT_TIMEOUT_SECONDS = float(os.environ.get("ORACLE_LOCAL_TIMEOUT", "25"))      # total generation budget
+CONNECT_TIMEOUT_SECONDS = float(os.environ.get("ORACLE_LOCAL_CONNECT_TIMEOUT", "5"))  # reach Ollama
+# Keep the conversational model resident so it is not unloaded/reloaded between
+# turns (the single biggest source of cold-start timeouts).
+LOCAL_KEEP_ALIVE = os.environ.get("ORACLE_LOCAL_KEEP_ALIVE", "30m")
+
+# Bounded pool. A GPU serializes inference anyway, so we gate concurrency with a
+# single non-blocking inference slot (_INFLIGHT). Extra workers exist only so a
+# stale/abandoned future cannot occupy the one thread the next request needs.
+_LOCAL_POOL = ThreadPoolExecutor(max_workers=3, thread_name_prefix="qwen_worker")
+# One outstanding local-model request at a time. Acquired non-blocking: if the
+# model is already busy we return an honest "busy" state instead of queueing
+# invisibly behind a request that then looks like a timeout.
+_INFLIGHT = threading.Semaphore(1)
 
 MODE_COMPANION = "COMPANION"
 MODE_BUILDER = "BUILDER"
@@ -164,6 +178,11 @@ class DirectResponse:
     text: str
     timed_out: bool = False
     fallback_used: bool = False
+    # Honest machine-readable outcome for diagnostics and the UI. One of:
+    # ok | model_busy | total_generation_timeout | connection_failure |
+    # empty_response | model_error
+    status: str = "ok"
+    detail: str = ""
 
 
 def load_mode_state() -> dict:
@@ -241,19 +260,58 @@ def classify_route(text: str, *, current_mode: str = MODE_BUILDER, no_route: boo
     return RouteDecision(MODE_COMPANION, False, "default to direct conversation")
 
 
-def fallback_response(text: str, *, timed_out: bool = False) -> str:
-    lower = text.lower()
-    if "are you there" in lower:
-        base = "I'm here, Noah. Fully here, and I am not routing this away."
-    elif "frustrated" in lower or "tired" in lower or "stuck" in lower:
-        base = "I hear you. Let's slow it down and stay with the real thing for a second."
-    elif "how are you" in lower:
-        base = "I'm here and steady. More importantly, I'm with you right now."
-    else:
-        base = "Noah, I am here. I am in Companion Mode, staying local and conversational. Tell me what you want to talk through."
-    if timed_out:
-        return f"{base} The local model took too long, so I'm answering directly instead."
-    return base
+def _classify_local_error(exc: BaseException) -> str:
+    """Map a local-model exception to an honest status string."""
+    name = type(exc).__name__.lower()
+    text = str(exc).lower()
+    if "connecttimeout" in name or "connecterror" in name or "apiconnection" in name:
+        return "connection_failure"
+    if "refused" in text or "failed to establish" in text or "connection" in name:
+        return "connection_failure"
+    if "timeout" in name or "timed out" in text:
+        return "total_generation_timeout"
+    return "model_error"
+
+
+def fallback_response(
+    text: str = "",
+    *,
+    timed_out: bool = False,
+    status: str = "total_generation_timeout",
+    effective_mode: str = "Companion",
+    timeout_s: float = DEFAULT_TIMEOUT_SECONDS,
+) -> str:
+    """
+    Honest non-answer. It states the real failure reason and the actual effective
+    route, and it never pretends to have answered the user's question, and never
+    claims a mode that is not the effective route.
+    """
+    mode = effective_mode or "Companion"
+    if status == "model_busy":
+        return (
+            f"Local model is currently processing another request. "
+            f"Effective route: {mode}. No new answer was started — try again in a moment."
+        )
+    if status == "connection_failure":
+        return (
+            f"Local model is unreachable — could not connect to Ollama. "
+            f"Effective route: {mode}. No model answer was received."
+        )
+    if status == "empty_response":
+        return (
+            f"Local model returned an empty response. "
+            f"Effective route: {mode}. No usable answer was produced."
+        )
+    if status == "model_error":
+        return (
+            f"Local model errored before producing an answer. "
+            f"Effective route: {mode}. No model answer was received."
+        )
+    # default / total_generation_timeout
+    return (
+        f"Local model response exceeded the {int(timeout_s)}s limit. "
+        f"Effective route: {mode}. No model answer was received."
+    )
 
 
 def _system_prompt(base_prompt: str = "") -> str:
@@ -354,55 +412,110 @@ def direct_response(
     })
     _write_debug_snapshot()
 
-    def call_local() -> str:
-        if llm_call is not None:
-            return llm_call(messages, model)
-        from openai import OpenAI
-        client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama", timeout=timeout_s)
-        resp = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=360,
-            temperature=0.7,
-            extra_body={"num_ctx": 4096, "num_predict": 360},
+    effective_mode = "Companion"  # this engine is the Companion path by construction
+
+    # Honest busy-guard: one inference at a time, acquired NON-BLOCKING. If the
+    # model is already working we return an explicit model_busy state instead of
+    # queueing invisibly behind a request that would then look like a timeout.
+    if not _INFLIGHT.acquire(blocking=False):
+        _LAST_DEBUG["model_busy"] = True
+        _LAST_DEBUG["fallback_answered"] = True
+        _write_debug_snapshot()
+        if policy is not None and policy.has_schema():
+            return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=False,
+                                  fallback_used=True, status="model_busy")
+        return DirectResponse(
+            fallback_response(status="model_busy", effective_mode=effective_mode),
+            fallback_used=True, status="model_busy",
+            detail="another local request is in flight",
         )
-        return resp.choices[0].message.content or ""
+
+    def call_local() -> str:
+        try:
+            if llm_call is not None:
+                return llm_call(messages, model)
+            from openai import OpenAI
+            import httpx
+            client = OpenAI(
+                base_url="http://localhost:11434/v1",
+                api_key="ollama",
+                # Separate connect vs read timeouts: fail fast if Ollama is down,
+                # but allow the full generation budget once connected.
+                timeout=httpx.Timeout(timeout_s, connect=CONNECT_TIMEOUT_SECONDS),
+            )
+            resp = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=360,
+                temperature=0.7,
+                # keep_alive holds the model resident so it is not unloaded and
+                # cold-reloaded between turns (the main cold-start timeout cause).
+                extra_body={"num_ctx": 4096, "num_predict": 360, "keep_alive": LOCAL_KEEP_ALIVE},
+            )
+            return resp.choices[0].message.content or ""
+        finally:
+            # Release the inference slot only when the worker actually finishes
+            # (success OR error). The main thread may have already stopped waiting
+            # on a timeout; releasing HERE — not there — is what keeps "busy"
+            # honest while a request is still running and prevents a stale future
+            # from starving the next request.
+            _INFLIGHT.release()
 
     _LAST_DEBUG["local_model_request_started"] = True
     _LAST_DEBUG["local_model_request_start_ts"] = time.time()
     _write_debug_snapshot()
     future = _LOCAL_POOL.submit(call_local)
     try:
-        reply = future.result(timeout=timeout_s)
+        # The real Ollama client bounds itself (httpx read timeout = timeout_s), so
+        # we wait a little longer to let its timeout fire first and close the socket
+        # cleanly. A custom llm_call has no internal timeout, so bound it exactly.
+        _wait = timeout_s if llm_call is not None else timeout_s + 2.0
+        reply = future.result(timeout=_wait)
     except FutureTimeout:
-        # Do NOT cancel — the thread owns the HTTP socket; cancelling leaves it dangling.
-        # Just stop waiting. If a schema was requested, return a schema-aware
-        # sentinel that oracle.py will replace with build_timeout_response().
         _LAST_DEBUG["timeout_fired"] = True
         _LAST_DEBUG["fallback_answered"] = True
         _write_debug_snapshot()
+        # Do NOT release _INFLIGHT here — call_local's finally owns it and frees it
+        # when the worker terminates (bounded by the httpx read timeout).
         if policy is not None and policy.has_schema():
             _LAST_DEBUG["schema_preserving_timeout"] = True
             _write_debug_snapshot()
-            return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=True, fallback_used=True)
-        return DirectResponse(fallback_response(user_input, timed_out=True), timed_out=True, fallback_used=True)
-    except Exception:
+            return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=True,
+                                  fallback_used=True, status="total_generation_timeout")
+        return DirectResponse(
+            fallback_response(timed_out=True, status="total_generation_timeout",
+                              effective_mode=effective_mode, timeout_s=timeout_s),
+            timed_out=True, fallback_used=True, status="total_generation_timeout",
+        )
+    except Exception as exc:
+        status = _classify_local_error(exc)
         _LAST_DEBUG["fallback_answered"] = True
         _LAST_DEBUG["model_error"] = True
+        _LAST_DEBUG["model_error_status"] = status
         _write_debug_snapshot()
+        timed = status == "total_generation_timeout"
         if policy is not None and policy.has_schema():
             _LAST_DEBUG["schema_preserving_timeout"] = True
             _write_debug_snapshot()
-            return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=True, fallback_used=True)
-        return DirectResponse(fallback_response(user_input), fallback_used=True)
+            return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=timed,
+                                  fallback_used=True, status=status)
+        return DirectResponse(
+            fallback_response(status=status, effective_mode=effective_mode, timeout_s=timeout_s),
+            timed_out=timed, fallback_used=True, status=status,
+            detail=f"{type(exc).__name__}: {exc}",
+        )
     if not reply.strip():
         _LAST_DEBUG["fallback_answered"] = True
         _write_debug_snapshot()
         if policy is not None and policy.has_schema():
             _LAST_DEBUG["schema_preserving_timeout"] = True
             _write_debug_snapshot()
-            return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=True, fallback_used=True)
-        return DirectResponse(fallback_response(user_input), fallback_used=True)
+            return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=False,
+                                  fallback_used=True, status="empty_response")
+        return DirectResponse(
+            fallback_response(status="empty_response", effective_mode=effective_mode),
+            fallback_used=True, status="empty_response",
+        )
     _LAST_DEBUG["first_token_received"] = True
     _LAST_DEBUG["response_received_ts"] = time.time()
     _write_debug_snapshot()

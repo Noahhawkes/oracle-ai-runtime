@@ -68,9 +68,13 @@ def test_local_model_timeout_in_companion_returns_local_failure():
     reply = convo.direct_response("are you there", timeout_s=0.01, llm_call=slow_call)
     assert reply.timed_out is True
     assert reply.fallback_used is True
-    assert "local model took too long" in reply.text.lower()
-    assert "routing this to claude" not in reply.text.lower()
-    assert "routing this to codex" not in reply.text.lower()
+    # Honest local failure: states the real reason, does not pretend to answer,
+    # does not falsely claim a mode, and does not route externally.
+    low = reply.text.lower()
+    assert "no model answer was received" in low or "exceeded" in low
+    assert "i am in companion mode" not in low
+    assert "routing this to claude" not in low
+    assert "routing this to codex" not in low
 
 
 def test_forbidden_claude_codex_routing_in_companion_timeout():
