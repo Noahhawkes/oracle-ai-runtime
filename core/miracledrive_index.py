@@ -27,10 +27,12 @@ from typing import Optional
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 GDRIVE_ROOT = Path("G:/My Drive")
+ORACLE_ROOT = Path("G:/My Drive/HawkesNest LLC/ORACLE.AI")
 
 # Paths ORACLE indexes (all readable, no restrictions)
 SOURCE_PATHS = [
     GDRIVE_ROOT / "MiracleDrive_SealPhase_2025-04-05_16-44-46",
+    ORACLE_ROOT,  # live workspace first for recovery/search relevance
     GDRIVE_ROOT / "HawkesNest LLC",
     GDRIVE_ROOT / "ORACLE.AI",
     GDRIVE_ROOT / "OracleAI",
@@ -41,7 +43,7 @@ SOURCE_PATHS = [
     GDRIVE_ROOT / "NOAH_FlameAnchor_Deployment",
     GDRIVE_ROOT / "HYDRA_STACK_Figures",
     GDRIVE_ROOT / "DOCX",
-    Path("G:/My Drive/HawkesNest LLC/ORACLE.AI"),  # live workspace
+    ORACLE_ROOT,  # live workspace duplicate kept harmless by root dedupe
 ]
 
 # OBS recording directories (common locations)
@@ -49,6 +51,17 @@ OBS_PATHS = [
     Path("C:/Users/noahh/Videos"),
     Path("C:/Users/noahh/Documents/OBS"),
     Path(os.path.expanduser("~/Videos")),
+]
+
+# Cold CLI searches should be fast and relevant. The full background index still
+# covers SOURCE_PATHS above for the MiracleDrive UI.
+SEARCH_PRIORITY_PATHS = [
+    ORACLE_ROOT / "core",
+    ORACLE_ROOT / "docs",
+    ORACLE_ROOT / "reference",
+    ORACLE_ROOT / "Memory",
+    ORACLE_ROOT / "tests",
+    ORACLE_ROOT / "ui",
 ]
 
 # Text-readable extensions (content extracted up to MAX_CONTENT_BYTES)
@@ -78,6 +91,7 @@ SKIP_DIR_NAMES = {
     "dist",
     "build",
     ".pytest_cache",
+    "worktrees",
 }
 
 # ── Data model ────────────────────────────────────────────────────────────────
@@ -256,7 +270,9 @@ def _walk_files(root: Path):
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [
             d for d in dirnames
-            if d not in SKIP_DIR_NAMES and not d.startswith(".")
+            if d not in SKIP_DIR_NAMES
+            and not d.startswith(".")
+            and not d.lower().endswith(".worktrees")
         ]
         for name in filenames:
             if name.startswith(".") or name == "desktop.ini" or name.endswith(".pyc"):
@@ -358,51 +374,28 @@ def search_filesystem(text: str, limit: int = 20, max_files: int = MAX_FILES) ->
     """
     Cold-search configured MiracleDrive roots without building the whole index.
 
-    This is for CLI/manual recovery paths. It avoids broad hashing and stops as
-    soon as enough matches are found.
+    This is for CLI/manual recovery paths. It searches high-value ORACLE roots,
+    avoids broad hashing and slow rich-document extraction. The web index covers
+    broader Drive roots in the background.
     """
     q = text.lower().strip()
     if not q:
         return []
-    out: list[dict] = []
-    scanned = 0
-    for root in _iter_source_roots():
-        if not root.exists():
-            continue
-        for path in _walk_files(root):
-            if scanned >= max_files or len(out) >= limit:
-                return out
-            scanned += 1
-            haystack = f"{path.name}\n{path}".lower()
-            content = None
-            try:
-                stat = path.stat()
-                size = stat.st_size
-            except Exception:
-                continue
-            ext = path.suffix.lower()
-            if q not in haystack:
-                if size >= MAX_CONTENT_BYTES:
-                    continue
-                if ext in TEXT_EXTENSIONS:
-                    content = _read_text_content(path)
-                elif ext == ".docx":
-                    content = _read_docx_content(path)
-                elif ext == ".pdf":
-                    content = _read_pdf_content(path)
-                if not content or q not in content.lower():
-                    continue
-            elif q in haystack and size < MAX_CONTENT_BYTES and ext in TEXT_EXTENSIONS:
-                content = _read_text_content(path)
+    query_terms = [t for t in q.replace("_", " ").replace("-", " ").split() if t]
 
-            try:
-                mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat()
-            except Exception:
-                mtime = ""
-            out.append(asdict(FileRecord(
+    def term_hit(value: str) -> bool:
+        normalized = value.lower().replace("_", " ").replace("-", " ")
+        return all(term in normalized for term in query_terms)
+
+    def make_record(path: Path, root: Path, size: int, content: Optional[str]) -> dict:
+        try:
+            mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat()
+        except Exception:
+            mtime = ""
+        return asdict(FileRecord(
                 path=str(path.resolve()),
                 name=path.name,
-                extension=ext,
+                extension=path.suffix.lower(),
                 size_bytes=size,
                 mtime_utc=mtime,
                 sha256_prefix="not_hashed",
@@ -410,8 +403,70 @@ def search_filesystem(text: str, limit: int = 20, max_files: int = MAX_FILES) ->
                 content_available=content is not None,
                 source_root=str(root),
                 category=_classify(path),
-            )))
-    return out
+            ))
+
+    out: list[tuple[int, dict]] = []
+    seen: set[str] = set()
+
+    def append_match(score: int, path: Path, root: Path, content: Optional[str] = None) -> None:
+        key = str(path.resolve())
+        if key in seen:
+            return
+        try:
+            size = path.stat().st_size
+        except Exception:
+            return
+        seen.add(key)
+        out.append((score, make_record(path, root, size, content)))
+
+    roots = [p for p in SEARCH_PRIORITY_PATHS if p.exists()] or _iter_source_roots()
+
+    scanned = 0
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in _walk_files(root):
+            if scanned >= max_files or len(out) >= limit:
+                break
+            scanned += 1
+            name_hit = q in path.name.lower() or term_hit(path.name)
+            path_hit = q in str(path).lower() or term_hit(str(path))
+            if name_hit or path_hit:
+                content = None
+                try:
+                    if path.stat().st_size < MAX_CONTENT_BYTES and path.suffix.lower() in TEXT_EXTENSIONS:
+                        content = _read_text_content(path)
+                except Exception:
+                    content = None
+                append_match(0 if name_hit else 1, path, root, content)
+        if scanned >= max_files or len(out) >= limit:
+            break
+
+    if len(out) < limit:
+        scanned = 0
+        for root in roots:
+            if not root.exists():
+                continue
+            for path in _walk_files(root):
+                if scanned >= max_files or len(out) >= limit:
+                    break
+                scanned += 1
+                if str(path.resolve()) in seen or path.suffix.lower() not in TEXT_EXTENSIONS:
+                    continue
+                try:
+                    size = path.stat().st_size
+                except Exception:
+                    continue
+                if size >= MAX_CONTENT_BYTES:
+                    continue
+                content = _read_text_content(path)
+                if content and q in content.lower():
+                    append_match(2, path, root, content)
+            if scanned >= max_files or len(out) >= limit:
+                break
+
+    ranked = sorted(out, key=lambda item: (item[0], item[1]["name"].lower(), item[1]["path"].lower()))
+    return [item[1] for item in ranked[:limit]]
 
 
 def _build_in_background() -> None:

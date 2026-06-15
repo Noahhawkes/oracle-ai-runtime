@@ -117,6 +117,7 @@ def test_miracledrive_cold_search_filters_nonmatching_large_files(tmp_path, monk
     matching.write_text("the light compression law is here", encoding="utf-8")
     large_nonmatch = tmp_path / "random.pdf"
     large_nonmatch.write_bytes(b"x" * (miracledrive_index.MAX_CONTENT_BYTES + 10))
+    monkeypatch.setattr(miracledrive_index, "SEARCH_PRIORITY_PATHS", [tmp_path])
     monkeypatch.setattr(miracledrive_index, "_iter_source_roots", lambda: [tmp_path])
 
     results = miracledrive_index.search_filesystem("light compression", limit=10)
