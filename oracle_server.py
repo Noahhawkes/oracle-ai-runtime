@@ -190,13 +190,22 @@ def _boot():
         print("[Boot] Learning ledger ready")
     except Exception as e:
         print(f"[Boot] Learning ledger not available: {e}")
-    # Start ambient context watchers (clipboard + screenshots + OBS)
-    try:
-        from ambient_watch import start as _aw_start
-        _aw_start()
-        print("[Boot] Ambient watch active (clipboard + screenshots + OBS)")
-    except Exception as e:
-        print(f"[Boot] Ambient watch not available: {e}")
+    # Ambient context watchers (clipboard + screenshot/OBS file indexing) are an
+    # UNGOVERNED automatic capture path: they started at boot with no session
+    # authorization, polled the clipboard every 0.8s, indexed screenshot/OBS
+    # files, ran OCR, and injected the results into prompts + durable memory.
+    # Fail-closed: they no longer start automatically. Opt in explicitly with
+    # ORACLE_ENABLE_AMBIENT_WATCH=1 (a later patch will add a governed control).
+    if os.environ.get("ORACLE_ENABLE_AMBIENT_WATCH") == "1":
+        try:
+            from ambient_watch import start as _aw_start
+            _aw_start()
+            print("[Boot] Ambient watch active (explicitly enabled via env)")
+        except Exception as e:
+            print(f"[Boot] Ambient watch not available: {e}")
+    else:
+        print("[Boot] Ambient watch DISABLED (no automatic capture; set "
+              "ORACLE_ENABLE_AMBIENT_WATCH=1 to opt in)")
 
 if os.environ.get("ORACLE_SKIP_SERVER_BOOT") != "1":
     _boot()
@@ -1492,12 +1501,56 @@ async def api_current_observation():
         }, status_code=500)
 
 
+@app.post("/api/camera/authorize")
+async def api_camera_authorize(request: Request):
+    """
+    Create one bounded, in-memory camera authorization for this session.
+    Called when Noah explicitly starts the camera. No durable storage.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    device_id = (body.get("device_id") or None)
+    try:
+        from camera_authorization import create_authorization
+        record = create_authorization(session_id=_session_id, device_id=device_id)
+        return JSONResponse({
+            "ok": True,
+            "authorization_id": record["authorization_id"],
+            "session_id": record["session_id"],
+            "device_id": record["device_id"],
+            "created_at": record["created_at"],
+        })
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/camera/stop")
+async def api_camera_stop(request: Request):
+    """Invalidate a camera authorization (camera stopped / track ended / unload)."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    auth_id = body.get("authorization_id")
+    try:
+        from camera_authorization import invalidate
+        invalidated = invalidate(auth_id)
+        return JSONResponse({"ok": True, "invalidated": bool(invalidated)})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
 @app.post("/api/see")
 async def api_see(request: Request):
     """
-    ORACLE looks at one webcam frame and describes it in her own voice.
-    The frame is analyzed in memory and discarded — never written to disk.
-    The browser drives continuous watching by posting frames one at a time.
+    LOOK ONCE: describe exactly one explicitly-requested camera frame.
+
+    Fail-closed. The request must carry a valid camera authorization for this
+    session; otherwise the vision model is never invoked. One successful call
+    produces exactly one receipt, written BEFORE the caption is returned for
+    display. The frame is analyzed in memory and discarded — never stored.
     """
     try:
         body = await request.json()
@@ -1508,31 +1561,95 @@ async def api_see(request: Request):
     if not image:
         return JSONResponse({"available": False, "error": "no image supplied"}, status_code=400)
 
-    prompt = body.get("prompt") or None
+    authorization_id = body.get("authorization_id")
+    session_id = body.get("session_id")
+    device_id = body.get("device_id") or None
+    track_label = body.get("track_label") or None
+    correlation_id = body.get("correlation_id") or None
+
+    # ── Authorization gate — reject without touching the vision model ─────────
+    try:
+        from camera_authorization import validate as _cam_validate
+        ok, reason = _cam_validate(authorization_id, session_id, device_id)
+    except Exception as exc:
+        ok, reason = False, f"authorization_error:{type(exc).__name__}"
+    if not ok:
+        return JSONResponse({
+            "available": False,
+            "rejected": True,
+            "error": f"authorization_rejected:{reason}",
+            "raw_frame_stored": False,
+        }, status_code=403)
+
+    from camera_receipt import build_receipt, save_receipt
+
+    def _publish(receipt: dict) -> JSONResponse:
+        """Write the receipt first; only then expose the observation."""
+        try:
+            save_receipt(receipt)
+        except Exception as save_exc:
+            # No receipt → no published caption.
+            return JSONResponse({
+                "available": False,
+                "rejected": False,
+                "error": f"receipt_write_failed:{type(save_exc).__name__}: {save_exc}",
+                "raw_frame_stored": False,
+            }, status_code=500)
+        published = bool(receipt.get("published_to_chat"))
+        return JSONResponse({
+            "available": published,
+            "observation": receipt.get("observation_text") if published else None,
+            "unknown": receipt.get("observation_text") == "UNKNOWN" or receipt.get("error") is not None,
+            "observation_id": receipt.get("observation_id"),
+            "receipt_id": receipt.get("observation_id"),
+            "correlation_id": receipt.get("correlation_id"),
+            "evidence_class": receipt.get("evidence_class"),
+            "confidence": receipt.get("confidence"),
+            "device_id": receipt.get("device_id"),
+            "track_label": receipt.get("track_label"),
+            "model": receipt.get("model"),
+            "raw_frame_stored": False,
+            "error": receipt.get("error"),
+        })
+
     try:
         from oracle_sight import describe_image
-        # Run the (slow, blocking) vision call off the event loop.
-        result = await asyncio.to_thread(describe_image, image, prompt=prompt)
-        try:
-            from current_observation import record_webcam_observation
-            receipt = record_webcam_observation(result)
-            if receipt:
-                result["current_observation_receipt"] = {
-                    "receipt_id": receipt.get("receipt_id"),
-                    "observed_at": receipt.get("observed_at"),
-                    "expires_at": receipt.get("expires_at"),
-                    "fields": sorted((receipt.get("fields") or {}).keys()),
-                }
-        except Exception as receipt_exc:
-            result["current_observation_receipt_error"] = f"{type(receipt_exc).__name__}: {receipt_exc}"
-        return JSONResponse(result)
+        result = await asyncio.to_thread(describe_image, image)
+
+        # Unusable (dark/blocked) frame → UNKNOWN, model already skipped.
+        if result.get("unknown") or not result.get("observation"):
+            receipt = build_receipt(
+                observation_text="UNKNOWN",
+                correlation_id=correlation_id,
+                session_id=session_id,
+                authorization_id=authorization_id,
+                device_id=device_id,
+                track_label=track_label,
+                model=result.get("model"),
+                confidence="none",
+                published_to_chat=True,
+                error=result.get("error") or "no_observation",
+            )
+            return _publish(receipt)
+
+        receipt = build_receipt(
+            observation_text=str(result.get("observation")).strip(),
+            correlation_id=correlation_id,
+            session_id=session_id,
+            authorization_id=authorization_id,
+            device_id=device_id,
+            track_label=track_label,
+            model=result.get("model"),
+            confidence="model_unverified_inference",
+            published_to_chat=True,
+        )
+        return _publish(receipt)
     except Exception as exc:
         return JSONResponse({
             "available": False,
             "observation": None,
             "error": f"{type(exc).__name__}: {exc}",
             "raw_frame_stored": False,
-            "observed_at": datetime.now(timezone.utc).isoformat(),
         }, status_code=500)
 
 

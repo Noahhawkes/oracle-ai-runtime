@@ -28,18 +28,59 @@ OLLAMA_BASE = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip
 CONFIGURED_VISION_MODEL = os.environ.get("LOCAL_MODEL_VISION", "qwen2.5-vl:7b")
 SIGHT_TIMEOUT = float(os.environ.get("ORACLE_SIGHT_TIMEOUT", "90"))
 
-# ORACLE's voice when she looks through the webcam. First person, warm, specific,
-# grounded only in what is visible. She does not invent and does not pretend the
-# frame is a live video — it is the single moment she was just handed.
+# Truth-constrained sight prompt. The model describes ONLY what is directly
+# visible in this single frame. It does not guess identity, names, relationships,
+# intent, or location beyond visible evidence; it does not claim illegible text is
+# readable; and it returns the single word UNKNOWN when the frame is too dark,
+# blocked, blurred, or otherwise insufficient. It must NOT begin with "I can see"
+# (that phrasing, combined with the UI tag, produced the malformed "seesI can see").
 DEFAULT_SIGHT_PROMPT = (
-    "You are ORACLE, looking through Noah's webcam at this single moment. "
-    "In one or two short sentences, say what you actually see right now in warm, "
-    "natural first person (\"I can see...\"). Mention the person, their expression, "
-    "and the setting only if visible. Be specific but brief. Never invent details "
-    "you cannot see. Do not mention that you are an AI or a model."
+    "You are ORACLE describing ONE still camera frame. Report only what is "
+    "directly and clearly visible. Do not guess identity, names, relationships, "
+    "intent, emotions, or location beyond visible evidence. Do not claim any "
+    "unreadable or blurry text is legible. If the frame is too dark, blocked, "
+    "blurred, or otherwise insufficient to describe, reply with exactly: UNKNOWN. "
+    "Otherwise give one or two plain, literal sentences. Mark anything uncertain "
+    "as uncertain. Do NOT begin your reply with the words 'I can see'. Do not "
+    "mention that you are an AI or a model."
 )
 
+# Below this mean luminance (0-255) a frame is treated as too dark to describe;
+# the model is not called and the observation is UNKNOWN. Deterministic, so dark
+# frames never reach the vision model.
+DARK_THRESHOLD = float(os.environ.get("ORACLE_SIGHT_DARK_THRESHOLD", "16"))
+
 _MODEL_CACHE: dict[str, Any] = {"name": None, "checked": False}
+
+
+def frame_brightness(image: str) -> float | None:
+    """Mean luminance (0-255) of a data-URL/base64 JPEG, or None if undecodable."""
+    try:
+        import io
+        from PIL import Image
+
+        data = image.split(",", 1)[1] if image.startswith("data:") else image
+        raw = base64.b64decode(data)
+        img = Image.open(io.BytesIO(raw)).convert("L")
+        img.thumbnail((32, 32))
+        pixels = list(img.getdata())
+        return (sum(pixels) / len(pixels)) if pixels else None
+    except Exception:
+        return None
+
+
+def assess_frame(image: str) -> dict:
+    """
+    Classify frame usability before any model call.
+    Returns {usable, reason, brightness}. A dark frame is not usable.
+    A frame we cannot decode is left usable (the model/prompt handles UNKNOWN).
+    """
+    brightness = frame_brightness(image)
+    if brightness is None:
+        return {"usable": True, "reason": "brightness_unknown", "brightness": None}
+    if brightness < DARK_THRESHOLD:
+        return {"usable": False, "reason": "insufficient_light", "brightness": brightness}
+    return {"usable": True, "reason": "ok", "brightness": brightness}
 
 
 def _utc_now() -> str:
@@ -117,10 +158,20 @@ def describe_image(image: str, *, prompt: str | None = None, timeout: float | No
         "observed_at": observed_at,
         "error": None,
         "raw_frame_stored": False,
+        "unknown": False,
+        "quality": None,
     }
 
     if not image or not image.strip():
         result["error"] = "no image supplied"
+        return result
+
+    # Deterministic quality gate — dark/unusable frames never reach the model.
+    quality = assess_frame(image)
+    result["quality"] = quality
+    if not quality.get("usable"):
+        result["unknown"] = True
+        result["error"] = quality.get("reason") or "insufficient_frame"
         return result
 
     model = resolve_vision_model()

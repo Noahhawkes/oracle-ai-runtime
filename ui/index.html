@@ -535,8 +535,15 @@
     70% { box-shadow: 0 0 0 7px rgba(239,68,68,0); }
     100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
   }
-  .cam-close {
+  .cam-look {
     margin-left: auto;
+    background: var(--accent); border: none; color: #fff;
+    cursor: pointer; font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; line-height: 1; padding: 5px 9px; border-radius: 5px;
+  }
+  .cam-look:hover:not(:disabled) { filter: brightness(1.1); }
+  .cam-look:disabled { opacity: 0.4; cursor: not-allowed; }
+  .cam-close {
     background: none; border: none; color: var(--text-dim);
     cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 4px;
   }
@@ -565,6 +572,15 @@
     color: var(--accent);
     font-style: normal;
     margin-right: 6px;
+  }
+  .vision-receipt {
+    display: block;
+    margin-top: 4px;
+    font-size: 9px;
+    font-style: normal;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    opacity: 0.7;
   }
 
   /* Scrollbar */
@@ -627,15 +643,18 @@
     <a href="/miracledrive" id="md-link" title="MiracleDrive OS" style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.28);text-decoration:none;padding:4px 10px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;transition:0.2s;" onmouseover="this.style.color='#22d3ee';this.style.borderColor='rgba(34,211,238,0.35)'" onmouseout="this.style.color='rgba(255,255,255,0.28)';this.style.borderColor='rgba(255,255,255,0.1)'">MiracleDrive ↗</a>
   </div>
 
-  <!-- Camera / vision panel — ORACLE's eyes -->
+  <!-- Camera / vision panel — ORACLE's eyes. Preview-only: she does NOT watch
+       continuously. One observation happens only when Noah presses LOOK ONCE. -->
   <div id="camera-panel">
     <video id="cam-video" autoplay playsinline muted></video>
     <div class="cam-status">
       <span class="cam-dot"></span>
-      <span id="cam-state">ORACLE is watching</span>
-      <button class="cam-close" onclick="toggleVision()" title="Stop watching">✕</button>
+      <span id="cam-state">Camera preview — ORACLE is not watching</span>
+      <button class="cam-look" id="look-once-btn" onclick="lookOnce()" disabled
+              title="Capture one frame and create one receipted observation">LOOK ONCE</button>
+      <button class="cam-close" onclick="stopVision()" title="Stop camera">✕</button>
     </div>
-    <div id="cam-seen">Waking her eyes…</div>
+    <div id="cam-seen">Preview only. Press LOOK ONCE for a single observation.</div>
   </div>
 
   <div id="messages">
@@ -1131,24 +1150,21 @@ function toggleMic() {
   try { _recognizer.start(); } catch {}
 }
 
-// ── Sight: ORACLE watches through the webcam (continuous, never stored) ────────
-const VISION_SAMPLE_MS   = 11000;   // how often we look at a frame
-const VISION_MSG_GAP_MS  = 24000;   // min gap between spontaneous spoken observations
-const VISION_DIFF_THRESH = 11;      // mean per-pixel change (0–255) that counts as "scene changed"
+// ── Sight: explicit, receipted LOOK ONCE (no continuous watching, never stored) ─
+// Camera is OFF at startup. Starting the camera is preview-only and never calls
+// /api/see. There is NO recurring inference loop. Exactly one observation is
+// produced per LOOK ONCE press, after a server receipt is created. Camera
+// captions never auto-insert into chat and never trigger speech.
 
-let watching = false;
-let visionBusy = false;
-let visionFirst = true;
-let _visionTimer = null;
-let _lastVisionMsgTs = 0;
-let _prevSmallPixels = null;
+let watching = false;          // true only while a live preview stream is open
+let lookBusy = false;          // guards against double-firing a single LOOK ONCE
 let _camStream = null;
-let _visionFailStreak = 0;
+let _camAuth = null;           // { authorization_id, session_id, device_id }
 
-const _capCanvas   = document.createElement('canvas'); // full frame sent to ORACLE
-const _diffCanvas  = document.createElement('canvas'); // tiny frame for change detection
-_diffCanvas.width = 32; _diffCanvas.height = 24;
+const _capCanvas = document.createElement('canvas'); // single frame for LOOK ONCE
 
+// `toggleVision` is kept as the eye-button entry point: it opens or closes the
+// preview. It deliberately starts NO inference.
 async function toggleVision() {
   if (watching) { stopVision(); return; }
   await startVision();
@@ -1172,108 +1188,130 @@ async function startVision() {
   video.srcObject = _camStream;
   document.getElementById('camera-panel').classList.add('visible');
   document.getElementById('eye-btn').classList.add('active');
-  document.getElementById('cam-state').textContent = 'ORACLE is watching';
-  document.getElementById('cam-seen').textContent = 'Waking her eyes…';
   watching = true;
-  visionFirst = true;
-  _prevSmallPixels = null;
-  _scheduleVisionTick(1500); // first look shortly after warm-up
+
+  // Authorize this camera session (bounded, server-side, in-memory).
+  const dev = _activeDevice();
+  try {
+    const r = await fetch(apiUrl('/api/camera/authorize'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ device_id: dev.deviceId }),
+    });
+    const data = await r.json();
+    if (data && data.ok) {
+      _camAuth = { authorization_id: data.authorization_id,
+                   session_id: data.session_id, device_id: dev.deviceId };
+    }
+  } catch (e) { _camAuth = null; }
+
+  document.getElementById('cam-state').textContent =
+    'Camera preview — ORACLE is not watching' + (dev.label ? ' · ' + dev.label : '');
+  document.getElementById('cam-seen').textContent =
+    'Preview only. Press LOOK ONCE for a single observation.';
+  const lb = document.getElementById('look-once-btn');
+  if (lb) lb.disabled = !_camAuth;   // enabled only with a valid authorization
 }
 
 function stopVision() {
   watching = false;
-  if (_visionTimer) { clearTimeout(_visionTimer); _visionTimer = null; }
+  // Invalidate the server authorization first (best-effort).
+  if (_camAuth && _camAuth.authorization_id) {
+    try {
+      fetch(apiUrl('/api/camera/stop'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authorization_id: _camAuth.authorization_id }),
+      });
+    } catch (e) {}
+  }
+  _camAuth = null;
   if (_camStream) { _camStream.getTracks().forEach(t => t.stop()); _camStream = null; }
   const video = document.getElementById('cam-video');
   if (video) video.srcObject = null;
   document.getElementById('camera-panel').classList.remove('visible');
   document.getElementById('eye-btn').classList.remove('active');
+  const lb = document.getElementById('look-once-btn');
+  if (lb) lb.disabled = true;
 }
 
-function _scheduleVisionTick(delay) {
-  if (!watching) return;
-  _visionTimer = setTimeout(visionTick, delay == null ? VISION_SAMPLE_MS : delay);
+// Invalidate authorization if the page unloads while the camera is open.
+window.addEventListener('beforeunload', () => {
+  if (_camAuth && _camAuth.authorization_id && navigator.sendBeacon) {
+    try {
+      navigator.sendBeacon(apiUrl('/api/camera/stop'),
+        new Blob([JSON.stringify({ authorization_id: _camAuth.authorization_id })],
+                 { type: 'application/json' }));
+    } catch (e) {}
+  }
+});
+
+function _activeDevice() {
+  if (!_camStream) return { deviceId: null, label: '' };
+  const track = _camStream.getVideoTracks()[0];
+  if (!track) return { deviceId: null, label: '' };
+  let deviceId = null;
+  try { deviceId = (track.getSettings && track.getSettings().deviceId) || null; } catch (e) {}
+  return { deviceId, label: track.label || '' };
 }
 
-function _grabFrames() {
+function _grabFrame() {
   const video = document.getElementById('cam-video');
   if (!video || !video.videoWidth) return null;
-  // Full frame for ORACLE (downscaled to keep the payload small).
   const w = 384, h = Math.round(w * video.videoHeight / video.videoWidth);
   _capCanvas.width = w; _capCanvas.height = h;
-  const cx = _capCanvas.getContext('2d');
-  cx.drawImage(video, 0, 0, w, h);
-  const dataUrl = _capCanvas.toDataURL('image/jpeg', 0.6);
-  // Tiny frame for cheap change detection.
-  const dx = _diffCanvas.getContext('2d');
-  dx.drawImage(video, 0, 0, _diffCanvas.width, _diffCanvas.height);
-  const px = dx.getImageData(0, 0, _diffCanvas.width, _diffCanvas.height).data;
-  return { dataUrl, px };
+  _capCanvas.getContext('2d').drawImage(video, 0, 0, w, h);
+  return _capCanvas.toDataURL('image/jpeg', 0.6);
 }
 
-function _sceneChanged(px) {
-  if (!_prevSmallPixels) return true;
-  let sum = 0;
-  for (let i = 0; i < px.length; i += 4) {
-    sum += Math.abs(px[i] - _prevSmallPixels[i])
-         + Math.abs(px[i+1] - _prevSmallPixels[i+1])
-         + Math.abs(px[i+2] - _prevSmallPixels[i+2]);
-  }
-  const mean = sum / (px.length / 4 * 3);
-  return mean > VISION_DIFF_THRESH;
-}
+// One press = one capture = one receipted observation. Never schedules another.
+async function lookOnce() {
+  if (!watching || lookBusy) return;
+  if (!_camAuth) { document.getElementById('cam-seen').textContent =
+      '(camera not authorized — restart the camera)'; return; }
+  const dataUrl = _grabFrame();
+  if (!dataUrl) { document.getElementById('cam-seen').textContent = '(no frame yet — try again)'; return; }
 
-async function visionTick() {
-  if (!watching) return;
-  if (visionBusy || isStreaming) { _scheduleVisionTick(); return; }
+  lookBusy = true;
+  const lb = document.getElementById('look-once-btn');
+  if (lb) lb.disabled = true;
+  document.getElementById('cam-seen').textContent = 'Looking once…';
+  const dev = _activeDevice();
+  const correlationId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
 
-  const frames = _grabFrames();
-  if (!frames) { _scheduleVisionTick(); return; }
-
-  const changed = visionFirst || _sceneChanged(frames.px);
-  _prevSmallPixels = frames.px;
-  if (!changed) { _scheduleVisionTick(); return; }
-
-  visionBusy = true;
-  let backoff = null;
   try {
     const r = await fetch(apiUrl('/api/see'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: frames.dataUrl }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image: dataUrl,
+        session_id: _camAuth.session_id,
+        authorization_id: _camAuth.authorization_id,
+        device_id: dev.deviceId,
+        track_label: dev.label,
+        correlation_id: correlationId,
+      }),
     });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
-    if (data && data.available && data.observation) {
-      _visionFailStreak = 0;
-      document.getElementById('cam-state').textContent = 'ORACLE is watching';
-      document.getElementById('cam-seen').textContent = data.observation;
-      const now = Date.now();
-      if ((visionFirst || now - _lastVisionMsgTs > VISION_MSG_GAP_MS) && !isStreaming) {
-        addVisionMessage(data.observation);
-        speak(data.observation);
-        _lastVisionMsgTs = now;
-      }
-      visionFirst = false;
+    if (r.ok && data && data.available && data.receipt_id) {
+      // Receipt exists → display exactly one labeled observation. No speech.
+      const text = data.observation || 'UNKNOWN';
+      document.getElementById('cam-seen').textContent = text;
+      addCameraObservation(text, data.receipt_id);
+    } else if (data && data.rejected) {
+      document.getElementById('cam-seen').textContent = '(rejected: ' + (data.error || 'unauthorized') + ')';
     } else {
-      // Model reachable but no usable observation — soft note, no backoff storm.
       document.getElementById('cam-seen').textContent =
-        (data && data.error) ? '(' + data.error + ')' : '(no observation)';
+        '(' + ((data && data.error) ? data.error : 'no observation') + ')';
     }
   } catch (e) {
-    // Server blip / restart — self-heal instead of looking broken.
-    _visionFailStreak++;
-    _prevSmallPixels = null; // force a fresh look once the link returns
-    document.getElementById('cam-state').textContent = 'ORACLE is reconnecting…';
-    document.getElementById('cam-seen').textContent = 'Lost the link for a moment — retrying…';
-    backoff = Math.min(VISION_SAMPLE_MS + _visionFailStreak * 4000, 30000);
+    document.getElementById('cam-seen').textContent = '(look failed: ' + e.message + ')';
   } finally {
-    visionBusy = false;
-    _scheduleVisionTick(backoff); // null → normal cadence
+    lookBusy = false;
+    if (lb) lb.disabled = !watching || !_camAuth;
   }
 }
 
-function addVisionMessage(text) {
+// Render one camera observation, clearly labeled and stamped with its receipt id.
+// It is NOT ordinary Companion speech and never triggers TTS.
+function addCameraObservation(text, receiptId) {
   if (!conversationStarted) {
     document.getElementById('messages').innerHTML = '';
     conversationStarted = true;
@@ -1287,7 +1325,9 @@ function addVisionMessage(text) {
   wrap.className = 'msg-wrap';
   const bubble = document.createElement('div');
   bubble.className = 'msg-bubble vision';
-  bubble.innerHTML = '<span class="vision-tag">sees</span>' + escapeHtml(text);
+  bubble.innerHTML =
+    '<span class="vision-tag">CAMERA OBSERVATION</span> ' + escapeHtml(text) +
+    '<span class="vision-receipt">receipt: ' + escapeHtml(receiptId || 'UNKNOWN') + '</span>';
   wrap.appendChild(bubble);
   row.appendChild(avatar);
   row.appendChild(wrap);
