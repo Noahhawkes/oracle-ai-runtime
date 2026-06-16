@@ -264,7 +264,7 @@ _BLOCK_PREFIXES = (
     "oracle salience focus",
 )
 
-def _strip_routing_artifacts(reply: str) -> str:
+def _strip_routing_artifacts(reply: str, mode: str = "companion") -> str:
     """Remove system-internal blocks and routing artifacts from LLM responses.
 
     Strips:
@@ -303,6 +303,14 @@ def _strip_routing_artifacts(reply: str) -> str:
     # Code bridge — Companion mode is local-only by design.
     original_low = reply.strip().lower()
     if original_low in _ROUTING_PHRASES:
+        # Mode-aware: never tell Noah to switch to a mode he is already in.
+        if (mode or "").lower() == "builder":
+            return (
+                "I'm already in Builder mode — but this web view has no Claude "
+                "Code bridge wired up, so I can't actually hand a task off from "
+                "here. Tell me the specific task and I'll do what I can locally, "
+                "or we wire the bridge."
+            )
         return (
             "I can't hand off to Claude Code from here — this web view is "
             "local-only. Switch to Builder mode for tool-backed work, or tell "
@@ -786,6 +794,16 @@ def _deterministic_runtime_answer(user_text: str) -> str | None:
             return f"UNAVAILABLE [RUNTIME_STATE]: Runtime accessor failed: {type(exc).__name__}: {exc}"
 
     if any(p in lower for p in (
+        "law/life", "law and life", "law life", "user.ai", "user ai",
+        "active npc", "npc bridge", "npc status", "law layer", "life layer",
+    )):
+        try:
+            from law_life_status import build_law_life_status, summarize_law_life_status
+            return summarize_law_life_status(build_law_life_status())
+        except Exception as exc:
+            return f"UNAVAILABLE [LAW_LIFE_STATUS]: Status reconciliation failed: {type(exc).__name__}: {exc}"
+
+    if any(p in lower for p in (
         "what are we working on", "what are you working on",
         "active goal", "current goal", "active task", "what is the active task",
         "what changed in your build", "what changed", "what have you changed",
@@ -1201,7 +1219,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     # depend on bootstrap. They answer from canonical accessors or a bounded error.
     _det = _deterministic_runtime_answer(user_text)
     if _det is not None:
-        _det = _strip_routing_artifacts(_det)
+        _det = _strip_routing_artifacts(_det, _mode)
         yield _sse({"type": "token", "text": _det})
         yield _sse({"type": "done", "mode": _mode, "effective_route": "companion"})
         _history.append({"role": "assistant", "content": _det})
@@ -1244,7 +1262,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                     # web UI has no Claude Code bridge, so the phrase is never a
                     # real action. (The fallback path below already strips; this
                     # grounded path previously skipped it.)
-                    reply = _strip_routing_artifacts(reply)
+                    reply = _strip_routing_artifacts(reply, _mode)
                     yield _sse({"type": "token", "text": reply})
                     _history.append({"role": "assistant", "content": reply})
                     if len(_history) > 40:
@@ -1293,7 +1311,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 reply = _apply_authority_gate(reply, effective_mode, user_text)
                 reply = _apply_current_observation_gate(reply, user_text)
                 _history = engine_history[-40:]
-                reply = _strip_routing_artifacts(reply)
+                reply = _strip_routing_artifacts(reply, _mode)
                 try:
                     from learning import record_interaction
                     record_interaction(user_text, "companion_engine", effective_mode,
@@ -1353,7 +1371,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             reply = _apply_authority_gate(reply, effective_mode, user_text)
             reply = _apply_current_observation_gate(reply, user_text)
             _history = engine_history[-40:]
-            reply = _strip_routing_artifacts(reply)
+            reply = _strip_routing_artifacts(reply, _mode)
             try:
                 from learning import record_interaction
                 record_interaction(user_text, "builder_engine", effective_mode,
@@ -1702,6 +1720,82 @@ async def history():
 @app.get("/api/mode")
 async def mode():
     return JSONResponse(_get_mode_state())
+
+
+@app.get("/api/law-life")
+async def api_law_life():
+    """Read-only USER.AI law layer + active_npc life layer status."""
+    try:
+        from law_life_status import build_law_life_status
+        return JSONResponse(build_law_life_status())
+    except Exception as exc:
+        return JSONResponse({
+            "schema_version": 1,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "law": {"status": "unavailable"},
+            "life": {"status": "unavailable"},
+            "bridge": {"server_bridge_status": "unavailable"},
+            "observation": {"last_observation": None},
+            "error": f"{type(exc).__name__}: {exc}",
+        }, status_code=500)
+
+
+@app.get("/api/presence")
+async def api_presence():
+    """
+    ORACLE's live state for the always-visible presence rail: authoritative mode,
+    what intent she's carrying, how much she remembers, and her last observation.
+    Read-only; cheap; safe to poll.
+    """
+    out = {
+        "mode": _mode,
+        "no_route": _no_route,
+        "session_id": _session_id,
+        "pending_intent": None,
+        "next_safe_action": None,
+        "memory_count": None,
+        "last_observation": None,
+        "law_life": None,
+    }
+    try:
+        from cognitive_kernel import load_kernel_state
+        ks = load_kernel_state()
+        pi = ks.get("pending_intent")
+        if isinstance(pi, dict):
+            out["pending_intent"] = str(pi.get("text") or "")[:160] or None
+        out["next_safe_action"] = ks.get("next_safe_action")
+    except Exception:
+        pass
+    try:
+        from light_compression import list_memories
+        out["memory_count"] = len(list_memories(limit=100000))
+    except Exception:
+        pass
+    try:
+        from law_life_status import build_law_life_status
+        status = build_law_life_status()
+        out["law_life"] = {
+            "law_status": ((status.get("law") or {}).get("status")),
+            "life_status": ((status.get("life") or {}).get("status")),
+            "bridge_status": ((status.get("bridge") or {}).get("server_bridge_status")),
+            "runtime_instantiation_status": ((status.get("bridge") or {}).get("runtime_instantiation_status")),
+            "seed_candidate_count": ((status.get("bridge") or {}).get("seed_candidate_count")),
+            "screen_receipt_status": (((status.get("observation") or {}).get("current_observation") or {}).get("receipt_status")),
+            "camera_receipt_status": (((status.get("observation") or {}).get("camera_observation") or {}).get("receipt_status")),
+        }
+        last = ((status.get("observation") or {}).get("last_observation"))
+        if isinstance(last, dict):
+            raw_text = str(last.get("text") or "UNKNOWN")
+            display_text = "UNKNOWN" if raw_text.strip().upper() == "UNKNOWN" else "receipt present"
+            out["last_observation"] = {
+                "source": last.get("source"),
+                "text": display_text,
+                "id": last.get("id"),
+                "at": last.get("at"),
+            }
+    except Exception:
+        pass
+    return JSONResponse(out)
 
 
 @app.post("/api/clear")

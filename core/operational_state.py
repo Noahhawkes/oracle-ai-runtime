@@ -96,6 +96,13 @@ def _vision_state() -> dict[str, Any]:
                 "fresh": False,
                 "error": f"{type(obs_exc).__name__}: {obs_exc}",
             }
+        try:
+            from law_life_status import build_observation_status
+            state["observations"] = build_observation_status()
+        except Exception as unified_exc:
+            state["observations"] = {
+                "error": f"{type(unified_exc).__name__}: {unified_exc}",
+            }
         return state
     except Exception as exc:
         return {"available": False, "error": f"{type(exc).__name__}: {exc}"}
@@ -192,10 +199,15 @@ def summarize_operational_state(state: dict | None = None) -> str:
         f"- Runtime: localhost:7777 {rt.get('localhost_7777')}; "
         f"mode {rt.get('mode', 'UNKNOWN')}; model {rt.get('conversation_model')}"
     )
-    current_obs = vis.get("current_observation") if isinstance(vis.get("current_observation"), dict) else {}
+    observations = vis.get("observations") if isinstance(vis.get("observations"), dict) else {}
+    current_obs = observations.get("current_observation") if isinstance(observations.get("current_observation"), dict) else {}
+    if not current_obs:
+        current_obs = vis.get("current_observation") if isinstance(vis.get("current_observation"), dict) else {}
+    camera_obs = observations.get("camera_observation") if isinstance(observations.get("camera_observation"), dict) else {}
     lines.append(
         f"- Vision model: {'available' if vis.get('available') else 'unavailable'} ({vis.get('model')}); "
-        f"current observation receipt: {current_obs.get('receipt_status', 'UNKNOWN')}"
+        f"screen receipt: {current_obs.get('receipt_status', 'UNKNOWN')}; "
+        f"camera receipt: {camera_obs.get('receipt_status', 'UNKNOWN')}"
     )
     lines.append(f"- Pending approvals: {v.get('pending_approvals', {}).get('count', 0)}")
     recent = v.get("recent_commits", [])

@@ -72,6 +72,43 @@ _SHOW_PENDING_PHRASES = (
     "pending", "show pending", "show me pending", "show me", "what's pending",
     "whats pending", "what needs approval", "show approvals",
 )
+# Deferred action requests: things Noah asks ORACLE to DO that should be held as
+# a pending intent so a later "yes"/"proceed" resolves them instead of falling
+# through to a stale fallback. (Reproduction: "...log that in memory" → "proceed".)
+_DEFERRED_ACTION_MARKERS = (
+    "log that in memory", "log this in memory", "log that to memory",
+    "put that in memory", "put this in memory", "save that to memory",
+    "save this to memory", "add that to memory", "add this to memory",
+    "store that", "store this", "write that down", "note that",
+    "remember that", "remember this", "remember to", "remind me to",
+    "integrate this", "integrate that", "add to doctrine", "add this to doctrine",
+    "add that to doctrine", "make that a rule", "make this a rule",
+    "log that", "log it in memory", "commit that to memory",
+)
+_DEFERRED_ACTION_VERBS = (
+    "log", "save", "store", "record", "note", "integrate", "memorize", "remember",
+)
+_MEMORY_TARGETS = ("memory", "doctrine", "the record", "continuity", "core")
+
+
+def detect_deferred_action(text: str) -> dict | None:
+    """
+    Return a pending-intent dict if `text` is a deferred action request ORACLE
+    should hold for confirmation, else None. Kept conservative to avoid
+    enrolling ordinary conversation.
+    """
+    lower = (text or "").strip().lower()
+    if not lower:
+        return None
+    if lower in _PROCEED_PHRASES:           # affirmations are handled elsewhere
+        return None
+    hit = any(m in lower for m in _DEFERRED_ACTION_MARKERS)
+    if not hit:
+        words = set(lower.split())
+        hit = bool(words & set(_DEFERRED_ACTION_VERBS)) and any(t in lower for t in _MEMORY_TARGETS)
+    if not hit:
+        return None
+    return {"text": text.strip()[:240], "approval_required": False, "source": "user_action_request"}
 _ROUTINE_PHRASES = (
     "run one resident cycle", "wake cycle", "check channels", "check codex",
     "check claude", "check git status", "show channel", "channel status",
@@ -248,6 +285,18 @@ def classify_input(
 
     if lower in _PROCEED_PHRASES:
         return KernelDecision(INTENT_CONVERSATION, KERNEL_DEFER, "bare affirmation without pending intent")
+
+    # Deferred action request → enroll as pending intent (carried via the
+    # decision's pending_intent, which update_world_model persists). The reply
+    # still flows normally; the next "yes"/"proceed" resolves it.
+    _deferred = detect_deferred_action(text)
+    if _deferred:
+        return KernelDecision(
+            INTENT_CONVERSATION,
+            KERNEL_DEFER,
+            "deferred action request enrolled as pending intent",
+            pending_intent=_deferred,
+        )
 
     salience = classify_salience(text)
     if salience.source_class != SOURCE_NOAH_DIRECT and not salience.handoff_allowed:

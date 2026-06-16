@@ -52,6 +52,15 @@ def test_camera_off_at_startup():
     assert "let watching = false" in UI
 
 
+def test_presence_rail_shows_law_life_bridge_status():
+    assert 'id="pr-law"' in UI
+    assert 'id="pr-life"' in UI
+    assert 'id="pr-bridge"' in UI
+    assert "ll.law_status" in UI
+    assert "ll.life_status" in UI
+    assert "ll.bridge_status" in UI
+
+
 def test_authorization_wired():
     assert "/api/camera/authorize" in UI
     assert "/api/camera/stop" in UI

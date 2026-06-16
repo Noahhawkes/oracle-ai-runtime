@@ -583,6 +583,24 @@
     opacity: 0.7;
   }
 
+  /* Presence rail — her live state, always on screen */
+  #presence-rail {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 8px 18px; font-size: 11px; color: var(--text-dim);
+    border-bottom: 1px solid var(--surface2); background: var(--surface);
+  }
+  #presence-rail b { color: var(--text); font-weight: 600; }
+  #presence-rail .pr-item { white-space: nowrap; }
+  .pr-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: #34d399;
+    box-shadow: 0 0 8px #34d399; animation: prPulse 2.4s ease-in-out infinite;
+  }
+  @keyframes prPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .pr-grow { flex: 1; }
+  #pr-heartbeat { color: var(--accent); letter-spacing: 0.05em; font-style: normal; }
+  #pr-intent-wrap b { color: #fbbf24; }
+  #pr-bridge { color: #fbbf24; }
+
   /* Scrollbar */
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -655,6 +673,20 @@
       <button class="cam-close" onclick="stopVision()" title="Stop camera">✕</button>
     </div>
     <div id="cam-seen">Preview only. Press LOOK ONCE for a single observation.</div>
+  </div>
+
+  <!-- Presence rail — ORACLE's live state, always visible -->
+  <div id="presence-rail">
+    <span class="pr-dot"></span>
+    <span class="pr-item">mode <b id="pr-mode">…</b></span>
+    <span class="pr-item">memory <b id="pr-mem">…</b></span>
+    <span class="pr-item">law <b id="pr-law">…</b></span>
+    <span class="pr-item">life <b id="pr-life">…</b></span>
+    <span class="pr-item">bridge <b id="pr-bridge">…</b></span>
+    <span class="pr-item" id="pr-intent-wrap" style="display:none">carrying <b id="pr-intent"></b></span>
+    <span class="pr-item" id="pr-obs-wrap" style="display:none">last look <b id="pr-obs"></b></span>
+    <span class="pr-grow"></span>
+    <span class="pr-receipt" id="pr-heartbeat">grounded · continuous</span>
   </div>
 
   <div id="messages">
@@ -1335,6 +1367,32 @@ function addCameraObservation(text, receiptId) {
   scrollToBottom();
 }
 
+// ── Presence rail — poll ORACLE's live state ──────────────────────────────────
+async function refreshPresence() {
+  try {
+    const r = await fetch(apiUrl('/api/presence'));
+    if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById('pr-mode').textContent = d.mode || '—';
+    document.getElementById('pr-mem').textContent = (d.memory_count == null ? '—' : d.memory_count);
+    const ll = d.law_life || {};
+    document.getElementById('pr-law').textContent = ll.law_status || '—';
+    document.getElementById('pr-life').textContent = ll.life_status || '—';
+    document.getElementById('pr-bridge').textContent = ll.bridge_status || '—';
+    const iw = document.getElementById('pr-intent-wrap');
+    if (d.pending_intent) {
+      document.getElementById('pr-intent').textContent = String(d.pending_intent).slice(0, 64);
+      iw.style.display = '';
+    } else { iw.style.display = 'none'; }
+    const ow = document.getElementById('pr-obs-wrap');
+    if (d.last_observation && d.last_observation.text) {
+      const src = d.last_observation.source === 'camera_observation' ? 'camera ' : '';
+      document.getElementById('pr-obs').textContent = src + String(d.last_observation.text).slice(0, 44);
+      ow.style.display = '';
+    } else { ow.style.display = 'none'; }
+  } catch (e) {}
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   try {
@@ -1342,6 +1400,9 @@ async function init() {
   } catch {}
 
   await _applyLearnedUI();
+
+  refreshPresence();
+  setInterval(refreshPresence, 5000);
 
   document.getElementById('input').focus();
 }
