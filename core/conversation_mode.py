@@ -72,21 +72,36 @@ _LAST_DEBUG: dict = {}
 _SECRET_PATTERNS = (
     re.compile(r"sk-[A-Za-z0-9_-]{12,}"),
     re.compile(r"(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*[^\s,;]+"),
+    re.compile(r"(?i)(\.env[^\s:]*\s*[:=]\s*)[^\s,;]+"),
+    re.compile(r"(?i)(private key|private_key|ssh key|ssh_key)\s*[:=]\s*[^\s,;]+"),
+    re.compile(r"(?i)(financial|medical|legal)(?:\s+identifier|\s+ids?|\s+case ids?)\s*[:=]\s*[^\s,;]+"),
 )
 
 
 def _redact(text: str) -> str:
     redacted = text
     for pattern in _SECRET_PATTERNS:
-        redacted = pattern.sub(lambda m: f"{m.group(1)}=[REDACTED]" if m.lastindex else "[REDACTED]", redacted)
+        def _sub(m: re.Match) -> str:
+            if m.lastindex:
+                return f"{m.group(1)}[REDACTED]" if "=" in m.group(0) else "[REDACTED]"
+            return "[REDACTED]"
+        redacted = pattern.sub(_sub, redacted)
     return redacted
 
 
-def _context_counts(prompt: str) -> tuple[int, int]:
+def _token_estimate(text: str) -> int:
+    if not text:
+        return 0
+    return max(1, (len(text) + 3) // 4)
+
+
+def _context_counts(prompt: str) -> tuple[int, int, int, int]:
     lower = prompt.lower()
     memory_count = lower.count("[memory") + lower.count("compressed memory") + lower.count("wake memory")
-    doc_count = lower.count("[priority") + lower.count("doctrine") + lower.count("sov1") + lower.count("legacygi")
-    return memory_count, doc_count
+    doc_count = lower.count("doctrine") + lower.count("sov1") + lower.count("legacygi") + lower.count("rendered reality")
+    recent_thread_count = lower.count("[thread") + lower.count("[recent thread") + lower.count("conversation")
+    file_context_count = lower.count("core/") + lower.count("docs/") + lower.count("memory/") + lower.count("[file context")
+    return memory_count, doc_count, recent_thread_count, file_context_count
 
 
 def begin_debug_turn(user_input: str, route: RouteDecision, *, current_mode: str, no_route: bool) -> None:
@@ -105,6 +120,9 @@ def begin_debug_turn(user_input: str, route: RouteDecision, *, current_mode: str
         "timeout_fired": False,
         "first_token_received": False,
         "local_model_request_started": False,
+        "fallback_reason": "",
+        "last_error": "",
+        "response_source": "",
     })
     _write_debug_snapshot()
 
@@ -137,25 +155,31 @@ def format_debug_context(debug: dict | None = None) -> str:
     if not data:
         return "[DEBUG CONTEXT]\n  No Companion Mode turn has been captured yet."
     lines = ["[DEBUG CONTEXT]"]
-    lines.append(f"  Current mode        : {data.get('current_mode', 'unknown')}")
-    lines.append(f"  No-route active     : {'yes' if data.get('no_route') else 'no'}")
-    lines.append(f"  Raw input received  : {'yes' if data.get('raw_user_input_received') else 'no'}")
-    lines.append(f"  Raw input chars     : {data.get('last_user_message_chars', 0)}")
-    lines.append(f"  Normalized intent   : {data.get('normalized_intent', '')}")
-    lines.append(f"  Selected route      : {data.get('selected_route', '')}")
-    lines.append(f"  Context packet      : {'loaded' if data.get('context_packet_loaded') else 'not loaded'}")
-    lines.append(f"  Loaded memory count : {data.get('loaded_memory_count', 0)}")
-    lines.append(f"  Loaded doc count    : {data.get('loaded_doc_count', 0)}")
-    lines.append(f"  User input in prompt: {'yes' if data.get('user_input_in_final_prompt') else 'no'}")
-    lines.append(f"  Final prompt chars  : {data.get('final_prompt_chars', 0)}")
-    lines.append(f"  Model name          : {data.get('model_name', '')}")
-    lines.append(f"  Model timeout sec   : {data.get('model_timeout_seconds', '')}")
-    lines.append(f"  Request started     : {'yes' if data.get('local_model_request_started') else 'no'}")
-    lines.append(f"  First token received: {'yes' if data.get('first_token_received') else 'no'}")
-    lines.append(f"  Timeout fired       : {'yes' if data.get('timeout_fired') else 'no'}")
-    lines.append(f"  Fallback answered   : {'yes' if data.get('fallback_answered') else 'no'}")
-    if data.get("timeout_fired"):
-        lines.append(f"  Result              : Context was loaded, but {data.get('model_name', 'local model')} timed out before response.")
+    lines.append(f"  current_mode            : {data.get('current_mode', 'unknown')}")
+    lines.append(f"  route_selected          : {data.get('selected_route', '')}")
+    lines.append(f"  no_route_active         : {'true' if data.get('no_route') else 'false'}")
+    lines.append(f"  raw_user_input_chars    : {data.get('last_user_message_chars', 0)}")
+    lines.append(f"  raw_user_input_preview   : {data.get('raw_user_input_redacted', '')[:140]}")
+    lines.append(f"  normalized_intent       : {data.get('normalized_intent', '')}")
+    lines.append(f"  companion_mode_active   : {str(data.get('current_mode') == MODE_COMPANION).lower()}")
+    lines.append(f"  builder_mode_active      : {str(data.get('current_mode') == MODE_BUILDER).lower()}")
+    lines.append(f"  loaded_memory_count      : {data.get('loaded_memory_count', 0)}")
+    lines.append(f"  loaded_doctrine_count    : {data.get('loaded_doctrine_count', 0)}")
+    lines.append(f"  loaded_recent_thread_count : {data.get('loaded_recent_thread_count', 0)}")
+    lines.append(f"  loaded_file_context_count : {data.get('loaded_file_context_count', 0)}")
+    lines.append(f"  final_prompt_chars       : {data.get('final_prompt_chars', 0)}")
+    lines.append(f"  final_prompt_token_estimate : {data.get('final_prompt_token_estimate', 0)}")
+    lines.append(f"  model_name               : {data.get('model_name', '')}")
+    lines.append(f"  model_endpoint           : {data.get('model_endpoint', '')}")
+    lines.append(f"  model_timeout_seconds    : {data.get('model_timeout_seconds', '')}")
+    lines.append(f"  model_request_started_at : {data.get('model_request_started_at', '')}")
+    lines.append(f"  first_token_received_at   : {data.get('first_token_received_at', '')}")
+    lines.append(f"  first_token_latency_ms   : {data.get('first_token_latency_ms', '')}")
+    lines.append(f"  model_completed_at       : {data.get('model_completed_at', '')}")
+    lines.append(f"  fallback_activated       : {'true' if data.get('fallback_answered') else 'false'}")
+    lines.append(f"  fallback_reason          : {data.get('fallback_reason', '')}")
+    lines.append(f"  last_error               : {data.get('last_error', '')}")
+    lines.append(f"  response_source          : {data.get('response_source', '')}")
     return "\n".join(lines)
 
 
@@ -386,7 +410,7 @@ def direct_response(
     system = _system_prompt(base_prompt)
     messages = [{"role": "system", "content": system}] + history[-12:] + [{"role": "user", "content": user_input}]
     final_prompt = json.dumps(messages, ensure_ascii=False, indent=2)
-    memory_count, doc_count = _context_counts(system)
+    memory_count, doc_count, recent_thread_count, file_context_count = _context_counts(system)
     if not _LAST_DEBUG:
         begin_debug_turn(
             user_input,
@@ -398,17 +422,28 @@ def direct_response(
         "context_packet_loaded": bool(base_prompt),
         "context_packet_chars": len(base_prompt),
         "loaded_memory_count": memory_count,
-        "loaded_doc_count": doc_count,
+        "loaded_doctrine_count": doc_count,
+        "loaded_recent_thread_count": recent_thread_count,
+        "loaded_file_context_count": file_context_count,
         "user_input_in_final_prompt": user_input in final_prompt,
         "final_user_message_chars": len(user_input),
         "final_prompt_chars": len(final_prompt),
+        "final_prompt_token_estimate": _token_estimate(final_prompt),
         "final_prompt_redacted": _redact(final_prompt),
         "model_name": model,
+        "model_endpoint": os.environ.get("ORACLE_MODEL_ENDPOINT", "http://localhost:11434/v1"),
         "model_timeout_seconds": timeout_s,
         "fallback_answered": False,
         "timeout_fired": False,
         "first_token_received": False,
         "local_model_request_started": False,
+        "fallback_reason": "",
+        "last_error": "",
+        "response_source": "",
+        "model_request_started_at": "",
+        "first_token_received_at": "",
+        "model_completed_at": "",
+        "first_token_latency_ms": "",
     })
     _write_debug_snapshot()
 
@@ -420,6 +455,8 @@ def direct_response(
     if not _INFLIGHT.acquire(blocking=False):
         _LAST_DEBUG["model_busy"] = True
         _LAST_DEBUG["fallback_answered"] = True
+        _LAST_DEBUG["fallback_reason"] = "local model busy"
+        _LAST_DEBUG["response_source"] = "local_fallback"
         _write_debug_snapshot()
         if policy is not None and policy.has_schema():
             return DirectResponse("__ORACLE_TIMEOUT_SCHEMA_PRESERVE__", timed_out=False,
@@ -437,7 +474,7 @@ def direct_response(
             from openai import OpenAI
             import httpx
             client = OpenAI(
-                base_url="http://localhost:11434/v1",
+                base_url=_LAST_DEBUG.get("model_endpoint", "http://localhost:11434/v1"),
                 api_key="ollama",
                 # Separate connect vs read timeouts: fail fast if Ollama is down,
                 # but allow the full generation budget once connected.
@@ -462,6 +499,7 @@ def direct_response(
             _INFLIGHT.release()
 
     _LAST_DEBUG["local_model_request_started"] = True
+    _LAST_DEBUG["model_request_started_at"] = datetime.utcnow().isoformat() + "Z"
     _LAST_DEBUG["local_model_request_start_ts"] = time.time()
     _write_debug_snapshot()
     future = _LOCAL_POOL.submit(call_local)
@@ -474,6 +512,9 @@ def direct_response(
     except FutureTimeout:
         _LAST_DEBUG["timeout_fired"] = True
         _LAST_DEBUG["fallback_answered"] = True
+        _LAST_DEBUG["fallback_reason"] = "Model returned no first token before timeout."
+        _LAST_DEBUG["response_source"] = "local_fallback"
+        _LAST_DEBUG["model_completed_at"] = datetime.utcnow().isoformat() + "Z"
         _write_debug_snapshot()
         # Do NOT release _INFLIGHT here — call_local's finally owns it and frees it
         # when the worker terminates (bounded by the httpx read timeout).
@@ -486,12 +527,17 @@ def direct_response(
             fallback_response(timed_out=True, status="total_generation_timeout",
                               effective_mode=effective_mode, timeout_s=timeout_s),
             timed_out=True, fallback_used=True, status="total_generation_timeout",
+            detail="Model returned no first token before timeout.",
         )
     except Exception as exc:
         status = _classify_local_error(exc)
         _LAST_DEBUG["fallback_answered"] = True
         _LAST_DEBUG["model_error"] = True
         _LAST_DEBUG["model_error_status"] = status
+        _LAST_DEBUG["fallback_reason"] = "Fallback answered because local inference failed."
+        _LAST_DEBUG["last_error"] = f"{type(exc).__name__}: {exc}"
+        _LAST_DEBUG["response_source"] = "local_fallback"
+        _LAST_DEBUG["model_completed_at"] = datetime.utcnow().isoformat() + "Z"
         _write_debug_snapshot()
         timed = status == "total_generation_timeout"
         if policy is not None and policy.has_schema():
@@ -506,6 +552,9 @@ def direct_response(
         )
     if not reply.strip():
         _LAST_DEBUG["fallback_answered"] = True
+        _LAST_DEBUG["fallback_reason"] = "Fallback answered because local inference failed."
+        _LAST_DEBUG["response_source"] = "local_fallback"
+        _LAST_DEBUG["model_completed_at"] = datetime.utcnow().isoformat() + "Z"
         _write_debug_snapshot()
         if policy is not None and policy.has_schema():
             _LAST_DEBUG["schema_preserving_timeout"] = True
@@ -517,7 +566,13 @@ def direct_response(
             fallback_used=True, status="empty_response",
         )
     _LAST_DEBUG["first_token_received"] = True
+    _LAST_DEBUG["first_token_received_at"] = datetime.utcnow().isoformat() + "Z"
+    start_ts = _LAST_DEBUG.get("local_model_request_start_ts")
+    if isinstance(start_ts, (int, float)):
+        _LAST_DEBUG["first_token_latency_ms"] = int((time.time() - float(start_ts)) * 1000)
     _LAST_DEBUG["response_received_ts"] = time.time()
+    _LAST_DEBUG["response_source"] = "local_model"
+    _LAST_DEBUG["model_completed_at"] = datetime.utcnow().isoformat() + "Z"
     _write_debug_snapshot()
     return DirectResponse(reply.strip())
 
