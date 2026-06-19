@@ -170,6 +170,7 @@ _session_id: str = ""
 _history: list[dict] = []
 _mode: str = "companion"          # companion | builder
 _no_route: bool = False
+_retrieval_only_mode: bool = False
 _active_context_latest: dict[str, Any] | None = None
 
 def _boot():
@@ -249,6 +250,7 @@ def _get_mode_state() -> dict:
         "mode": "unified_oracle",
         "legacy_mode": _mode,
         "no_route": _no_route,
+        "retrieval_only": _retrieval_only_mode,
         "session_id": _session_id,
         "current_lane": route.get("current_lane", "talk_lane"),
         "lane_label": route.get("lane_label", "Talk"),
@@ -353,6 +355,36 @@ def _strip_routing_artifacts(reply: str, mode: str = "companion") -> str:
             "only through explicit local actions and receipts; no external "
             "handoff happened from this web view."
         )
+    return reply
+
+
+def _fabric_local_model_runner(prompt: str) -> str:
+    """Try the configured local direct-response path once."""
+    from conversation_mode import direct_response
+    from llm import get_model
+
+    direct = direct_response(
+        prompt,
+        history=_history[-12:],
+        model=get_model(vision=False),
+    )
+    return direct.text
+
+
+def _fabric_model_failure_fallback(reply: str, user_text: str, route: dict[str, Any]) -> str:
+    """Replace local model timeout/busy text with cognition fabric fallback text."""
+    try:
+        from cognition_fabric import fallback_response, is_model_failure_text
+
+        if is_model_failure_text(reply):
+            return fallback_response(
+                user_text,
+                route,
+                {},
+                reason="the local model did not answer before timeout",
+            )["response_text"]
+    except Exception:
+        pass
     return reply
 
 
@@ -882,7 +914,7 @@ def _deterministic_runtime_answer(user_text: str) -> str | None:
 
 
 async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
-    global _mode, _no_route, _history
+    global _mode, _no_route, _retrieval_only_mode, _history
 
     def _sse(data: dict) -> str:
         return f"data: {json.dumps(data)}\n\n"
@@ -978,6 +1010,52 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             text = "I routed this to Guard lane. This action requires Noah.Physical approval because it may be irreversible."
         yield _sse({"type": "token", "text": text})
         yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "guard_lane"})
+        return
+
+    if lower in ("/cognition", "cognition", "cognition status"):
+        try:
+            from cognition_fabric import format_cognition_status
+            text = f"```\n{format_cognition_status()}\n```"
+        except Exception as exc:
+            text = f"ORACLE Cognition Fabric unavailable: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "runtime_status"})
+        return
+
+    if lower == "/retrieval-only" or lower.startswith("/retrieval-only "):
+        _retrieval_only_mode = True
+        query = user_text.strip()[len("/retrieval-only"):].strip() or "retrieval-only status"
+        try:
+            from cognition_fabric import run_cognition
+            result = run_cognition(query, _unified_route, {}, retrieval_only=True)
+            text = result["response_text"]
+            if query == "retrieval-only status":
+                text = "Retrieval-only mode active. No model call will be used for ordinary chat until `/retry-local`.\n\n" + text
+        except Exception as exc:
+            text = f"Retrieval-only mode active, but retrieval status is unavailable: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "retrieval_only"})
+        return
+
+    if lower == "/retry-local" or lower.startswith("/retry-local "):
+        _retrieval_only_mode = False
+        query = user_text.strip()[len("/retry-local"):].strip() or "Are you there?"
+        try:
+            from cognition_fabric import run_cognition
+            result = await asyncio.to_thread(
+                lambda: run_cognition(
+                    query,
+                    _unified_route,
+                    {},
+                    local_model_runner=_fabric_local_model_runner,
+                    retry_local=True,
+                )
+            )
+            text = result["response_text"]
+        except Exception as exc:
+            text = f"Local retry unavailable: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "retry_local"})
         return
 
     if lower in ("/boot", "/boot-status", "boot status", "status line"):
@@ -1243,13 +1321,20 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     if lower in ("/status", "/mode"):
         state = _get_mode_state()
         boot = boot_status_payload()
+        try:
+            from cognition_fabric import get_cognition_status
+            fabric = get_cognition_status()
+        except Exception:
+            fabric = {"status_label": "unavailable", "current_cognition_tier": "unknown"}
         yield _sse({"type": "token", "text": (
             f"**Mode:** UNIFIED ORACLE\n"
             f"**Current lane:** {state.get('lane_label', 'Talk')}\n"
             f"**Safety:** {state.get('safety_status', 'Safe')}\n"
             f"**Cognition:** {boot['cognition_mode']}\n"
+            f"**Cognition fabric:** {fabric.get('status_label')} / {fabric.get('current_cognition_tier')}\n"
             f"**Network:** {boot['network_boundary']}\n"
             f"**Boot receipt:** `{boot['boot_receipt_path']}`\n"
+            f"**Retrieval-only:** {state.get('retrieval_only')}\n"
             f"**No-route:** {state['no_route']}\n"
             f"**Session:** `{state['session_id']}`"
         )})
@@ -1263,6 +1348,9 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             "|---|---|\n"
             "| `refresh context` | Refresh active local context without resetting conversation |\n"
             "| `show context diff` | Show the latest active context diff |\n"
+            "| `/cognition` | Show Cognition Fabric tiers, model/fallback state, and cloud boundary |\n"
+            "| `/retrieval-only` | Answer from local runtime/retrieval state without a model call |\n"
+            "| `/retry-local` | Try the configured local model once, then fall back honestly |\n"
             "| `/no-route` | Force all conversation local |\n"
             "| `/route-on` | Restore external routing |\n"
             "| `/capabilities` | Full broker matrix with live smoke receipts |\n"
@@ -1339,6 +1427,40 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         pass
 
     _history.append({"role": "user", "content": user_text})
+
+    if _retrieval_only_mode:
+        try:
+            from cognition_fabric import run_cognition
+            result = run_cognition(user_text, _unified_route, {}, retrieval_only=True)
+            reply = result["response_text"]
+        except Exception as exc:
+            reply = f"Retrieval-only response unavailable: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": reply})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "retrieval_only"})
+        _history.append({"role": "assistant", "content": reply})
+        try:
+            from memory import save_message
+            save_message(_session_id, "assistant", reply)
+        except Exception:
+            pass
+        return
+
+    if (_unified_route or {}).get("detected_lane") == "build_lane":
+        try:
+            from cognition_fabric import TIER_PENDING_ACTION, run_cognition
+            result = run_cognition(user_text, _unified_route, {}, force_tier=TIER_PENDING_ACTION)
+            reply = result["response_text"]
+        except Exception as exc:
+            reply = f"Build lane pending-action boundary unavailable: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": reply})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "build_lane"})
+        _history.append({"role": "assistant", "content": reply})
+        try:
+            from memory import save_message
+            save_message(_session_id, "assistant", reply)
+        except Exception:
+            pass
+        return
 
     try:
         _boot_status = boot_status_payload()
@@ -1466,6 +1588,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 reply = _apply_current_observation_gate(reply, user_text)
                 _history = engine_history[-40:]
                 reply = _strip_routing_artifacts(reply, _mode)
+                reply = _fabric_model_failure_fallback(reply, user_text, _unified_route)
                 try:
                     from learning import record_interaction
                     record_interaction(user_text, "companion_engine", effective_mode,
@@ -1526,6 +1649,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             reply = _apply_current_observation_gate(reply, user_text)
             _history = engine_history[-40:]
             reply = _strip_routing_artifacts(reply, _mode)
+            reply = _fabric_model_failure_fallback(reply, user_text, _unified_route)
             try:
                 from learning import record_interaction
                 record_interaction(user_text, "builder_engine", effective_mode,
@@ -2162,6 +2286,22 @@ async def api_boot():
     return JSONResponse(boot_status_payload())
 
 
+@app.get("/api/cognition")
+async def api_cognition():
+    """Read-only Cognition Fabric status; no model call, no cloud call."""
+    try:
+        from cognition_fabric import get_cognition_status
+        return JSONResponse(get_cognition_status())
+    except Exception as exc:
+        return JSONResponse({
+            "current_cognition_tier": "unknown",
+            "status_label": "unavailable",
+            "cloud_api_used": False,
+            "conversation_reset": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }, status_code=500)
+
+
 @app.get("/api/mode")
 async def mode():
     state = _get_mode_state()
@@ -2214,6 +2354,7 @@ async def api_presence():
         "last_observation": None,
         "law_life": None,
         "boot": None,
+        "cognition_fabric": None,
     }
     try:
         mode_state = _get_mode_state()
@@ -2232,6 +2373,26 @@ async def api_presence():
         }
     except Exception:
         pass
+    try:
+        from cognition_fabric import get_cognition_status
+        fabric = get_cognition_status()
+        out["cognition_fabric"] = {
+            "status_label": fabric.get("status_label"),
+            "current_cognition_tier": fabric.get("current_cognition_tier"),
+            "last_local_model_status": fabric.get("last_local_model_status"),
+            "last_timeout": fabric.get("last_timeout"),
+            "last_fallback_reason": fabric.get("last_fallback_reason"),
+            "cloud_api_used": False,
+            "conversation_reset": False,
+        }
+    except Exception as exc:
+        out["cognition_fabric"] = {
+            "status_label": "unavailable",
+            "current_cognition_tier": "unknown",
+            "cloud_api_used": False,
+            "conversation_reset": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
     try:
         from cognitive_kernel import load_kernel_state
         ks = load_kernel_state()

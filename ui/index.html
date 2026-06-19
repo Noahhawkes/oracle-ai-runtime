@@ -2096,7 +2096,16 @@ async function refreshPresence() {
     const d = await r.json();
     document.getElementById('pr-mode').textContent = d.lane_label || d.current_lane || 'Unified';
     const boot = d.boot || {};
-    document.getElementById('pr-cognition').textContent = boot.cognition_mode || '—';
+    const fabric = d.cognition_fabric || {};
+    const cogEl = document.getElementById('pr-cognition');
+    cogEl.textContent = fabric.status_label || boot.cognition_mode || '—';
+    cogEl.title = [
+      fabric.current_cognition_tier ? ('tier: ' + fabric.current_cognition_tier) : '',
+      fabric.last_local_model_status ? ('local: ' + fabric.last_local_model_status) : '',
+      fabric.last_fallback_reason ? ('fallback: ' + fabric.last_fallback_reason) : '',
+      'cloud_api_used: false',
+      'conversation_reset: false'
+    ].filter(Boolean).join(' | ');
     document.getElementById('pr-heartbeat').textContent =
       boot.network_boundary ? ('boundary ' + boot.network_boundary) : 'grounded';
     document.getElementById('pr-mem').textContent = (d.memory_count == null ? '—' : d.memory_count);
