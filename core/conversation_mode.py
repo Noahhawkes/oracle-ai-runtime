@@ -329,8 +329,8 @@ def _system_prompt(base_prompt: str = "") -> str:
         f"{seed_block}\n"
         "You are ORACLE speaking directly with Noah. Be present, brief, warm, and honest.\n"
         "Do not route, delegate, create tasks, write code, call tools, edit files, use shell, "
-        "or mention waiting on Claude/Codex. If Noah asks for action, say you can switch to "
-        "Builder Mode when he asks. Answer in one or two short paragraphs.\n"
+        "or mention waiting on Claude/Codex. If Noah asks for action, say unified ORACLE "
+        "can route it to the right internal lane with local safety gates. Answer in one or two short paragraphs.\n"
         f"Current time: {now}"
     ).strip()
 
@@ -383,6 +383,24 @@ def direct_response(
     policy=None,  # Optional[ExecutionPolicy] — avoids circular import
 ) -> DirectResponse:
     history = list(history or [])
+    try:
+        from boot_receipt import get_or_create_boot_receipt, offline_no_model_line
+        _boot = get_or_create_boot_receipt()
+        if (_boot.get("cognition") or {}).get("mode") == "offline_no_model":
+            return DirectResponse(
+                offline_no_model_line(),
+                fallback_used=True,
+                status="offline_no_model",
+                detail="no verified local model in boot receipt",
+            )
+    except Exception as exc:
+        return DirectResponse(
+            "Local floor unavailable: boot receipt support could not be verified. "
+            f"{type(exc).__name__}: {exc}",
+            fallback_used=True,
+            status="model_error",
+            detail=f"{type(exc).__name__}: {exc}",
+        )
     system = _system_prompt(base_prompt)
     messages = [{"role": "system", "content": system}] + history[-12:] + [{"role": "user", "content": user_input}]
     final_prompt = json.dumps(messages, ensure_ascii=False, indent=2)
@@ -436,8 +454,9 @@ def direct_response(
                 return llm_call(messages, model)
             from openai import OpenAI
             import httpx
+            from llm import DEFAULT_OLLAMA_BASE
             client = OpenAI(
-                base_url="http://localhost:11434/v1",
+                base_url=os.environ.get("OLLAMA_BASE", DEFAULT_OLLAMA_BASE),
                 api_key="ollama",
                 # Separate connect vs read timeouts: fail fast if Ollama is down,
                 # but allow the full generation budget once connected.

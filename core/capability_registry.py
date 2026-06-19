@@ -8,6 +8,7 @@ approval is required. This is a registry and need detector, not a new tool.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -91,14 +92,16 @@ def build_registry(*, simulate_claude_unavailable: bool = False, simulate_codex_
     core = ROOT / "core"
     tools = ROOT / "tools"
 
+    force_local = os.getenv("ORACLE_FORCE_LOCAL", "false").lower() in ("1", "true", "yes", "on")
     try:
-        import urllib.request
-        urllib.request.urlopen("http://localhost:11434", timeout=0.3)
-        ollama_status = STATUS_AVAILABLE
-        ollama_blocker = ""
-    except Exception:
+        from boot_receipt import inspect_cognition
+        cognition = inspect_cognition()
+        ollama_status = STATUS_AVAILABLE if cognition.get("mode") == "local_only" else STATUS_DEGRADED
+        ollama_blocker = "" if ollama_status == STATUS_AVAILABLE else "No verified local model in boot receipt"
+    except Exception as exc:
+        cognition = {}
         ollama_status = STATUS_DEGRADED
-        ollama_blocker = "Ollama endpoint not confirmed"
+        ollama_blocker = f"Boot cognition unavailable: {type(exc).__name__}: {exc}"
 
     codex_channel_exists = _exists(core / "oracle_codex_channel.py")
     codex_status = STATUS_AVAILABLE if codex_channel_exists else STATUS_UNAVAILABLE
@@ -124,7 +127,10 @@ def build_registry(*, simulate_claude_unavailable: bool = False, simulate_codex_
             ["local chat", "summarize", "classify"],
             ["guarantee architecture quality", "approve governance"],
             ["external calls", "actuation"],
-            fallback_option="ChatGPT relay or Codex depending on task",
+            fallback_option=(
+                "offline_no_model deterministic status only"
+                if force_local else "ChatGPT relay or Codex depending on task"
+            ),
             blocker=ollama_blocker,
         ),
         "codex_bridge": _cap(

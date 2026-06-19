@@ -62,6 +62,19 @@ if sys.stdout is None or sys.stderr is None:
 
 import re as _re
 
+try:
+    from boot_receipt import (
+        boot_status_payload,
+        create_boot_receipt,
+        get_or_create_boot_receipt,
+        offline_no_model_line,
+    )
+    _BOOT_RECEIPT = create_boot_receipt()
+    print(_BOOT_RECEIPT.get("human_boot_line", "Local floor online."))
+except Exception as _boot_exc:
+    print(f"BOOT REFUSED: {_boot_exc}", file=sys.stderr)
+    raise SystemExit(1)
+
 # ── Simulation guard ──────────────────────────────────────────────────────────
 # Detects when a user pastes an implementation directive into Builder Mode
 # instead of submitting an actual task.
@@ -157,12 +170,20 @@ _session_id: str = ""
 _history: list[dict] = []
 _mode: str = "companion"          # companion | builder
 _no_route: bool = False
+_active_context_latest: dict[str, Any] | None = None
 
 def _boot():
-    global _session_id
+    global _session_id, _active_context_latest
     from memory import init_db, new_session
     init_db()
     _session_id = new_session()
+    try:
+        from active_context_sync import load_active_context_latest
+        _active_context_latest = load_active_context_latest()
+        if _active_context_latest:
+            print("[Boot] Active context latest loaded")
+    except Exception as e:
+        print(f"[Boot] Active context latest not loaded: {e}")
     # Run companion grounding bootstrap at startup (deterministic, no LLM)
     try:
         import companion_bootstrap
@@ -213,10 +234,28 @@ if os.environ.get("ORACLE_SKIP_SERVER_BOOT") != "1":
 # ── Mode helpers ──────────────────────────────────────────────────────────────
 
 def _get_mode_state() -> dict:
+    try:
+        from unified_oracle_router import latest_route_status
+        route = latest_route_status()
+    except Exception:
+        route = {
+            "mode": "unified_oracle",
+            "current_lane": "talk_lane",
+            "lane_label": "Talk",
+            "safety_status": "Safe",
+            "conversation_reset": False,
+        }
     return {
-        "mode": _mode,
+        "mode": "unified_oracle",
+        "legacy_mode": _mode,
         "no_route": _no_route,
         "session_id": _session_id,
+        "current_lane": route.get("current_lane", "talk_lane"),
+        "lane_label": route.get("lane_label", "Talk"),
+        "safety_status": route.get("safety_status", "Safe"),
+        "latest_route_path": route.get("latest_route_path"),
+        "latest_route_receipt_path": route.get("latest_receipt_path"),
+        "conversation_reset": False,
     }
 
 
@@ -303,18 +342,16 @@ def _strip_routing_artifacts(reply: str, mode: str = "companion") -> str:
     # Code bridge — Companion mode is local-only by design.
     original_low = reply.strip().lower()
     if original_low in _ROUTING_PHRASES:
-        # Mode-aware: never tell Noah to switch to a mode he is already in.
         if (mode or "").lower() == "builder":
             return (
-                "I'm already in Builder mode — but this web view has no Claude "
-                "Code bridge wired up, so I can't actually hand a task off from "
-                "here. Tell me the specific task and I'll do what I can locally, "
-                "or we wire the bridge."
+                "I routed this to Build lane, but this web view has no Claude "
+                "Code bridge wired up. I can continue with local allowed actions "
+                "and receipts from here."
             )
         return (
-            "I can't hand off to Claude Code from here — this web view is "
-            "local-only. Switch to Builder mode for tool-backed work, or tell "
-            "me what you'd like and I'll answer directly."
+            "I routed this inside unified ORACLE. Build-lane work can proceed "
+            "only through explicit local actions and receipts; no external "
+            "handoff happened from this web view."
         )
     return reply
 
@@ -401,7 +438,7 @@ def _source_disciplined_response(user_text: str, bootstrap: Any, history: list[d
         frame = _continuity_frame(persist=False)
         runtime = frame.get("runtime", {})
         return (
-            "VERIFIED [RUNTIME_STATE]: I am here in Companion Mode on the local ORACLE runtime. "
+            "VERIFIED [RUNTIME_STATE]: I am here in unified ORACLE mode on the local ORACLE runtime. "
             f"Session `{(runtime.get('session_id') or {}).get('value') or _session_id}` is active on `localhost:7777`."
         )
 
@@ -423,8 +460,8 @@ def _source_disciplined_response(user_text: str, bootstrap: Any, history: list[d
         return (
             "VERIFIED [LIVE_CONTEXT]: I am ORACLE, the local governed continuity engine for the active "
             "ORACLE.AI project.\n"
-            "INFERENCE: In this session, my role is to answer Noah directly in Companion Mode, preserve "
-            "continuity, and avoid external routing unless Noah explicitly requests implementation work."
+            "INFERENCE: In this session, my role is to answer Noah directly, route intent through internal lanes, "
+            "preserve continuity, and avoid external routing unless Noah explicitly approves it."
         )
 
     if "what do you remember" in lower and "oracle" in lower and "project" in lower:
@@ -619,11 +656,19 @@ def _runtime_diagnostics() -> dict:
     def _model_status() -> dict:
         try:
             from llm import get_model, is_local
+            boot = get_or_create_boot_receipt()
+            cognition = boot.get("cognition", {})
             return {
                 "local_mode": bool(is_local()),
+                "cognition_mode": cognition.get("mode"),
                 "conversation_model": get_model(vision=False),
                 "vision_model": get_model(vision=True),
-                "ollama_base_url": "http://localhost:11434/v1",
+                "verified_model_name": cognition.get("verified_model_name"),
+                "verified_local_engine": cognition.get("verified_local_engine"),
+                "network_boundary": cognition.get("network_boundary"),
+                "boot_receipt_path": boot.get("receipt_path"),
+                "latest_json_path": boot.get("latest_path"),
+                "ollama_base_url": cognition.get("ollama_base_url", "http://localhost:11434/v1"),
             }
         except Exception as exc:
             return {"available": False, "error": f"{type(exc).__name__}: {exc}"}
@@ -844,18 +889,36 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
 
     # ── Slash commands ────────────────────────────────────────────────────────
     lower = user_text.strip().lower()
+    try:
+        from unified_oracle_router import format_lane_boundary, route_message
+        _unified_route_result = route_message(user_text, notes="chat turn classified by unified ORACLE router")
+        _unified_route = _unified_route_result.get("route") or {}
+        yield _sse({
+            "type": "route",
+            "mode": "unified_oracle",
+            "lane": _unified_route.get("detected_lane", "talk_lane"),
+            "lane_label": _unified_route.get("lane_label", "Talk"),
+            "safety_status": _unified_route.get("safety_status", "Safe"),
+            "route_path": _unified_route.get("route_path"),
+            "receipt_path": (_unified_route_result.get("receipt") or {}).get("receipt_path"),
+            "conversation_reset": False,
+        })
+    except Exception:
+        format_lane_boundary = None  # type: ignore[assignment]
+        _unified_route_result = {"route": {"detected_lane": "talk_lane", "lane_label": "Talk", "safety_status": "Safe"}}
+        _unified_route = _unified_route_result["route"]
 
     if lower in ("/companion", "companion mode"):
         _mode = "companion"
-        yield _sse({"type": "mode", "mode": "companion"})
-        yield _sse({"type": "token", "text": "Switched to **Companion Mode** — I'm here, talking directly."})
+        yield _sse({"type": "mode", "mode": "unified_oracle"})
+        yield _sse({"type": "token", "text": "Unified ORACLE mode is active. I route talk, build, capture, witness, and guard lanes internally."})
         yield _sse({"type": "done"})
         return
 
     if lower in ("/builder", "builder mode"):
         _mode = "builder"
-        yield _sse({"type": "mode", "mode": "builder"})
-        yield _sse({"type": "token", "text": "Switched to **Builder Mode** — code, patches, tools enabled."})
+        yield _sse({"type": "mode", "mode": "unified_oracle"})
+        yield _sse({"type": "token", "text": "Unified ORACLE mode is active. Build requests route to Build lane with local receipts and safety gates."})
         yield _sse({"type": "done"})
         return
 
@@ -867,8 +930,65 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
 
     if lower in ("/route-on", "/routeon"):
         _no_route = False
-        yield _sse({"type": "token", "text": "External routing restored."})
+        boot = boot_status_payload()
+        if boot.get("network_boundary") == "local-only":
+            text = "Routing controls restored inside the local-only boundary."
+        else:
+            text = "External routing restored."
+        yield _sse({"type": "token", "text": text})
         yield _sse({"type": "done"})
+        return
+
+    if "active upload" in lower:
+        text = (
+            "I do not upload by default. I can link and refresh local context. "
+            "Upload or cloud sync requires explicit Noah.Physical approval."
+        )
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "guard_lane"})
+        return
+
+    if lower in ("refresh context", "pull current context", "update active context", "sync local state", "pull current updates"):
+        try:
+            from active_context_sync import format_refresh_response, refresh_active_context
+            result = await asyncio.to_thread(refresh_active_context, notes="manual unified ORACLE context refresh")
+            global _active_context_latest
+            _active_context_latest = result.get("snapshot")
+            text = format_refresh_response(result)
+        except Exception as exc:
+            text = f"Active Context Sync unavailable: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "capture_lane"})
+        return
+
+    if lower in ("show context diff", "show what changed"):
+        try:
+            from active_context_sync import format_diff_response
+            text = format_diff_response()
+        except Exception as exc:
+            text = f"Active Context Diff unavailable: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": f"```\n{text}\n```"})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "capture_lane"})
+        return
+
+    if (_unified_route or {}).get("detected_lane") == "guard_lane":
+        if callable(format_lane_boundary):
+            text = format_lane_boundary(_unified_route)
+        else:
+            text = "I routed this to Guard lane. This action requires Noah.Physical approval because it may be irreversible."
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "guard_lane"})
+        return
+
+    if lower in ("/boot", "/boot-status", "boot status", "status line"):
+        boot = boot_status_payload()
+        text = (
+            f"{boot['human_boot_line']}\n\n"
+            f"Boot receipt: `{boot['boot_receipt_path']}`\n"
+            f"Latest: `{boot['latest_json_path']}`"
+        )
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": _mode})
         return
 
     if lower in ("/pending", "pending"):
@@ -1122,8 +1242,14 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
 
     if lower in ("/status", "/mode"):
         state = _get_mode_state()
+        boot = boot_status_payload()
         yield _sse({"type": "token", "text": (
-            f"**Mode:** {state['mode'].upper()}\n"
+            f"**Mode:** UNIFIED ORACLE\n"
+            f"**Current lane:** {state.get('lane_label', 'Talk')}\n"
+            f"**Safety:** {state.get('safety_status', 'Safe')}\n"
+            f"**Cognition:** {boot['cognition_mode']}\n"
+            f"**Network:** {boot['network_boundary']}\n"
+            f"**Boot receipt:** `{boot['boot_receipt_path']}`\n"
             f"**No-route:** {state['no_route']}\n"
             f"**Session:** `{state['session_id']}`"
         )})
@@ -1135,8 +1261,8 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             "**ORACLE Commands**\n\n"
             "| Command | Description |\n"
             "|---|---|\n"
-            "| `/companion` | Direct conversation mode — no tools, no routing |\n"
-            "| `/builder` | Builder mode — code, patches, tools enabled |\n"
+            "| `refresh context` | Refresh active local context without resetting conversation |\n"
+            "| `show context diff` | Show the latest active context diff |\n"
             "| `/no-route` | Force all conversation local |\n"
             "| `/route-on` | Restore external routing |\n"
             "| `/capabilities` | Full broker matrix with live smoke receipts |\n"
@@ -1152,7 +1278,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             "| `/self-patch approve <id>` | Approve a pending proposal |\n"
             "| `/self-patch implement <id>` | Implement an approved proposal |\n"
             "| `/focus` | Show persistent salience focus |\n"
-            "| `/status` | Current mode and session info |\n"
+            "| `/status` | Unified ORACLE lane, safety, and session info |\n"
         )})
         yield _sse({"type": "done"})
         return
@@ -1213,6 +1339,34 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         pass
 
     _history.append({"role": "user", "content": user_text})
+
+    try:
+        _boot_status = boot_status_payload()
+    except Exception as _boot_status_exc:
+        _boot_status = {"cognition_mode": "unknown", "error": str(_boot_status_exc)}
+    if _boot_status.get("cognition_mode") == "offline_no_model":
+        if any(term in lower for term in ("status", "root", "receipt", "retrieval", "capability", "capabilities")):
+            receipt = _boot_status.get("receipt") or {}
+            retrieval = receipt.get("retrieval") or {}
+            reply = (
+                f"{_boot_status.get('human_boot_line') or offline_no_model_line()}\n\n"
+                f"Runtime root: `{_boot_status.get('runtime_root')}`\n"
+                f"State root: `{_boot_status.get('state_root')}`\n"
+                f"Boot receipt: `{_boot_status.get('boot_receipt_path')}`\n"
+                f"Latest: `{_boot_status.get('latest_json_path')}`\n"
+                f"Retrieval: `{retrieval.get('status', 'unknown')}`"
+            )
+        else:
+            reply = offline_no_model_line()
+        yield _sse({"type": "token", "text": reply})
+        yield _sse({"type": "done", "mode": _mode, "effective_route": "offline_no_model"})
+        _history.append({"role": "assistant", "content": reply})
+        try:
+            from memory import save_message
+            save_message(_session_id, "assistant", reply)
+        except Exception:
+            pass
+        return
 
     # ── Deterministic runtime/sight answers (no LLM, both modes) ──────────────
     # Presence, active task, and sight questions must never hit the slow model or
@@ -1519,6 +1673,281 @@ async def api_current_observation():
         }, status_code=500)
 
 
+@app.get("/api/sourcemap/rendered-reality")
+async def api_rendered_reality_status():
+    """Consent state only. Does not read OBS/window context while OFF."""
+    try:
+        from rendered_reality_witness import get_witness_status
+        return JSONResponse(get_witness_status())
+    except Exception as exc:
+        return JSONResponse({
+            "name": "RenderedReality Live Witness",
+            "mode": "off",
+            "enabled": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }, status_code=500)
+
+
+@app.post("/api/sourcemap/rendered-reality/mode")
+async def api_rendered_reality_mode(request: Request):
+    """Set consent mode. Enabling does not capture screen/audio/video/keys."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        from rendered_reality_witness import set_witness_mode
+        return JSONResponse(set_witness_mode(str(body.get("mode") or "off")))
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/sourcemap/rendered-reality/refresh")
+async def api_rendered_reality_refresh():
+    """Refresh bounded live metadata only if witness consent is enabled."""
+    try:
+        from rendered_reality_witness import refresh_live_context
+        return JSONResponse(refresh_live_context())
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/sourcemap/rendered-reality/receipt")
+async def api_rendered_reality_receipt(request: Request):
+    """Write one RenderedReality session receipt only when consent is enabled."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        from rendered_reality_witness import write_session_receipt
+        receipt = write_session_receipt(notes=str(body.get("notes") or ""))
+        return JSONResponse(receipt)
+    except PermissionError as exc:
+        return JSONResponse({"error": str(exc), "receipt_written": False}, status_code=403)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/sourcemap/lootdrops")
+async def api_lootdrops_status():
+    """Local symbolic LootDrop status. No cloud, no upload, no financial value."""
+    try:
+        from lootdrop_artifacts import status_payload
+        return JSONResponse(status_payload())
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/sourcemap/lootdrops/manual")
+async def api_lootdrops_manual(request: Request):
+    """Create the manual Myrmidon's Signet continuity artifact locally."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        from lootdrop_artifacts import create_manual_lootdrop
+        allowed = {
+            key: body.get(key)
+            for key in (
+                "artifact_type",
+                "title",
+                "source_context",
+                "evidence_state",
+                "human_authority",
+                "description",
+                "symbolic_stats",
+                "linked_files",
+                "linked_receipts",
+                "mindcoin_award",
+                "notes",
+            )
+            if key in body
+        }
+        return JSONResponse(create_manual_lootdrop(**allowed))
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/sourcemap/lootdrops/receipt")
+async def api_lootdrops_receipt():
+    """Write a local receipt for the latest LootDrop artifact."""
+    try:
+        from lootdrop_artifacts import latest_lootdrop_artifact, write_lootdrop_receipt
+        latest = latest_lootdrop_artifact()
+        if not latest:
+            return JSONResponse({"error": "No LootDrop artifact exists yet."}, status_code=404)
+        return JSONResponse(write_lootdrop_receipt(latest))
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/sourcemap/lootdrops/award")
+async def api_lootdrops_award():
+    """Append a symbolic nonfinancial MindCoin JSONL event for the latest LootDrop."""
+    try:
+        from lootdrop_artifacts import award_mindcoin_for_lootdrop, latest_lootdrop_artifact, write_lootdrop_receipt
+        latest = latest_lootdrop_artifact()
+        if not latest:
+            return JSONResponse({"error": "No LootDrop artifact exists yet."}, status_code=404)
+        receipt = write_lootdrop_receipt(latest)
+        return JSONResponse(award_mindcoin_for_lootdrop(latest, receipt))
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/sourcemap/witness-governance")
+async def api_witness_governance_status():
+    """SourceMap Witness Governance doctrine/status. No observation is performed."""
+    try:
+        from sourcemap_witness_governance import status_payload
+        return JSONResponse(status_payload())
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/sourcemap/witness-governance/command")
+async def api_witness_governance_command(request: Request):
+    """Apply an explicit governance command and write receipts when required."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        from sourcemap_witness_governance import handle_command
+        return JSONResponse(handle_command(
+            str(body.get("command") or ""),
+            source_reference=str(body.get("source_reference") or ""),
+            linked_path=str(body.get("linked_path") or ""),
+            artifact_type=str(body.get("artifact_type") or ""),
+            why_it_mattered=str(body.get("why_it_mattered") or ""),
+            notes=str(body.get("notes") or ""),
+        ))
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/sourcemap/witness-governance/known")
+async def api_witness_governance_known():
+    """Report known local references without claiming content understanding."""
+    try:
+        from sourcemap_witness_governance import show_me_what_you_know
+        return JSONResponse(show_me_what_you_know())
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/sourcemap/obs-transcript")
+async def api_obs_transcript_status():
+    """Local-only OBS transcript status. No media upload or cloud STT fallback."""
+    try:
+        from obs_live_transcript import status_payload
+        return JSONResponse(status_payload())
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/sourcemap/obs-transcript/pull")
+async def api_obs_transcript_pull(request: Request):
+    """Pull an existing local transcript sidecar or write a blocker receipt."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        from obs_live_transcript import pull_active_transcript
+        return JSONResponse(pull_active_transcript(notes=str(body.get("notes") or "")))
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/sourcemap/obs-transcript/receipt")
+async def api_obs_transcript_receipt(request: Request):
+    """Write a local receipt for current OBS transcript readiness/status."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        from obs_live_transcript import write_status_receipt
+        return JSONResponse(write_status_receipt(notes=str(body.get("notes") or "")))
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/unified-oracle/route")
+async def api_unified_oracle_route():
+    """Current unified ORACLE lane/safety status."""
+    try:
+        from unified_oracle_router import latest_route_status
+        return JSONResponse(latest_route_status())
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/unified-oracle/classify")
+async def api_unified_oracle_classify(request: Request):
+    """Classify a message into an internal lane and write a local route record."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        from unified_oracle_router import route_message
+        return JSONResponse(route_message(str(body.get("message") or ""), notes="manual UI route classification"))
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/active-context")
+async def api_active_context_status():
+    """Active Context Sync status. Read-only."""
+    try:
+        from active_context_sync import status_payload
+        return JSONResponse(status_payload())
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/active-context/refresh")
+async def api_active_context_refresh(request: Request):
+    """Refresh active context from local state without resetting conversation."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        from active_context_sync import refresh_active_context
+        result = refresh_active_context(notes=str(body.get("notes") or "manual API refresh"))
+        global _active_context_latest
+        _active_context_latest = result.get("snapshot")
+        return JSONResponse(result)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/active-context/diff")
+async def api_active_context_diff():
+    """Return the latest active context diff."""
+    try:
+        from active_context_sync import load_active_context_latest
+        latest = load_active_context_latest()
+        return JSONResponse({
+            "latest_context_path": str(Path(r"C:\Oracle\state") / "context" / "active_context_latest.json"),
+            "diff": (latest or {}).get("diff") if latest else None,
+            "conversation_reset": False,
+        })
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
 @app.post("/api/camera/authorize")
 async def api_camera_authorize(request: Request):
     """
@@ -1717,9 +2146,33 @@ async def history():
     return JSONResponse({"history": _history, "session_id": _session_id})
 
 
+@app.get("/health")
+async def health():
+    boot = boot_status_payload()
+    return JSONResponse({
+        "ok": True,
+        "cognition_mode": boot.get("cognition_mode"),
+        "network_boundary": boot.get("network_boundary"),
+        "boot_receipt_path": boot.get("boot_receipt_path"),
+    })
+
+
+@app.get("/api/boot")
+async def api_boot():
+    return JSONResponse(boot_status_payload())
+
+
 @app.get("/api/mode")
 async def mode():
-    return JSONResponse(_get_mode_state())
+    state = _get_mode_state()
+    try:
+        boot = boot_status_payload()
+        state["cognition_mode"] = boot.get("cognition_mode")
+        state["network_boundary"] = boot.get("network_boundary")
+        state["boot_receipt_path"] = boot.get("boot_receipt_path")
+    except Exception:
+        pass
+    return JSONResponse(state)
 
 
 @app.get("/api/law-life")
@@ -1748,15 +2201,37 @@ async def api_presence():
     Read-only; cheap; safe to poll.
     """
     out = {
-        "mode": _mode,
+        "mode": "unified_oracle",
+        "legacy_mode": _mode,
         "no_route": _no_route,
         "session_id": _session_id,
+        "current_lane": None,
+        "lane_label": None,
+        "safety_status": None,
         "pending_intent": None,
         "next_safe_action": None,
         "memory_count": None,
         "last_observation": None,
         "law_life": None,
+        "boot": None,
     }
+    try:
+        mode_state = _get_mode_state()
+        out["current_lane"] = mode_state.get("current_lane")
+        out["lane_label"] = mode_state.get("lane_label")
+        out["safety_status"] = mode_state.get("safety_status")
+    except Exception:
+        pass
+    try:
+        boot = boot_status_payload()
+        out["boot"] = {
+            "cognition_mode": boot.get("cognition_mode"),
+            "network_boundary": boot.get("network_boundary"),
+            "boot_receipt_path": boot.get("boot_receipt_path"),
+            "warning_count": len(boot.get("warnings") or []),
+        }
+    except Exception:
+        pass
     try:
         from cognitive_kernel import load_kernel_state
         ks = load_kernel_state()
@@ -1903,10 +2378,21 @@ async def resume():
 @app.get("/api/status")
 async def status_endpoint():
     """Get daemon status."""
+    boot = boot_status_payload()
     return JSONResponse({
         "paused": _paused,
         "notifications_queued": len(_pending_notifications),
         "session_id": _session_id,
+        "boot": {
+            "cognition_mode": boot.get("cognition_mode"),
+            "verified_model_name": boot.get("verified_model_name"),
+            "verified_local_engine": boot.get("verified_local_engine"),
+            "network_boundary": boot.get("network_boundary"),
+            "boot_receipt_path": boot.get("boot_receipt_path"),
+            "latest_json_path": boot.get("latest_json_path"),
+            "human_boot_line": boot.get("human_boot_line"),
+            "warnings": boot.get("warnings", []),
+        },
     })
 
 

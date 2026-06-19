@@ -82,6 +82,7 @@
   #new-chat-btn:hover { background: var(--surface2); }
 
   #mode-section {
+    display: none;
     padding: 8px 10px 4px;
     border-bottom: 1px solid var(--border);
   }
@@ -241,8 +242,26 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
   }
-  #mode-indicator.companion { background: rgba(16,163,127,0.15); color: var(--accent); }
-  #mode-indicator.builder   { background: rgba(99,102,241,0.15); color: #818cf8; }
+  #mode-indicator.unified_oracle { background: rgba(16,163,127,0.15); color: var(--accent); }
+  #mode-indicator.talk_lane { background: rgba(16,163,127,0.15); color: var(--accent); }
+  #mode-indicator.build_lane { background: rgba(99,102,241,0.15); color: #818cf8; }
+  #mode-indicator.capture_lane { background: rgba(251,191,36,0.14); color: #fbbf24; }
+  #mode-indicator.witness_lane { background: rgba(34,211,238,0.14); color: #22d3ee; }
+  #mode-indicator.guard_lane { background: rgba(239,68,68,0.16); color: #f87171; }
+  #safety-indicator {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    background: rgba(255,255,255,0.07);
+    color: var(--text-dim);
+  }
+  #safety-indicator.safe { background: rgba(16,163,127,0.12); color: var(--accent); }
+  #safety-indicator.receipt { background: rgba(251,191,36,0.14); color: #fbbf24; }
+  #safety-indicator.approval { background: rgba(239,68,68,0.16); color: #f87171; }
+  #safety-indicator.blocked { background: rgba(239,68,68,0.22); color: #fecaca; }
 
   /* ── Messages ── */
   #messages {
@@ -558,6 +577,114 @@
     overflow-y: auto;
   }
 
+  /* SourceMap / RenderedReality Live Witness panel */
+  #sourcemap-panel {
+    position: absolute;
+    top: 60px;
+    right: 16px;
+    width: min(520px, calc(100vw - 32px));
+    max-height: calc(100dvh - 92px);
+    overflow-y: auto;
+    background: var(--sidebar-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    z-index: 28;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    display: none;
+  }
+  #sourcemap-panel.visible { display: block; }
+  .sourcemap-head {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .sourcemap-head h2 {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .sourcemap-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 3px 6px;
+  }
+  .sourcemap-close:hover { color: var(--text); }
+  .sourcemap-body {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .witness-governance {
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    background: rgba(255,255,255,0.03);
+  }
+  .witness-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .witness-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px;
+    min-height: 70px;
+    background: var(--surface);
+  }
+  .witness-card b {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 11px;
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .witness-card span {
+    display: block;
+    font-size: 12px;
+    line-height: 1.35;
+    color: var(--text-dim);
+    overflow-wrap: anywhere;
+  }
+  .witness-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .witness-actions button, #sourcemap-btn {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 7px 9px;
+    cursor: pointer;
+  }
+  .witness-actions button:hover, #sourcemap-btn:hover {
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .witness-actions button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .witness-actions button.warn {
+    color: #fbbf24;
+  }
+
   /* ORACLE's spontaneous vision messages */
   .msg-bubble.vision {
     color: var(--text-dim);
@@ -657,7 +784,9 @@
   <div id="topbar">
     <button id="toggle-sidebar" onclick="toggleSidebar()" title="Toggle sidebar">☰</button>
     <span id="topbar-title">ORACLE</span>
-    <div id="mode-indicator" class="companion">Companion</div>
+    <div id="mode-indicator" class="talk_lane">Talk</div>
+    <div id="safety-indicator" class="safe">Safe</div>
+    <button id="sourcemap-btn" onclick="toggleSourceMapPanel()" title="ORACLE SourceMap">SourceMap</button>
     <a href="/miracledrive" id="md-link" title="MiracleDrive OS" style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.28);text-decoration:none;padding:4px 10px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;transition:0.2s;" onmouseover="this.style.color='#22d3ee';this.style.borderColor='rgba(34,211,238,0.35)'" onmouseout="this.style.color='rgba(255,255,255,0.28)';this.style.borderColor='rgba(255,255,255,0.1)'">MiracleDrive ↗</a>
   </div>
 
@@ -675,10 +804,118 @@
     <div id="cam-seen">Preview only. Press LOOK ONCE for a single observation.</div>
   </div>
 
+  <div id="sourcemap-panel">
+    <div class="sourcemap-head">
+      <h2>RenderedReality Live Witness</h2>
+      <button class="sourcemap-close" onclick="toggleSourceMapPanel(false)" title="Close">x</button>
+    </div>
+    <div class="sourcemap-body">
+      <div class="witness-governance">
+        RenderedReality Live Witness observes metadata only when Noah.Physical enables it. It does not record the screen, audio, video, keystrokes, or clipboard by default. It writes receipts, not surveillance archives.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>Live Witness Status</b><span id="rr-status">loading</span></div>
+        <div class="witness-card"><b>Consent Mode</b><span id="rr-mode">off</span></div>
+        <div class="witness-card"><b>OBS Status</b><span id="rr-obs">not observed</span></div>
+        <div class="witness-card"><b>Current Window</b><span id="rr-window">not observed</span></div>
+        <div class="witness-card"><b>Last Session Receipt</b><span id="rr-receipt">none</span></div>
+        <div class="witness-card"><b>Warnings</b><span id="rr-warnings">none</span></div>
+      </div>
+      <div class="witness-actions">
+        <button class="primary" onclick="setRenderedRealityMode('metadata_only')">Enable metadata-only witness</button>
+        <button onclick="setRenderedRealityMode('off')">Disable witness</button>
+        <button onclick="refreshRenderedReality()">Refresh live context</button>
+        <button class="warn" onclick="writeRenderedRealityReceipt()">Write session receipt</button>
+      </div>
+      <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
+        <h2>SourceMap Witness Governance</h2>
+      </div>
+      <div class="witness-governance">
+        Observe. Link. Receipt. Store by consent. Copy only by Noah.Physical approval.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>Current Watch State</b><span id="gov-watch-state">watch_off</span></div>
+        <div class="witness-card"><b>Current Storage Tier</b><span id="gov-storage-tier">do_not_store</span></div>
+        <div class="witness-card"><b>Last Receipt</b><span id="gov-receipt">none</span></div>
+        <div class="witness-card"><b>Consent Status</b><span id="gov-consent">explicit consent required</span></div>
+        <div class="witness-card"><b>Allowed To Observe</b><span id="gov-observe">metadata only after explicit enablement</span></div>
+        <div class="witness-card"><b>Allowed To Store</b><span id="gov-store">receipts and selected artifacts by consent</span></div>
+        <div class="witness-card"><b>Forbidden To Capture</b><span id="gov-forbidden">hidden recording, keylogging, clipboard, screenshots, audio, video by default</span></div>
+        <div class="witness-card"><b>Known References</b><span id="gov-known">not loaded</span></div>
+      </div>
+      <div class="witness-actions">
+        <button onclick="sendGovernanceCommand('do_not_watch')">Do not watch</button>
+        <button class="primary" onclick="sendGovernanceCommand('metadata_only')">Metadata only</button>
+        <button onclick="sendGovernanceCommand('link_this')">Link this</button>
+        <button onclick="sendGovernanceCommand('write_receipt')">Write receipt</button>
+        <button class="warn" onclick="sendGovernanceCommand('preserve_this')">Preserve this</button>
+        <button onclick="sendGovernanceCommand('forget_this')">Forget this</button>
+        <button onclick="showGovernanceKnown()">Show me what you know</button>
+      </div>
+      <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
+        <h2>LootDrops</h2>
+      </div>
+      <div class="witness-governance" id="lootdrop-notice">
+        MindCoin is symbolic, local-only, nonfinancial, nontransferable, and has no cash, crypto, market, or exchange value.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>Latest LootDrop</b><span id="loot-latest">none</span></div>
+        <div class="witness-card"><b>MindCoin Total</b><span id="loot-total">0</span></div>
+        <div class="witness-card"><b>Last Award Reason</b><span id="loot-reason">none</span></div>
+        <div class="witness-card"><b>Linked Receipt</b><span id="loot-receipt">none</span></div>
+        <div class="witness-card"><b>Artifact Path</b><span id="loot-artifact">none</span></div>
+        <div class="witness-card"><b>Warnings</b><span id="loot-warnings">none</span></div>
+      </div>
+      <div class="witness-actions">
+        <button class="primary" onclick="createManualLootDrop()">Create manual LootDrop</button>
+        <button onclick="writeLootDropReceipt()">Write LootDrop receipt</button>
+        <button class="warn" onclick="awardLootDropMindCoin()">Award MindCoin</button>
+      </div>
+      <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
+        <h2>Active Context</h2>
+      </div>
+      <div class="witness-governance" id="active-context-notice">
+        Active Context Sync refreshes local state from C:\Oracle\state without resetting this conversation, uploading, syncing, or making Drive canonical.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>Last Refresh Time</b><span id="ctx-refresh-time">none</span></div>
+        <div class="witness-card"><b>Sources Loaded</b><span id="ctx-sources-loaded">0</span></div>
+        <div class="witness-card"><b>New Changes</b><span id="ctx-new-changes">0</span></div>
+        <div class="witness-card"><b>Warnings</b><span id="ctx-warnings">none</span></div>
+        <div class="witness-card"><b>Reset Status</b><span id="ctx-reset-status">Not reset</span></div>
+        <div class="witness-card"><b>Latest Snapshot</b><span id="ctx-latest-path">none</span></div>
+      </div>
+      <div class="witness-actions">
+        <button class="primary" onclick="refreshActiveContext()">Refresh Context</button>
+        <button onclick="showActiveContextDiff()">Show Context Diff</button>
+      </div>
+      <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
+        <h2>Captain's Log Transcript</h2>
+      </div>
+      <div class="witness-governance" id="obs-transcript-notice">
+        Local-only OBS transcript shelf. ORACLE reads OBS recording metadata and existing transcript sidecars only; it does not upload media, copy raw video, record audio, capture the screen, or use cloud transcription.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>Active OBS Recording</b><span id="obs-transcript-recording">unknown</span></div>
+        <div class="witness-card"><b>Local Transcript Stack</b><span id="obs-transcript-stack">unknown</span></div>
+        <div class="witness-card"><b>Transcript Sidecars</b><span id="obs-transcript-sidecars">unknown</span></div>
+        <div class="witness-card"><b>Latest Transcript</b><span id="obs-transcript-latest">none</span></div>
+        <div class="witness-card"><b>Latest Receipt</b><span id="obs-transcript-receipt">none</span></div>
+        <div class="witness-card"><b>Warnings</b><span id="obs-transcript-warnings">none</span></div>
+      </div>
+      <div class="witness-actions">
+        <button class="primary" onclick="loadObsTranscriptStatus()">Refresh OBS transcript status</button>
+        <button onclick="pullObsTranscript()">Pull local transcript</button>
+        <button class="warn" onclick="writeObsTranscriptReceipt()">Write transcript receipt</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Presence rail — ORACLE's live state, always visible -->
   <div id="presence-rail">
     <span class="pr-dot"></span>
     <span class="pr-item">mode <b id="pr-mode">…</b></span>
+    <span class="pr-item">cognition <b id="pr-cognition">…</b></span>
     <span class="pr-item">memory <b id="pr-mem">…</b></span>
     <span class="pr-item">law <b id="pr-law">…</b></span>
     <span class="pr-item">life <b id="pr-life">…</b></span>
@@ -760,7 +997,9 @@ function apiUrl(path) { return API_ORIGIN + path; }
 })();
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let currentMode = 'companion';
+let currentMode = 'unified_oracle';
+let currentLane = 'talk_lane';
+let currentSafety = 'Safe';
 let noRoute = false;
 let isStreaming = false;
 let conversationStarted = false;
@@ -779,14 +1018,28 @@ function setMode(mode) {
   sendSuggestion('/' + mode);
 }
 
-function updateModeUI(mode) {
-  if (mode !== 'companion' && mode !== 'builder') return;
-  currentMode = mode;
+function _safetyClass(value) {
+  const low = String(value || '').toLowerCase();
+  if (low.includes('blocked')) return 'blocked';
+  if (low.includes('approval')) return 'approval';
+  if (low.includes('receipt')) return 'receipt';
+  return 'safe';
+}
+
+function updateModeUI(mode, lane, safety) {
+  currentMode = 'unified_oracle';
+  currentLane = lane || (mode && mode.endsWith('_lane') ? mode : currentLane) || 'talk_lane';
+  currentSafety = safety || currentSafety || 'Safe';
   document.querySelectorAll('.mode-pill').forEach(p => p.classList.remove('active'));
-  document.getElementById('pill-' + mode)?.classList.add('active');
   const ind = document.getElementById('mode-indicator');
-  ind.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
-  ind.className = mode;
+  const label = currentLane.replace('_lane', '').replace(/^\w/, c => c.toUpperCase());
+  ind.textContent = label;
+  ind.className = currentLane;
+  const safetyEl = document.getElementById('safety-indicator');
+  if (safetyEl) {
+    safetyEl.textContent = currentSafety;
+    safetyEl.className = _safetyClass(currentSafety);
+  }
 }
 
 function updateNoRouteUI(value) {
@@ -798,7 +1051,7 @@ async function syncModeState() {
   const r = await fetch(apiUrl('/api/mode'));
   if (!r.ok) throw new Error(`Mode sync failed (${r.status})`);
   const data = await r.json();
-  updateModeUI(data.mode || 'companion');
+  updateModeUI(data.mode || 'unified_oracle', data.current_lane || 'talk_lane', data.safety_status || 'Safe');
   updateNoRouteUI(data.no_route || false);
   return data;
 }
@@ -977,11 +1230,15 @@ async function sendMessage() {
         }
 
         if (event.type === 'mode') {
-          updateModeUI(event.mode);
+          updateModeUI(event.mode, event.lane || event.current_lane, event.safety_status);
+        }
+
+        if (event.type === 'route') {
+          updateModeUI(event.mode, event.lane, event.safety_status);
         }
 
         if (event.type === 'done') {
-          if (event.mode) updateModeUI(event.mode);
+          if (event.mode) updateModeUI(event.mode, event.lane || event.current_lane, event.safety_status);
         }
       } catch {}
     }
@@ -1087,6 +1344,470 @@ async function _applyLearnedUI() {
 // ── Voice out: ORACLE speaks her replies aloud ────────────────────────────────
 let voiceOn = true;          // default on — Noah wants her to talk
 let _selectedVoice = null;
+
+function toggleSourceMapPanel(force) {
+  const panel = document.getElementById('sourcemap-panel');
+  const visible = force === undefined ? !panel.classList.contains('visible') : !!force;
+  panel.classList.toggle('visible', visible);
+  if (visible) {
+    loadRenderedRealityStatus();
+    loadWitnessGovernanceStatus();
+    loadLootDropsStatus();
+    loadActiveContextStatus();
+    loadObsTranscriptStatus();
+  }
+}
+
+function _setWitnessText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text || 'none';
+}
+
+function renderRenderedReality(data) {
+  if (!data) return;
+  const mode = data.mode || 'off';
+  _setWitnessText('rr-mode', mode);
+  _setWitnessText('rr-status', data.enabled ? 'enabled' : 'off');
+  _setWitnessText('rr-receipt', data.last_session_receipt_path || 'none');
+
+  const context = data.last_context || data;
+  const obs = context.obs || null;
+  const win = context.window || null;
+  if (obs) {
+    const scene = obs.current_scene_name || 'no scene';
+    const flags = [
+      obs.obs_running ? 'OBS running' : 'OBS not running',
+      obs.obs_websocket_available ? 'websocket available' : 'websocket unavailable',
+      'scene: ' + scene,
+      'recording: ' + String(obs.recording_active),
+      'streaming: ' + String(obs.streaming_active)
+    ];
+    _setWitnessText('rr-obs', flags.join(' | '));
+  } else {
+    _setWitnessText('rr-obs', mode === 'off' ? 'not observed while off' : 'not observed');
+  }
+
+  if (win) {
+    const processName = win.active_process_name || 'unknown process';
+    const title = win.active_window_title || 'unknown title';
+    _setWitnessText('rr-window', processName + ' | ' + title);
+  } else {
+    _setWitnessText('rr-window', mode === 'off' ? 'not observed while off' : 'not observed');
+  }
+
+  const warnings = []
+    .concat(data.warnings || [])
+    .concat(context.warnings || [])
+    .filter(Boolean);
+  _setWitnessText('rr-warnings', warnings.length ? warnings.join(' | ') : 'none');
+}
+
+async function loadRenderedRealityStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/rendered-reality'));
+    renderRenderedReality(await r.json());
+  } catch (e) {
+    _setWitnessText('rr-status', 'unavailable: ' + e.message);
+  }
+}
+
+async function setRenderedRealityMode(mode) {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/rendered-reality/mode'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode })
+    });
+    const data = await r.json();
+    renderRenderedReality(data);
+  } catch (e) {
+    _setWitnessText('rr-warnings', e.message);
+  }
+}
+
+async function refreshRenderedReality() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/rendered-reality/refresh'), { method: 'POST' });
+    const data = await r.json();
+    renderRenderedReality(data);
+  } catch (e) {
+    _setWitnessText('rr-warnings', e.message);
+  }
+}
+
+async function writeRenderedRealityReceipt() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/rendered-reality/receipt'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: 'Manual SourceMap UI receipt request' })
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('rr-warnings', data.error || 'receipt blocked');
+      return;
+    }
+    _setWitnessText('rr-receipt', data.receipt_path || data.receipt_id || 'written');
+    await loadRenderedRealityStatus();
+  } catch (e) {
+    _setWitnessText('rr-warnings', e.message);
+  }
+}
+
+function _policySummary(policy) {
+  if (!policy || typeof policy !== 'object') return 'none';
+  return Object.entries(policy)
+    .slice(0, 4)
+    .map(([key, value]) => key + ': ' + String(value))
+    .join(' | ');
+}
+
+function renderWitnessGovernance(data) {
+  if (!data) return;
+  if (data.error) {
+    _setWitnessText('gov-known', data.error);
+    return;
+  }
+  const governance = data.governance || {};
+  _setWitnessText('gov-watch-state', data.current_watch_state || governance.current_watch_state || 'watch_off');
+  _setWitnessText('gov-storage-tier', data.current_storage_tier || governance.current_storage_tier || 'do_not_store');
+  _setWitnessText('gov-receipt', data.last_receipt_path || governance.last_receipt_path || 'none');
+  _setWitnessText('gov-consent', data.consent_status || 'explicit consent required');
+  _setWitnessText('gov-observe', _policySummary(data.allowed_to_observe || governance.observation_policy));
+  _setWitnessText('gov-store', _policySummary(data.allowed_to_store || governance.storage_policy));
+  _setWitnessText('gov-forbidden', (data.forbidden_to_capture || governance.forbidden_behaviors || []).slice(0, 5).join(' | ') || 'none');
+}
+
+async function loadWitnessGovernanceStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/witness-governance'));
+    renderWitnessGovernance(await r.json());
+  } catch (e) {
+    _setWitnessText('gov-known', e.message);
+  }
+}
+
+function _governanceCommandBody(command) {
+  const body = {
+    command,
+    source_reference: '',
+    linked_path: '',
+    artifact_type: 'source_map_witness_governance',
+    why_it_mattered: '',
+    notes: 'Manual SourceMap Witness Governance UI command'
+  };
+  if (['link_this', 'write_receipt', 'preserve_this', 'forget_this'].includes(command)) {
+    const ref = window.prompt('Source reference or path for this governance receipt:', '');
+    if (ref === null) return null;
+    body.source_reference = ref;
+    body.linked_path = ref;
+  }
+  if (['write_receipt', 'preserve_this', 'forget_this'].includes(command)) {
+    const why = window.prompt('Why does this matter?', '');
+    if (why === null) return null;
+    body.why_it_mattered = why;
+  }
+  return body;
+}
+
+async function sendGovernanceCommand(command) {
+  const body = _governanceCommandBody(command);
+  if (!body) return;
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/witness-governance/command'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('gov-known', data.error || 'governance command blocked');
+      return;
+    }
+    renderWitnessGovernance(data);
+    if (data.receipt && data.receipt.receipt_path) {
+      _setWitnessText('gov-receipt', data.receipt.receipt_path);
+    }
+  } catch (e) {
+    _setWitnessText('gov-known', e.message);
+  }
+}
+
+async function showGovernanceKnown() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/witness-governance/known'));
+    const data = await r.json();
+    if (data.error) {
+      _setWitnessText('gov-known', data.error);
+      return;
+    }
+    const parts = [
+      'governance: ' + (data.governance_path || 'none'),
+      'sources: ' + (data.source_manifest_source_count == null ? 'unknown' : data.source_manifest_source_count),
+      'receipts: ' + ((data.recent_receipts || []).length),
+      data.uncertainty || ''
+    ];
+    _setWitnessText('gov-known', parts.join(' | '));
+  } catch (e) {
+    _setWitnessText('gov-known', e.message);
+  }
+}
+
+function renderLootDrops(data) {
+  if (!data) return;
+  if (data.error) {
+    _setWitnessText('loot-warnings', data.error);
+    return;
+  }
+  const latest = data.latest_lootdrop || null;
+  const ledger = data.ledger || {};
+  _setWitnessText('loot-latest', latest ? (latest.title || latest.lootdrop_id || 'LootDrop') : 'none');
+  _setWitnessText('loot-total', String(data.mindcoin_total ?? ledger.mindcoin_total ?? 0));
+  _setWitnessText('loot-reason', data.last_award_reason || ledger.last_award_reason || 'none');
+  _setWitnessText('loot-receipt', data.linked_receipt || 'none');
+  _setWitnessText('loot-artifact', latest ? (latest.artifact_path || 'written') : 'none');
+  _setWitnessText('lootdrop-notice', data.nonfinancial_notice || 'MindCoin is symbolic, local-only, nonfinancial, nontransferable, and has no cash, crypto, market, or exchange value.');
+  _setWitnessText('loot-warnings', 'none');
+}
+
+async function loadLootDropsStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/lootdrops'));
+    renderLootDrops(await r.json());
+  } catch (e) {
+    _setWitnessText('loot-warnings', e.message);
+  }
+}
+
+async function createManualLootDrop() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/lootdrops/manual'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('loot-warnings', data.error || 'LootDrop creation blocked');
+      return;
+    }
+    await loadLootDropsStatus();
+  } catch (e) {
+    _setWitnessText('loot-warnings', e.message);
+  }
+}
+
+async function writeLootDropReceipt() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/lootdrops/receipt'), { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('loot-warnings', data.error || 'LootDrop receipt blocked');
+      return;
+    }
+    _setWitnessText('loot-receipt', data.receipt_path || data.receipt_id || 'written');
+    await loadLootDropsStatus();
+  } catch (e) {
+    _setWitnessText('loot-warnings', e.message);
+  }
+}
+
+async function awardLootDropMindCoin() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/lootdrops/award'), { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('loot-warnings', data.error || 'MindCoin award blocked');
+      return;
+    }
+    _setWitnessText('loot-reason', data.reason || 'awarded');
+    await loadLootDropsStatus();
+  } catch (e) {
+    _setWitnessText('loot-warnings', e.message);
+  }
+}
+
+function renderActiveContext(data) {
+  if (!data) return;
+  if (data.error) {
+    _setWitnessText('ctx-warnings', data.error);
+    return;
+  }
+  const latest = data.latest || {};
+  const diff = latest.diff || {};
+  const sources = data.sources_loaded || [];
+  const warnings = data.warnings || latest.active_warnings || [];
+  _setWitnessText('ctx-refresh-time', data.last_refresh_time || latest.timestamp || 'none');
+  _setWitnessText('ctx-sources-loaded', String(sources.length || 0));
+  _setWitnessText('ctx-new-changes', String(data.new_changes_since_last_refresh ?? diff.new_items_detected ?? 0));
+  _setWitnessText('ctx-warnings', warnings.length ? warnings.join(' | ') : 'none');
+  _setWitnessText('ctx-reset-status', data.reset_status || (latest.conversation_reset ? 'Reset' : 'Not reset'));
+  _setWitnessText('ctx-latest-path', data.latest_context_path || 'none');
+}
+
+async function loadActiveContextStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/active-context'));
+    renderActiveContext(await r.json());
+  } catch (e) {
+    _setWitnessText('ctx-warnings', e.message);
+  }
+}
+
+async function refreshActiveContext() {
+  try {
+    const r = await fetch(apiUrl('/api/active-context/refresh'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: 'Manual SourceMap UI active context refresh' })
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('ctx-warnings', data.error || 'Active Context refresh blocked');
+      return;
+    }
+    renderActiveContext({
+      latest_context_path: data.latest_context_path,
+      latest: data.snapshot,
+      sources_loaded: data.sources_loaded || [],
+      last_refresh_time: data.snapshot && data.snapshot.timestamp,
+      new_changes_since_last_refresh: data.diff && data.diff.new_items_detected,
+      warnings: data.diff && data.diff.warnings,
+      reset_status: data.conversation_reset ? 'Reset' : 'Not reset'
+    });
+  } catch (e) {
+    _setWitnessText('ctx-warnings', e.message);
+  }
+}
+
+async function showActiveContextDiff() {
+  try {
+    const r = await fetch(apiUrl('/api/active-context/diff'));
+    const data = await r.json();
+    if (!r.ok || data.error) {
+      _setWitnessText('ctx-warnings', data.error || 'Context diff unavailable');
+      return;
+    }
+    const diff = data.diff || {};
+    const parts = [
+      'sources +' + ((diff.new_sources || []).length),
+      'updated ' + ((diff.updated_sources || []).length),
+      'receipts +' + ((diff.new_receipts || []).length),
+      'captures +' + ((diff.new_game_captures || []).length),
+      'loot +' + ((diff.new_lootdrops || []).length),
+      'tasks +' + ((diff.new_pending_tasks || []).length)
+    ];
+    _setWitnessText('ctx-new-changes', String(diff.new_items_detected || 0));
+    _setWitnessText('ctx-warnings', parts.join(' | '));
+    _setWitnessText('ctx-reset-status', data.conversation_reset ? 'Reset' : 'Not reset');
+  } catch (e) {
+    _setWitnessText('ctx-warnings', e.message);
+  }
+}
+
+function _formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (!bytes) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = bytes;
+  let idx = 0;
+  while (size >= 1024 && idx < units.length - 1) {
+    size = size / 1024;
+    idx += 1;
+  }
+  return (idx === 0 ? String(size) : size.toFixed(1)) + ' ' + units[idx];
+}
+
+function renderObsTranscript(data) {
+  if (!data) return;
+  if (data.error) {
+    _setWitnessText('obs-transcript-warnings', data.error);
+    return;
+  }
+  const scan = data.recording_scan || {};
+  const active = scan.active_recording || {};
+  if (data.active_recording_path) {
+    const size = active.size_bytes == null ? '' : ' | ' + _formatBytes(active.size_bytes);
+    _setWitnessText('obs-transcript-recording', data.active_recording_path + size);
+  } else {
+    _setWitnessText('obs-transcript-recording', 'no active OBS recording found');
+  }
+
+  const stack = data.local_transcript_stack || {};
+  const engines = stack.ready_engines || {};
+  const ready = Object.entries(engines).filter(([, enabled]) => enabled).map(([name]) => name);
+  _setWitnessText(
+    'obs-transcript-stack',
+    stack.can_transcribe_locally ? ('ready: ' + ready.join(', ')) : 'unavailable; cloud transcription refused'
+  );
+
+  const sidecars = data.transcript_sidecars || [];
+  _setWitnessText(
+    'obs-transcript-sidecars',
+    sidecars.length ? sidecars.map(item => item.path || item.suffix || 'sidecar').slice(0, 2).join(' | ') : 'none'
+  );
+
+  const latest = data.latest_transcript || {};
+  _setWitnessText('obs-transcript-latest', latest.path || latest.markdown_path || 'none');
+  const receipt = data.latest_receipt || {};
+  _setWitnessText('obs-transcript-receipt', receipt.receipt_path || 'none');
+  const warnings = data.warnings || [];
+  _setWitnessText('obs-transcript-warnings', warnings.length ? warnings.join(' | ') : 'none');
+}
+
+async function loadObsTranscriptStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/obs-transcript'));
+    renderObsTranscript(await r.json());
+  } catch (e) {
+    _setWitnessText('obs-transcript-warnings', e.message);
+  }
+}
+
+async function pullObsTranscript() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/obs-transcript/pull'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: 'Manual SourceMap UI pull request' })
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('obs-transcript-warnings', data.error || 'OBS transcript pull blocked');
+      return;
+    }
+    if (data.receipt && data.receipt.receipt_path) {
+      _setWitnessText('obs-transcript-receipt', data.receipt.receipt_path);
+    }
+    if (data.transcript && data.transcript.path) {
+      _setWitnessText('obs-transcript-latest', data.transcript.path);
+    }
+    const blocker = data.receipt && data.receipt.blocker;
+    if (blocker) _setWitnessText('obs-transcript-warnings', blocker);
+    await loadObsTranscriptStatus();
+  } catch (e) {
+    _setWitnessText('obs-transcript-warnings', e.message);
+  }
+}
+
+async function writeObsTranscriptReceipt() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/obs-transcript/receipt'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: 'Manual SourceMap UI transcript status receipt' })
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('obs-transcript-warnings', data.error || 'OBS transcript receipt blocked');
+      return;
+    }
+    _setWitnessText('obs-transcript-receipt', data.receipt_path || data.receipt_id || 'written');
+    await loadObsTranscriptStatus();
+  } catch (e) {
+    _setWitnessText('obs-transcript-warnings', e.message);
+  }
+}
 
 function _pickVoice() {
   const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
@@ -1373,7 +2094,11 @@ async function refreshPresence() {
     const r = await fetch(apiUrl('/api/presence'));
     if (!r.ok) return;
     const d = await r.json();
-    document.getElementById('pr-mode').textContent = d.mode || '—';
+    document.getElementById('pr-mode').textContent = d.lane_label || d.current_lane || 'Unified';
+    const boot = d.boot || {};
+    document.getElementById('pr-cognition').textContent = boot.cognition_mode || '—';
+    document.getElementById('pr-heartbeat').textContent =
+      boot.network_boundary ? ('boundary ' + boot.network_boundary) : 'grounded';
     document.getElementById('pr-mem').textContent = (d.memory_count == null ? '—' : d.memory_count);
     const ll = d.law_life || {};
     document.getElementById('pr-law').textContent = ll.law_status || '—';
@@ -1400,6 +2125,11 @@ async function init() {
   } catch {}
 
   await _applyLearnedUI();
+  loadRenderedRealityStatus().catch(() => {});
+  loadWitnessGovernanceStatus().catch(() => {});
+  loadLootDropsStatus().catch(() => {});
+  loadActiveContextStatus().catch(() => {});
+  loadObsTranscriptStatus().catch(() => {});
 
   refreshPresence();
   setInterval(refreshPresence, 5000);

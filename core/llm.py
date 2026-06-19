@@ -15,6 +15,7 @@ Set in .env (optional — defaults are local-first):
 """
 
 import os
+import urllib.parse
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -24,8 +25,25 @@ DEFAULT_OLLAMA_BASE        = "http://localhost:11434/v1"
 DEFAULT_CLOUD_MODEL        = "claude-sonnet-4-6"
 
 
+class OfflineNoModelError(RuntimeError):
+    """Raised when local-only cognition has no verified local model."""
+
+
+def is_force_local() -> bool:
+    """Return True when cloud fallback is explicitly forbidden."""
+    return os.getenv("ORACLE_FORCE_LOCAL", "false").lower() in ("1", "true", "yes", "on")
+
+
+def _is_loopback_url(url: str) -> bool:
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return host in ("localhost", "127.0.0.1", "::1")
+
+
 def is_local() -> bool:
     """Return True if running in local Ollama mode. Defaults to True (API-independent)."""
+    if is_force_local():
+        return True
     # Default is "true" — cloud requires explicit LOCAL_MODE=false opt-in
     return os.getenv("LOCAL_MODE", "true").lower() not in ("0", "false", "no")
 
@@ -48,6 +66,17 @@ def require_local(caller: str = "") -> None:
             "To restore independence: set LOCAL_MODE=true in .env (or remove LOCAL_MODE entirely). "
             "To intentionally use cloud: do not call require_local()."
         )
+    if is_force_local():
+        base = os.getenv("OLLAMA_BASE", DEFAULT_OLLAMA_BASE)
+        root = base.rstrip("/")
+        if root.endswith("/v1"):
+            root = root[:-3]
+        if not _is_loopback_url(root):
+            prefix = f"[{caller}] " if caller else ""
+            raise RuntimeError(
+                f"{prefix}API independence violated: ORACLE_FORCE_LOCAL=true but "
+                f"OLLAMA_BASE is not loopback ({root})."
+            )
 
 
 def get_model(vision: bool = False) -> str:
@@ -73,6 +102,20 @@ def get_model(vision: bool = False) -> str:
 def make_client():
     """Return the right SDK client for the current mode."""
     if is_local():
+        require_local("make_client")
+        try:
+            from boot_receipt import get_or_create_boot_receipt, offline_no_model_line
+            receipt = get_or_create_boot_receipt()
+            cognition = receipt.get("cognition", {})
+            if cognition.get("mode") == "offline_no_model":
+                raise OfflineNoModelError(offline_no_model_line())
+        except OfflineNoModelError:
+            raise
+        except Exception:
+            # Boot refusal is handled at runtime startup. If an older import path
+            # reaches here, keep the local client path rather than falling through
+            # to cloud.
+            pass
         try:
             from openai import OpenAI
         except ImportError:
@@ -83,6 +126,11 @@ def make_client():
             )
         base = os.getenv("OLLAMA_BASE", DEFAULT_OLLAMA_BASE)
         return OpenAI(base_url=base, api_key="ollama")
+
+    if is_force_local():
+        raise RuntimeError(
+            "API independence violated: ORACLE_FORCE_LOCAL=true blocks cloud model clients."
+        )
 
     # Cloud mode — anthropic is optional; only imported here
     try:
@@ -113,6 +161,8 @@ def check_ollama() -> tuple[bool, str]:
     root = base.rstrip("/")
     if root.endswith("/v1"):
         root = root[:-3]
+    if is_force_local() and not _is_loopback_url(root):
+        return False, f"Ollama base blocked under ORACLE_FORCE_LOCAL=true: {root}"
     try:
         with urllib.request.urlopen(root, timeout=2) as r:
             return True, f"Ollama reachable at {root}"
@@ -130,6 +180,14 @@ def startup_status() -> dict:
     local = is_local()
     model = get_model(vision=False)
     vision_model = get_model(vision=True)
+    receipt = None
+    cognition = {}
+    try:
+        from boot_receipt import get_or_create_boot_receipt
+        receipt = get_or_create_boot_receipt()
+        cognition = receipt.get("cognition", {})
+    except Exception:
+        cognition = {}
 
     # SOV1 / computer control availability
     try:
@@ -144,11 +202,20 @@ def startup_status() -> dict:
         sov1_msg = "unavailable (computer_control import failed)"
 
     status = {
-        "mode": "LOCAL" if local else "CLOUD",
-        "model": model,
+        "mode": (
+            "LOCAL"
+            if cognition.get("mode") == "local_only"
+            else ("OFFLINE_NO_MODEL" if local else "CLOUD")
+        ),
+        "cognition_mode": cognition.get("mode", "unknown"),
+        "model": cognition.get("verified_model_name") or model,
         "vision_model": vision_model if local else "N/A (cloud handles vision)",
         "sov1_available": sov1_ok,
         "sov1_msg": sov1_msg,
+        "network_boundary": cognition.get("network_boundary", "unknown"),
+        "boot_receipt_path": receipt.get("receipt_path") if receipt else None,
+        "latest_json_path": receipt.get("latest_path") if receipt else None,
+        "human_boot_line": receipt.get("human_boot_line") if receipt else None,
     }
 
     if local:
