@@ -1003,6 +1003,36 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "capture_lane"})
         return
 
+    _live_request = (
+        lower in ("/live", "/live start", "/live status", "/live stop", "live mode", "live privacy")
+        or "capture current live transmission state" in lower
+        or "live transmission receipt" in lower
+        or "live_transmission_latest.json" in lower
+        or "i'm transmitting right now" in lower
+        or "i’m transmitting right now" in lower
+        or "i am transmitting right now" in lower
+        or "i'm live" in lower
+        or "i’m live" in lower
+        or "i am live" in lower
+    )
+    if _live_request:
+        try:
+            from live_transmission import handle_live_command
+            command = lower if lower.startswith("/live") else "/live start"
+            result = handle_live_command(command, notes="unified ORACLE live transmission command")
+            text = result.get("response_text") or "Live transmission state updated."
+            receipt_path = result.get("receipt_path")
+            state_path = result.get("state_path")
+            if receipt_path:
+                text += f"\n\nReceipt: `{receipt_path}`"
+            if state_path:
+                text += f"\nState: `{state_path}`"
+        except Exception as exc:
+            text = f"Live transmission capture unavailable: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "capture_lane"})
+        return
+
     if (_unified_route or {}).get("detected_lane") == "guard_lane":
         if callable(format_lane_boundary):
             text = format_lane_boundary(_unified_route)
@@ -1341,6 +1371,20 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         yield _sse({"type": "done"})
         return
 
+    if lower.startswith("/storage-census"):
+        # Deterministic Python — governed read-only census. Never routed through the LLM.
+        try:
+            from storage_census import handle_command
+            parts = user_text.strip().split(maxsplit=2)
+            sub = parts[1] if len(parts) > 1 else "roots"
+            arg = parts[2].strip() if len(parts) > 2 else ""
+            text = handle_command(sub, arg)
+        except Exception as e:
+            text = f"Storage Census error: {type(e).__name__}: {e}"
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done"})
+        return
+
     if lower in ("/help", "help"):
         yield _sse({"type": "token", "text": (
             "**ORACLE Commands**\n\n"
@@ -1351,6 +1395,9 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             "| `/cognition` | Show Cognition Fabric tiers, model/fallback state, and cloud boundary |\n"
             "| `/retrieval-only` | Answer from local runtime/retrieval state without a model call |\n"
             "| `/retry-local` | Try the configured local model once, then fall back honestly |\n"
+            "| `/live start` | Capture metadata-only live transmission state and receipt |\n"
+            "| `/live status` | Show live privacy posture without starting capture |\n"
+            "| `/live stop` | Mark live transmission inactive without raw recording |\n"
             "| `/no-route` | Force all conversation local |\n"
             "| `/route-on` | Restore external routing |\n"
             "| `/capabilities` | Full broker matrix with live smoke receipts |\n"
@@ -2006,6 +2053,212 @@ async def api_obs_transcript_receipt(request: Request):
         return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
 
+def _multipart_unavailable(exc: Exception) -> JSONResponse:
+    return JSONResponse({
+        "error": f"multipart form parsing unavailable: {type(exc).__name__}: {exc}",
+        "needs": "python-multipart",
+        "hint": "pip install python-multipart, then restart the ORACLE server",
+    }, status_code=503)
+
+
+async def _intake_items_from_form(form, *, use_relpaths: bool):
+    """Decode Starlette UploadFile entries into file_intake.FileInput items."""
+    from file_intake import FileInput
+    uploads = form.getlist("files")
+    relpaths: list[str] = []
+    if use_relpaths:
+        raw = form.get("relpaths") or ""
+        if raw:
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    relpaths = [str(p) for p in parsed]
+            except Exception:
+                relpaths = []
+    items: list[Any] = []
+    for idx, up in enumerate(uploads):
+        try:
+            data = await up.read() if hasattr(up, "read") else b""
+        except Exception:
+            data = b""
+        name = getattr(up, "filename", None) or f"upload_{idx}"
+        rel = (relpaths[idx] if idx < len(relpaths) else name) if use_relpaths else None
+        items.append(FileInput(filename=name, data=data, relative_path=rel))
+    return items
+
+
+@app.post("/api/intake/files")
+async def api_intake_files(request: Request):
+    """Local multipart file intake. No cloud upload, no Drive sync, no commit/push."""
+    try:
+        form = await request.form()
+    except Exception as exc:
+        return _multipart_unavailable(exc)
+    try:
+        from file_intake import run_intake
+        items = await _intake_items_from_form(form, use_relpaths=False)
+        if not items:
+            return JSONResponse({"error": "no files received"}, status_code=400)
+        return JSONResponse(run_intake(items, is_folder=False))
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/intake/folder")
+async def api_intake_folder(request: Request):
+    """Local folder intake; preserves browser-provided relative paths."""
+    try:
+        form = await request.form()
+    except Exception as exc:
+        return _multipart_unavailable(exc)
+    try:
+        from file_intake import run_intake
+        items = await _intake_items_from_form(form, use_relpaths=True)
+        if not items:
+            return JSONResponse({"error": "no files received"}, status_code=400)
+        return JSONResponse(run_intake(items, is_folder=True))
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/intake/latest")
+async def api_intake_latest():
+    """Latest intake manifest + intake roots/limits. Read-only."""
+    try:
+        from file_intake import read_latest_manifest, status_payload
+        payload = status_payload()
+        payload["manifest"] = read_latest_manifest()
+        return JSONResponse(payload)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/intake/review")
+async def api_intake_review():
+    """Review intake state grouped by status and risk. Read-only."""
+    try:
+        from file_intake import review_intake
+        return JSONResponse(review_intake())
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/intake/promote")
+async def api_intake_promote(request: Request):
+    """Mark an intake entry promoted (Noah.Physical approval). No content load."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        from file_intake import promote_intake
+        intake_id = str(body.get("intake_id") or "")
+        if not intake_id:
+            return JSONResponse({"error": "intake_id required"}, status_code=400)
+        out = promote_intake(intake_id, override_quarantine=bool(body.get("override")))
+        return JSONResponse(out, status_code=200 if out.get("ok") else 400)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/intake/quarantine")
+async def api_intake_quarantine(request: Request):
+    """Mark an intake entry quarantined and write a receipt."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        from file_intake import quarantine_intake
+        intake_id = str(body.get("intake_id") or "")
+        if not intake_id:
+            return JSONResponse({"error": "intake_id required"}, status_code=400)
+        out = quarantine_intake(intake_id)
+        return JSONResponse(out, status_code=200 if out.get("ok") else 400)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/storage-census/roots")
+async def api_storage_census_roots():
+    """Governed storage roots: approved vs known-not-scanned. Read-only."""
+    try:
+        from storage_census import roots_payload
+        out = roots_payload()
+        return JSONResponse(out, status_code=503 if out.get("blocked") else 200)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/storage-census/scan-approved")
+async def api_storage_census_scan():
+    """Scan approved roots only. Discovery metadata; no ingestion, no mutation."""
+    try:
+        from storage_census import run_census
+        out = run_census()
+        return JSONResponse(out, status_code=503 if out.get("blocked") else 200)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/storage-census/report")
+async def api_storage_census_report():
+    """Latest census report payload. Read-only."""
+    try:
+        from storage_census import report_payload
+        out = report_payload()
+        return JSONResponse(out, status_code=503 if out.get("blocked") else 200)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/storage-census/risks")
+async def api_storage_census_risks():
+    """Credential-risk COUNT only. Never returns paths or contents."""
+    try:
+        from storage_census import risks_payload
+        out = risks_payload()
+        return JSONResponse(out, status_code=503 if out.get("blocked") else 200)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/storage-census/approve-root")
+async def api_storage_census_approve(request: Request):
+    """Approve a known root for deeper scanning (Noah.Physical authority)."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        from storage_census import approve_root
+        path = str(body.get("path") or "")
+        if not path:
+            return JSONResponse({"error": "path required"}, status_code=400)
+        out = approve_root(path)
+        return JSONResponse(out, status_code=200 if out.get("ok") else 400)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/storage-census/reject-root")
+async def api_storage_census_reject(request: Request):
+    """Reject a root so it is never scanned."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        from storage_census import reject_root
+        path = str(body.get("path") or "")
+        if not path:
+            return JSONResponse({"error": "path required"}, status_code=400)
+        out = reject_root(path)
+        return JSONResponse(out, status_code=200 if out.get("ok") else 400)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
 @app.get("/api/unified-oracle/route")
 async def api_unified_oracle_route():
     """Current unified ORACLE lane/safety status."""
@@ -2355,6 +2608,7 @@ async def api_presence():
         "law_life": None,
         "boot": None,
         "cognition_fabric": None,
+        "live_transmission": None,
     }
     try:
         mode_state = _get_mode_state()
@@ -2391,6 +2645,32 @@ async def api_presence():
             "current_cognition_tier": "unknown",
             "cloud_api_used": False,
             "conversation_reset": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    try:
+        from live_transmission import read_live_state
+        live_state = read_live_state()
+        out["live_transmission"] = {
+            "live_transmission_active": bool(live_state.get("live_transmission_active")),
+            "session_state": live_state.get("session_state"),
+            "privacy_posture": live_state.get("privacy_posture"),
+            "recommended_mode": live_state.get("recommended_mode"),
+            "raw_recording": live_state.get("raw_recording", "off"),
+            "state_path": live_state.get("state_path"),
+            "conversation_reset": False,
+            "cloud_api_used": False,
+            "upload": False,
+            "sync": False,
+            "drive_modified": False,
+            "onedrive_modified": False,
+            "git_commit": False,
+            "git_push": False,
+        }
+    except Exception as exc:
+        out["live_transmission"] = {
+            "live_transmission_active": False,
+            "privacy_posture": "unknown",
+            "raw_recording": "off",
             "error": f"{type(exc).__name__}: {exc}",
         }
     try:

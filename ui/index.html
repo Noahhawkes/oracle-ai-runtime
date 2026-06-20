@@ -908,6 +908,61 @@
         <button onclick="pullObsTranscript()">Pull local transcript</button>
         <button class="warn" onclick="writeObsTranscriptReceipt()">Write transcript receipt</button>
       </div>
+      <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
+        <h2>ORACLE Intake</h2>
+      </div>
+      <div class="witness-governance" id="intake-notice">
+        Local file intake only. Files are copied into C:\Oracle\state\inbox. ORACLE does not upload to cloud, sync Drive, commit, push, delete, move, or rename existing files. Files are not automatically memory: every upload lands in intake state first and nothing is promoted into memory without Noah.Physical approval. Dangerous executables and credential-risk files are quarantined and never stored.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>Last Intake</b><span id="intake-time">none</span></div>
+        <div class="witness-card"><b>Files Received</b><span id="intake-received">0</span></div>
+        <div class="witness-card"><b>Quarantined</b><span id="intake-quarantined">0</span></div>
+        <div class="witness-card"><b>Rejected</b><span id="intake-rejected">0</span></div>
+        <div class="witness-card"><b>Manifest Path</b><span id="intake-manifest">none</span></div>
+        <div class="witness-card"><b>Last Receipt</b><span id="intake-receipt">none</span></div>
+        <div class="witness-card"><b>Warnings</b><span id="intake-warnings">none</span></div>
+      </div>
+      <input type="file" id="intake-file-input" multiple style="display:none" onchange="handleIntakeFiles(this)">
+      <input type="file" id="intake-folder-input" webkitdirectory directory multiple style="display:none" onchange="handleIntakeFolder(this)">
+      <div class="witness-actions">
+        <button class="primary" onclick="document.getElementById('intake-file-input').click()">Add Files</button>
+        <button onclick="document.getElementById('intake-folder-input').click()">Add Folder</button>
+        <button onclick="reviewIntake()">Review Intake</button>
+        <button onclick="clearIntakeView()">Clear Intake View</button>
+        <button class="warn" onclick="showIntakeManifest()">Show Intake Manifest</button>
+      </div>
+      <div id="intake-results" class="witness-governance" style="white-space:pre-wrap;font-family:monospace;font-size:11px"></div>
+      <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
+        <h2>Storage Census</h2>
+      </div>
+      <div class="witness-governance" id="census-notice">
+        Governed, read-only discovery. Imports and obeys core/governance.py — it does not define new governance. Scans approved roots only (default C:\Oracle), metadata only. It never ingests content, uploads, syncs, deletes, moves, renames, commits, pushes, or auto-merges into the canonical SourceMap. Credential-risk files are reported as a count only; their contents are never read. Fails closed if governance is unavailable.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>Governance</b><span id="census-governance">unknown</span></div>
+        <div class="witness-card"><b>Governance Source</b><span id="census-gov-source">none</span></div>
+        <div class="witness-card"><b>Approved Roots Scanned</b><span id="census-approved">none</span></div>
+        <div class="witness-card"><b>Known Roots Not Scanned</b><span id="census-known">none</span></div>
+        <div class="witness-card"><b>ORACLE-related Candidates</b><span id="census-candidates">0</span></div>
+        <div class="witness-card"><b>Credential-risk (count only)</b><span id="census-credrisk">0</span></div>
+        <div class="witness-card"><b>Duplicate Candidates</b><span id="census-dupes">0</span></div>
+        <div class="witness-card"><b>Manifest Path</b><span id="census-manifest">none</span></div>
+        <div class="witness-card"><b>Last Receipt</b><span id="census-receipt">none</span></div>
+        <div class="witness-card"><b>Warnings</b><span id="census-warnings">none</span></div>
+      </div>
+      <div class="witness-actions">
+        <button class="primary" onclick="loadCensusRoots()">Show Roots</button>
+        <button onclick="scanApprovedCensus()">Scan Approved</button>
+        <button onclick="loadCensusReport()">Report</button>
+        <button onclick="loadCensusRisks()">Risks</button>
+      </div>
+      <div class="witness-actions">
+        <input type="text" id="census-root-input" placeholder="root path to approve/reject" style="flex:1;min-width:160px;padding:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px">
+        <button onclick="approveCensusRoot()">Approve Root</button>
+        <button class="warn" onclick="rejectCensusRoot()">Reject Root</button>
+      </div>
+      <div id="census-results" class="witness-governance" style="white-space:pre-wrap;font-family:monospace;font-size:11px"></div>
     </div>
   </div>
 
@@ -1355,6 +1410,8 @@ function toggleSourceMapPanel(force) {
     loadLootDropsStatus();
     loadActiveContextStatus();
     loadObsTranscriptStatus();
+    loadIntakeStatus();
+    loadCensusRoots();
   }
 }
 
@@ -1809,6 +1866,258 @@ async function writeObsTranscriptReceipt() {
   }
 }
 
+function _fmtBytes(n) {
+  n = Number(n) || 0;
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function renderIntakeStatus(data) {
+  if (!data) return;
+  const counts = data.counts || {};
+  _setWitnessText('intake-received', counts.received != null ? counts.received : 0);
+  _setWitnessText('intake-quarantined', counts.quarantined != null ? counts.quarantined : 0);
+  _setWitnessText('intake-rejected', counts.rejected != null ? counts.rejected : 0);
+  _setWitnessText('intake-manifest', data.latest_manifest_path || 'none');
+  if (data.credential_risk_detected) {
+    _setWitnessText('intake-warnings', 'credential-risk file detected, rotation/quarantine required');
+  }
+}
+
+async function loadIntakeStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/intake/latest'));
+    renderIntakeStatus(await r.json());
+  } catch (e) {
+    _setWitnessText('intake-warnings', e.message);
+  }
+}
+
+function _renderIntakeResult(data) {
+  if (!data) return;
+  if (data.error) {
+    _setWitnessText('intake-warnings', data.error + (data.needs ? ' (needs ' + data.needs + ')' : ''));
+    document.getElementById('intake-results').textContent = data.error + (data.hint ? '\n' + data.hint : '');
+    return;
+  }
+  const manifest = data.manifest || {};
+  const entries = manifest.entries || [];
+  _setWitnessText('intake-time', manifest.created_at || 'now');
+  _setWitnessText('intake-receipt', data.receipt_path || 'none');
+  renderIntakeStatus({
+    counts: manifest.counts,
+    latest_manifest_path: data.manifest_path,
+    credential_risk_detected: manifest.credential_risk_detected,
+  });
+  const lines = entries.map(e => {
+    const rel = e.relative_path ? e.relative_path : e.original_filename;
+    const flags = (e.risk_flags && e.risk_flags.length) ? e.risk_flags.join(',') : '-';
+    return [
+      e.status.toUpperCase().padEnd(11),
+      rel,
+      _fmtBytes(e.size_bytes),
+      e.extension || '-',
+      e.mime_guess || '-',
+      'sha256:' + String(e.sha256 || '').slice(0, 12),
+      'risk:' + flags,
+      '=> ' + (e.recommended_action || '-'),
+    ].join('  ');
+  });
+  let header = (data.oracle_response || '');
+  document.getElementById('intake-results').textContent =
+    (header ? header + '\n\n' : '') + lines.join('\n');
+}
+
+async function _postIntake(path, formData) {
+  _setWitnessText('intake-warnings', 'uploading…');
+  try {
+    const r = await fetch(apiUrl(path), { method: 'POST', body: formData });
+    const data = await r.json();
+    if (!r.ok) {
+      _renderIntakeResult(data);
+      return;
+    }
+    _setWitnessText('intake-warnings', 'none');
+    _renderIntakeResult(data);
+    await loadIntakeStatus();
+  } catch (e) {
+    _setWitnessText('intake-warnings', e.message);
+  }
+}
+
+function handleIntakeFiles(input) {
+  const files = Array.from(input.files || []);
+  if (!files.length) return;
+  const fd = new FormData();
+  files.forEach(f => fd.append('files', f, f.name));
+  _postIntake('/api/intake/files', fd);
+  input.value = '';
+}
+
+function handleIntakeFolder(input) {
+  const files = Array.from(input.files || []);
+  if (!files.length) return;
+  const fd = new FormData();
+  const relpaths = [];
+  files.forEach(f => {
+    fd.append('files', f, f.name);
+    relpaths.push(f.webkitRelativePath || f.name);
+  });
+  fd.append('relpaths', JSON.stringify(relpaths));
+  _postIntake('/api/intake/folder', fd);
+  input.value = '';
+}
+
+async function reviewIntake() {
+  try {
+    const r = await fetch(apiUrl('/api/intake/review'), { method: 'POST' });
+    const data = await r.json();
+    if (!data.has_intake) {
+      document.getElementById('intake-results').textContent = data.message || 'No intake yet.';
+      return;
+    }
+    const flagged = (data.flagged || []).map(f =>
+      f.status.toUpperCase() + '  ' + f.original_filename + '  risk:' + (f.risk_flags || []).join(',') + '  => ' + f.recommended_action
+    );
+    const status = Object.entries(data.by_status || {}).map(([k, v]) => k + '=' + v).join('  ');
+    document.getElementById('intake-results').textContent =
+      'Status: ' + status + '\nPromotion requires Noah.Physical approval.\n\n' +
+      (flagged.length ? 'Flagged:\n' + flagged.join('\n') : 'No risk-flagged files.');
+  } catch (e) {
+    _setWitnessText('intake-warnings', e.message);
+  }
+}
+
+function clearIntakeView() {
+  // UI-only: clears the on-screen list. Does not delete any stored file.
+  document.getElementById('intake-results').textContent = 'Intake view cleared (UI only — no files deleted).';
+}
+
+async function showIntakeManifest() {
+  try {
+    const r = await fetch(apiUrl('/api/intake/latest'));
+    const data = await r.json();
+    document.getElementById('intake-results').textContent =
+      JSON.stringify(data.manifest || data, null, 2);
+  } catch (e) {
+    _setWitnessText('intake-warnings', e.message);
+  }
+}
+
+function _censusBlocked(data) {
+  if (data && data.blocked) {
+    _setWitnessText('census-governance', 'BLOCKED');
+    document.getElementById('census-results').textContent = data.message || 'Storage Census blocked: governance state unavailable.';
+    return true;
+  }
+  return false;
+}
+
+async function loadCensusRoots() {
+  try {
+    const r = await fetch(apiUrl('/api/storage-census/roots'));
+    const data = await r.json();
+    if (_censusBlocked(data)) return;
+    _setWitnessText('census-governance', data.governance_loaded ? 'loaded' : 'unknown');
+    _setWitnessText('census-gov-source', data.governance_source || 'none');
+    _setWitnessText('census-approved', (data.approved_roots || []).join(', ') || 'none');
+    const known = (data.known_roots_not_scanned || []).map(k => k.path + ' (' + k.kind + ')');
+    _setWitnessText('census-known', known.join(' | ') || 'none');
+    document.getElementById('census-results').textContent =
+      'Approved roots:\n  ' + (data.approved_roots || []).join('\n  ') +
+      '\n\nKnown but NOT scanned (approval required):\n  ' + known.join('\n  ');
+  } catch (e) {
+    _setWitnessText('census-warnings', e.message);
+  }
+}
+
+async function scanApprovedCensus() {
+  _setWitnessText('census-warnings', 'scanning approved roots…');
+  try {
+    const r = await fetch(apiUrl('/api/storage-census/scan-approved'), { method: 'POST' });
+    const data = await r.json();
+    if (_censusBlocked(data)) return;
+    const c = data.counts || {};
+    _setWitnessText('census-governance', 'loaded');
+    _setWitnessText('census-gov-source', data.governance_source || 'none');
+    _setWitnessText('census-approved', (data.approved_roots_scanned || []).join(', ') || 'none');
+    _setWitnessText('census-known', (data.known_roots_not_scanned || []).join(' | ') || 'none');
+    _setWitnessText('census-candidates', c.oracle_related_candidates != null ? c.oracle_related_candidates : 0);
+    _setWitnessText('census-credrisk', c.credential_risk != null ? c.credential_risk : 0);
+    _setWitnessText('census-dupes', c.duplicate_candidates != null ? c.duplicate_candidates : 0);
+    _setWitnessText('census-manifest', data.manifest_path || 'none');
+    _setWitnessText('census-receipt', data.receipt_path || 'none');
+    _setWitnessText('census-warnings', (data.warnings || []).join(' | ') || 'none');
+    document.getElementById('census-results').textContent =
+      'Census complete (approved roots only). Files seen: ' + (c.files_seen || 0) +
+      '\nManifest: ' + (data.manifest_path || '') +
+      '\nReport: ' + (data.report_path || '') +
+      '\nCandidates: ' + (data.candidates_path || '') +
+      '\nReceipt: ' + (data.receipt_path || '') +
+      '\nNo content ingested. No files moved/deleted/renamed/uploaded/synced/committed/pushed.';
+  } catch (e) {
+    _setWitnessText('census-warnings', e.message);
+  }
+}
+
+async function loadCensusReport() {
+  try {
+    const r = await fetch(apiUrl('/api/storage-census/report'));
+    const data = await r.json();
+    if (_censusBlocked(data)) return;
+    if (!data.has_census) {
+      document.getElementById('census-results').textContent = data.message || 'No census yet.';
+      return;
+    }
+    const largest = (data.largest_folders || []).map(f => '  ' + f.folder + ' — ' + (f.bytes / (1024 * 1024)).toFixed(1) + ' MB');
+    const newest = (data.newest_files || []).map(f => '  ' + f.modified + '  ' + f.name + ' (' + f.classification + ')');
+    document.getElementById('census-results').textContent =
+      'Largest folders:\n' + largest.join('\n') + '\n\nNewest files:\n' + newest.join('\n') +
+      '\n\nCredential-risk (count only): ' + (data.credential_risk_count || 0);
+  } catch (e) {
+    _setWitnessText('census-warnings', e.message);
+  }
+}
+
+async function loadCensusRisks() {
+  try {
+    const r = await fetch(apiUrl('/api/storage-census/risks'));
+    const data = await r.json();
+    if (_censusBlocked(data)) return;
+    _setWitnessText('census-credrisk', data.credential_risk_count != null ? data.credential_risk_count : 0);
+    document.getElementById('census-results').textContent =
+      'Credential-risk files: ' + (data.credential_risk_count || 0) + ' (count only — contents never read).' +
+      (data.message ? '\n' + data.message : '');
+  } catch (e) {
+    _setWitnessText('census-warnings', e.message);
+  }
+}
+
+async function _censusRootAction(path) {
+  const input = document.getElementById('census-root-input');
+  const value = (input && input.value || '').trim();
+  if (!value) { _setWitnessText('census-warnings', 'enter a root path first'); return null; }
+  try {
+    const r = await fetch(apiUrl(path), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: value })
+    });
+    const data = await r.json();
+    if (_censusBlocked(data)) return null;
+    document.getElementById('census-results').textContent = JSON.stringify(data, null, 2);
+    await loadCensusRoots();
+    return data;
+  } catch (e) {
+    _setWitnessText('census-warnings', e.message);
+    return null;
+  }
+}
+
+function approveCensusRoot() { _censusRootAction('/api/storage-census/approve-root'); }
+function rejectCensusRoot() { _censusRootAction('/api/storage-census/reject-root'); }
+
 function _pickVoice() {
   const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
   if (!voices.length) return null;
@@ -2094,7 +2403,9 @@ async function refreshPresence() {
     const r = await fetch(apiUrl('/api/presence'));
     if (!r.ok) return;
     const d = await r.json();
-    document.getElementById('pr-mode').textContent = d.lane_label || d.current_lane || 'Unified';
+    const live = d.live_transmission || {};
+    document.getElementById('pr-mode').textContent =
+      live.live_transmission_active ? 'Capture' : (d.lane_label || d.current_lane || 'Unified');
     const boot = d.boot || {};
     const fabric = d.cognition_fabric || {};
     const cogEl = document.getElementById('pr-cognition');
@@ -2107,7 +2418,9 @@ async function refreshPresence() {
       'conversation_reset: false'
     ].filter(Boolean).join(' | ');
     document.getElementById('pr-heartbeat').textContent =
-      boot.network_boundary ? ('boundary ' + boot.network_boundary) : 'grounded';
+      live.live_transmission_active
+        ? 'LIVE PRIVACY ELEVATED · RAW RECORDING OFF · LOCAL ONLY'
+        : (boot.network_boundary ? ('boundary ' + boot.network_boundary) : 'grounded');
     document.getElementById('pr-mem').textContent = (d.memory_count == null ? '—' : d.memory_count);
     const ll = d.law_life || {};
     document.getElementById('pr-law').textContent = ll.law_status || '—';
