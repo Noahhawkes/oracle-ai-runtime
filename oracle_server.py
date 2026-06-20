@@ -1193,17 +1193,27 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "sov1_handoff"})
         return
 
+    # Live-transmission phrases must be the *dominant* intent — matched as the
+    # whole message or its start (after an optional "ORACLE,"), never as a buried
+    # substring. Otherwise a carried/sticky status line like "...capture current
+    # live transmission state..." hijacks routing for unrelated requests such as
+    # "Write a book on my Dad".
+    _live_norm = lower.strip()
+    if _live_norm.startswith("oracle,"):
+        _live_norm = _live_norm[len("oracle,"):].strip()
+    _live_start_phrases = (
+        "capture current live transmission state",
+        "live transmission receipt",
+        "i'm transmitting right now",
+        "i’m transmitting right now",
+        "i am transmitting right now",
+    )
+    _live_exact = {"i'm live", "i’m live", "i am live", "live mode", "live privacy"}
     _live_request = (
         lower in ("/live", "/live start", "/live status", "/live stop", "live mode", "live privacy")
-        or "capture current live transmission state" in lower
-        or "live transmission receipt" in lower
         or "live_transmission_latest.json" in lower
-        or "i'm transmitting right now" in lower
-        or "i’m transmitting right now" in lower
-        or "i am transmitting right now" in lower
-        or "i'm live" in lower
-        or "i’m live" in lower
-        or "i am live" in lower
+        or _live_norm in _live_exact
+        or any(_live_norm.startswith(p) for p in _live_start_phrases)
     )
     if _live_request:
         try:
