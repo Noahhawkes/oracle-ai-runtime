@@ -5,10 +5,10 @@ Serves the ChatGPT-style frontend and handles chat via Server-Sent Events.
 
 Run:
     python oracle_server.py
-    python oracle_server.py --port 7777
-    python oracle_server.py --host 0.0.0.0 --port 7777
+    python oracle_server.py --port 7781
+    python oracle_server.py --host 0.0.0.0 --port 7781
 
-Then open: http://localhost:7777
+Then open: http://localhost:7781
 """
 
 from __future__ import annotations
@@ -61,6 +61,8 @@ if sys.stdout is None or sys.stderr is None:
             sys.stderr = _null
 
 import re as _re
+
+import runtime_config
 
 try:
     from boot_receipt import (
@@ -172,6 +174,30 @@ _mode: str = "companion"          # companion | builder
 _no_route: bool = False
 _retrieval_only_mode: bool = False
 _active_context_latest: dict[str, Any] | None = None
+_pending_guard_route: dict[str, Any] | None = None
+
+def _is_approval_followup(text: str) -> bool:
+    try:
+        from unified_oracle_router import is_approval_followup
+        return is_approval_followup(text)
+    except Exception:
+        cleaned = _re.sub(r"\s+", " ", str(text or "").strip().lower()).strip(" .!?:;")
+        return cleaned in {"approve", "approved", "yes approved", "i approve", "go ahead", "do it"}
+
+
+def _approval_followup_response(pending_route: dict[str, Any] | None) -> str:
+    if not pending_route:
+        return (
+            "Approval received, but no pending executable Guard action is bound. "
+            "Restate the exact target, action, and boundary."
+        )
+    excerpt = pending_route.get("user_message_excerpt") or "UNKNOWN"
+    route_id = pending_route.get("route_id") or "UNKNOWN"
+    return (
+        f"Approval received for pending Guard route `{route_id}`: {excerpt}\n\n"
+        "No executable action is bound to a bare approval in the web runtime. "
+        "Restate the exact target, action, and boundary, and I will route it through the correct guarded handler."
+    )
 
 def _boot():
     global _session_id, _active_context_latest
@@ -198,13 +224,17 @@ def _boot():
         print("[Boot] Presence daemon started")
     except Exception as e:
         print(f"[Boot] Presence daemon not available: {e}")
-    # Start MiracleDrive index in background (non-blocking)
-    try:
-        from miracledrive_index import start_background_index
-        start_background_index()
-        print("[Boot] MiracleDrive index build started in background")
-    except Exception as e:
-        print(f"[Boot] MiracleDrive index not available: {e}")
+    # Start MiracleDrive index in background (non-blocking) unless a task has
+    # explicitly locked Drive out of scope for this runtime start.
+    if os.environ.get("ORACLE_DISABLE_MIRACLEDRIVE_BOOT") == "1":
+        print("[Boot] MiracleDrive index DISABLED by ORACLE_DISABLE_MIRACLEDRIVE_BOOT=1")
+    else:
+        try:
+            from miracledrive_index import start_background_index
+            start_background_index()
+            print("[Boot] MiracleDrive index build started in background")
+        except Exception as e:
+            print(f"[Boot] MiracleDrive index not available: {e}")
     # Initialize learning ledger
     try:
         from learning import get_ui_hints as _lrn_ping
@@ -372,17 +402,23 @@ def _fabric_local_model_runner(prompt: str) -> str:
 
 
 def _fabric_model_failure_fallback(reply: str, user_text: str, route: dict[str, Any]) -> str:
-    """Replace local model timeout/busy text with cognition fabric fallback text."""
-    try:
-        from cognition_fabric import fallback_response, is_model_failure_text
+    """On local model timeout/busy, return the helpful command-routing fallback.
 
+    Replaces the old generic 'dead-fish' blob with a structured response that
+    points at the commands and UX cards that still work without the model.
+    """
+    try:
+        from cognition_fabric import is_model_failure_text
         if is_model_failure_text(reply):
-            return fallback_response(
-                user_text,
-                route,
-                {},
-                reason="the local model did not answer before timeout",
-            )["response_text"]
+            try:
+                from ui_experience import improved_fallback
+                return improved_fallback(user_text)
+            except Exception:
+                from cognition_fabric import fallback_response
+                return fallback_response(
+                    user_text, route, {},
+                    reason="the local model did not answer before timeout",
+                )["response_text"]
     except Exception:
         pass
     return reply
@@ -471,7 +507,7 @@ def _source_disciplined_response(user_text: str, bootstrap: Any, history: list[d
         runtime = frame.get("runtime", {})
         return (
             "VERIFIED [RUNTIME_STATE]: I am here in unified ORACLE mode on the local ORACLE runtime. "
-            f"Session `{(runtime.get('session_id') or {}).get('value') or _session_id}` is active on `localhost:7777`."
+            f"Session `{(runtime.get('session_id') or {}).get('value') or _session_id}` is active on `{runtime_config.runtime_authority()}`."
         )
 
     if lower.strip(" ?!.") in ("any updates", "updates", "status update"):
@@ -752,8 +788,8 @@ def _runtime_diagnostics() -> dict:
             "dirty": _run_git(["status", "--short"]) != "",
         },
         "server": {
-            "host": "127.0.0.1",
-            "port": 7777,
+            "host": runtime_config.runtime_host(),
+            "port": runtime_config.runtime_port(),
             "mode": _mode,
             "no_route": _no_route,
             "session_id": _session_id,
@@ -865,7 +901,7 @@ def _deterministic_runtime_answer(user_text: str) -> str | None:
             sid = (runtime.get("session_id") or {}).get("value") or _session_id
             return (
                 "VERIFIED [RUNTIME_STATE]: I am here on the local ORACLE runtime. "
-                f"Session `{sid}` is active on `localhost:7777`."
+                f"Session `{sid}` is active on `{runtime_config.runtime_authority()}`."
             )
         except Exception as exc:
             return f"UNAVAILABLE [RUNTIME_STATE]: Runtime accessor failed: {type(exc).__name__}: {exc}"
@@ -914,13 +950,46 @@ def _deterministic_runtime_answer(user_text: str) -> str | None:
 
 
 async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
-    global _mode, _no_route, _retrieval_only_mode, _history
+    global _mode, _no_route, _retrieval_only_mode, _history, _pending_guard_route
 
     def _sse(data: dict) -> str:
         return f"data: {json.dumps(data)}\n\n"
 
     # ── Slash commands ────────────────────────────────────────────────────────
     lower = user_text.strip().lower()
+    if _is_approval_followup(user_text):
+        try:
+            from unified_oracle_router import handle_guard_approval_followup
+            approval_result = handle_guard_approval_followup(user_text, write_receipt=True)
+            pending = approval_result.get("pending") or _pending_guard_route
+            text = approval_result.get("response_text") or _approval_followup_response(pending)
+            receipt_path = (approval_result.get("receipt") or {}).get("receipt_path")
+            if approval_result.get("approved"):
+                _pending_guard_route = None
+        except Exception:
+            pending = _pending_guard_route
+            text = _approval_followup_response(pending)
+            receipt_path = None
+        yield _sse({
+            "type": "route",
+            "mode": "unified_oracle",
+            "lane": "guard_lane",
+            "lane_label": "Guard",
+            "safety_status": "Approval Required",
+            "route_path": (pending or {}).get("route_path"),
+            "receipt_path": receipt_path,
+            "conversation_reset": False,
+        })
+        yield _sse({"type": "token", "text": text})
+        _history.append({"role": "assistant", "content": text})
+        try:
+            from memory import save_message
+            save_message(_session_id, "assistant", text)
+        except Exception:
+            pass
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "guard_approval"})
+        return
+
     try:
         from unified_oracle_router import format_lane_boundary, route_message
         _unified_route_result = route_message(user_text, notes="chat turn classified by unified ORACLE router")
@@ -1003,6 +1072,127 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "capture_lane"})
         return
 
+    if lower in (
+        "/profile-capsule",
+        "/profile-capsule substrate-identity-governance",
+        "/substrate-identity-governance",
+        "profile capsule",
+        "substrate-independent identity governance",
+    ):
+        try:
+            from profile_capsule import ensure_substrate_identity_governance_candidate, format_profile_capsule
+
+            result = ensure_substrate_identity_governance_candidate(notes="web runtime profile capsule request")
+            text = format_profile_capsule(result.get("candidate"))
+            receipt = result.get("receipt") or {}
+            if receipt.get("receipt_path"):
+                text += f"\n\nreceipt_written: {receipt['receipt_path']}"
+        except Exception as exc:
+            text = f"Profile capsule unavailable: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": f"```\n{text}\n```"})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "profile_capsule"})
+        return
+
+    if lower in ("/sov1-status", "sov1 status", "sov1 hands", "hands status", "/desktop-targets"):
+        try:
+            import computer_control as cc
+            from actuation_engine import ACTION_DRY_RUN, ActuationRequest, execute
+            from desktop_ai_bridge import format_target_list, list_targets_with_status
+
+            dry_run = execute(ActuationRequest(action_type=ACTION_DRY_RUN, dry_run=True))
+            hands_line = "ready" if getattr(cc, "HANDS_AVAILABLE", False) else "offline"
+            text = (
+                "SOV1 HANDS STATUS\n"
+                f"computer_control: {hands_line}\n"
+                f"actuation_dry_run: {bool(getattr(dry_run, 'dry_run', False))}\n"
+                f"actuation_success: {bool(getattr(dry_run, 'success', False))}\n"
+                f"scope_blocked: {bool(getattr(dry_run, 'scope_blocked', False))}\n"
+                f"stopped_reason: {getattr(dry_run, 'stopped_reason', '')}\n\n"
+                "Commands:\n"
+                "  /ask-sov1 <goal>     stage a governed SOV1 hands task\n"
+                "  /send-staged         review the staged SOV1 task\n"
+                "  /send-staged yes     confirm the SOV1 handoff\n\n"
+                + format_target_list(list_targets_with_status())
+            )
+        except Exception as exc:
+            text = f"SOV1 hands status unavailable: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": f"```\n{text}\n```"})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "sov1_status"})
+        return
+
+    if lower.startswith("/ask-sov1 ") or lower.startswith("/sov1 "):
+        command_prefix = "/ask-sov1 " if lower.startswith("/ask-sov1 ") else "/sov1 "
+        prompt_text = user_text.strip()[len(command_prefix):].strip()
+        if not prompt_text:
+            text = "Usage: `/ask-sov1 <task for SOV1 computer-use>`"
+            yield _sse({"type": "token", "text": text})
+            yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "sov1_stage"})
+            return
+        try:
+            from unified_oracle_router import classify_intent, format_lane_boundary, write_pending_guard_approval, write_route
+
+            sov1_route = classify_intent(prompt_text)
+            if sov1_route.get("detected_lane") == "guard_lane":
+                sov1_route = write_route(sov1_route)
+                _pending_guard_route = write_pending_guard_approval(sov1_route)
+                text = format_lane_boundary(sov1_route)
+                yield _sse({"type": "token", "text": text})
+                yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "guard_lane"})
+                return
+        except Exception:
+            pass
+        try:
+            from desktop_ai_bridge import stage_prompt
+
+            sp = stage_prompt("sov1", prompt_text, source="web")
+            text = (
+                "[STAGED] SOV1 hands task is staged locally.\n"
+                "Target: SOV1 Computer Use\n"
+                f"Stage ID: `{sp.id}`\n"
+                f"Preview: {sp.prompt[:180]}{'...' if len(sp.prompt) > 180 else ''}\n\n"
+                "No desktop action has run yet. Type `/send-staged` to review, then `/send-staged yes` to confirm the handoff."
+            )
+        except Exception as exc:
+            text = f"[BLOCKED] SOV1 staging failed: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "sov1_stage"})
+        return
+
+    if lower in ("/send-staged", "/send-staged yes", "/send-staged approve"):
+        try:
+            from desktop_ai_bridge import TARGETS, load_staged, send_staged
+
+            sp = load_staged()
+            if sp is None or sp.sent:
+                text = "No staged SOV1 task is waiting. Use `/ask-sov1 <goal>` first."
+            elif sp.target != "sov1":
+                target_name = TARGETS.get(sp.target, type("T", (), {"name": sp.target})()).name
+                text = (
+                    f"A staged prompt exists for {target_name}, not SOV1. "
+                    "Web confirmation is currently limited to SOV1 hands."
+                )
+            elif lower == "/send-staged":
+                text = (
+                    "[SOV1 STAGED TASK - PENDING CONFIRMATION]\n"
+                    f"Stage ID: `{sp.id}`\n"
+                    f"Risk: {sp.risk}\n"
+                    f"Prompt: {sp.prompt[:500]}{'...' if len(sp.prompt) > 500 else ''}\n\n"
+                    "To confirm this SOV1 handoff, type `/send-staged yes`."
+                )
+            else:
+                result = send_staged(confirmed=True)
+                text = (
+                    "[SOV1 HANDOFF CONFIRMED]\n"
+                    f"Detail: {result.get('detail', '')}\n"
+                    f"Next: {result.get('next_action', '')}\n\n"
+                    "No Drive, cloud, credential, commit, push, upload, or delete action was performed by this confirmation."
+                )
+        except Exception as exc:
+            text = f"[BLOCKED] SOV1 handoff failed: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "sov1_handoff"})
+        return
+
     _live_request = (
         lower in ("/live", "/live start", "/live status", "/live stop", "live mode", "live privacy")
         or "capture current live transmission state" in lower
@@ -1033,7 +1223,13 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "capture_lane"})
         return
 
-    if (_unified_route or {}).get("detected_lane") == "guard_lane":
+    if (_unified_route or {}).get("detected_lane") == "guard_lane" and not lower.startswith("/"):
+        _pending_guard_route = dict(_unified_route)
+        try:
+            from unified_oracle_router import write_pending_guard_approval
+            _pending_guard_route = write_pending_guard_approval(_unified_route)
+        except Exception:
+            pass
         if callable(format_lane_boundary):
             text = format_lane_boundary(_unified_route)
         else:
@@ -1103,6 +1299,58 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         yield _sse({"type": "token", "text": _pending_list_text()})
         yield _sse({"type": "done", "mode": _mode})
         return
+
+    if lower in ("/ingest-oracle-files", "/ingest-oracle", "ingest oracle files"):
+        try:
+            from intake_pipeline import build_intake, format_intake_summary
+            summary = await asyncio.to_thread(build_intake)
+            text = format_intake_summary(summary)
+            pending_n = summary.get("pending_promotions", 0)
+        except Exception as exc:
+            text = f"Governed intake unavailable: {type(exc).__name__}: {exc}"
+            pending_n = 0
+        lane = "guard_lane" if pending_n else "capture_lane"
+        yield _sse({
+            "type": "route", "mode": "unified_oracle", "lane": lane,
+            "lane_label": "Guard" if pending_n else "Capture",
+            "safety_status": "Approval Required" if pending_n else "Safe",
+            "conversation_reset": False,
+        })
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "intake_pipeline"})
+        return
+
+    if lower.split(" ")[0] == "/alive" and lower in ("/alive", "/alive status", "/alive on", "/alive off"):
+        try:
+            import alive_loop
+            arg = lower[len("/alive"):].strip()
+            if arg == "on":
+                alive_loop.start()
+            elif arg == "off":
+                alive_loop.stop()
+            text = alive_loop.format_status_line()
+        except Exception as exc:
+            text = f"Alive loop unavailable: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "alive_loop"})
+        return
+
+    if lower.split(" ")[0] in ("/trusted-build", "/session-authorize"):
+        cmd = lower.split(" ")[0]
+        if lower in (cmd, f"{cmd} status", f"{cmd} on", f"{cmd} off"):
+            try:
+                from trusted_build import set_trusted_build, format_status_line
+                arg = lower[len(cmd):].strip()
+                if arg == "on":
+                    set_trusted_build(True)
+                elif arg == "off":
+                    set_trusted_build(False)
+                text = format_status_line()
+            except Exception as exc:
+                text = f"Trusted build / session authorization unavailable: {type(exc).__name__}: {exc}"
+            yield _sse({"type": "token", "text": text})
+            yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "trusted_build"})
+            return
 
     if lower in ("/capabilities", "capabilities"):
         try:
@@ -1398,6 +1646,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             "| `/live start` | Capture metadata-only live transmission state and receipt |\n"
             "| `/live status` | Show live privacy posture without starting capture |\n"
             "| `/live stop` | Mark live transmission inactive without raw recording |\n"
+            "| `/profile-capsule` | Show/create the local substrate-identity governance profile candidate |\n"
             "| `/no-route` | Force all conversation local |\n"
             "| `/route-on` | Restore external routing |\n"
             "| `/capabilities` | Full broker matrix with live smoke receipts |\n"
@@ -1492,7 +1741,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             pass
         return
 
-    if (_unified_route or {}).get("detected_lane") == "build_lane":
+    if (_unified_route or {}).get("detected_lane") == "build_lane" and not lower.startswith("/"):
         try:
             from cognition_fabric import TIER_PENDING_ACTION, run_cognition
             result = run_cognition(user_text, _unified_route, {}, force_tier=TIER_PENDING_ACTION)
@@ -1540,6 +1789,64 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     # ── Deterministic runtime/sight answers (no LLM, both modes) ──────────────
     # Presence, active task, and sight questions must never hit the slow model or
     # depend on bootstrap. They answer from canonical accessors or a bounded error.
+    # ── Witness Artifact Lane: screenshot drop + witness mode (no model) ──────
+    if lower.startswith("/screenshot-drop") or lower.startswith("/witness "):
+        try:
+            import witness_artifacts as wa
+            raw = user_text.strip()
+            if lower.startswith("/screenshot-drop"):
+                arg = raw[len("/screenshot-drop"):].strip()
+                if not arg:
+                    wtext = "Usage: `/screenshot-drop <path-to-image>` (optionally `| note`)"
+                else:
+                    path_part, _, note_part = arg.partition("|")
+                    wtext = wa.format_drop(wa.drop_screenshot(path_part.strip(), note=note_part.strip()))
+            else:  # /witness <text>
+                note_text = raw[len("/witness"):].strip()
+                wtext = wa.format_drop(wa.drop_witness_note(note_text)) if note_text else "Usage: `/witness <what you want witnessed>`"
+        except Exception as exc:
+            wtext = f"Witness artifact lane unavailable: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": wtext})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "witness_artifacts"})
+        return
+
+    if lower in ("/witness-vault", "/witness-status", "/witness"):
+        try:
+            import witness_artifacts as wa
+            wtext = wa.format_status()
+        except Exception as exc:
+            wtext = f"Witness artifact lane unavailable: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": wtext})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "witness_artifacts"})
+        return
+
+    # ── UI Experience: explicit cards + natural-language aliases (no model) ────
+    if lower in ("/evidence-vault", "/context-recall", "/ui-patch"):
+        try:
+            import ui_experience
+            if lower == "/evidence-vault":
+                ux_text = ui_experience.evidence_vault()
+            elif lower == "/context-recall":
+                ux_text = ui_experience.context_recall()
+            else:
+                ux_text = ui_experience.ui_patch()
+        except Exception as exc:
+            ux_text = f"UI experience layer unavailable: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": ux_text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "ui_experience"})
+        return
+
+    try:
+        import ui_experience
+        _ux = ui_experience.route_phrase(user_text)
+    except Exception:
+        _ux = None
+    if _ux is not None:
+        yield _sse({"type": "token", "text": _ux["text"]})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": f"ui_{_ux['kind']}"})
+        _history.append({"role": "assistant", "content": _ux["text"]})
+        return
+
     _det = _deterministic_runtime_answer(user_text)
     if _det is not None:
         _det = _strip_routing_artifacts(_det, _mode)
@@ -2325,6 +2632,30 @@ async def api_active_context_diff():
         return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
 
+@app.get("/api/profile-capsule/substrate-identity-governance")
+async def api_profile_capsule_substrate_identity_governance():
+    """Read the local profile capsule candidate. No durable memory promotion."""
+    try:
+        from profile_capsule import status_payload
+        return JSONResponse(status_payload(create=False))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/profile-capsule/substrate-identity-governance")
+async def api_create_profile_capsule_substrate_identity_governance(request: Request):
+    """Create the local profile capsule candidate and receipt only."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        from profile_capsule import status_payload
+        return JSONResponse(status_payload(create=True, notes=str(body.get("notes") or "api profile capsule request")))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
 @app.post("/api/camera/authorize")
 async def api_camera_authorize(request: Request):
     """
@@ -2977,13 +3308,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ORACLE Web UI")
     parser.add_argument("--host", default=None,
                         help="Bind address. Defaults to 127.0.0.1; use --remote to bind 0.0.0.0.")
-    parser.add_argument("--port", type=int, default=7777)
+    parser.add_argument("--port", type=int, default=runtime_config.DEFAULT_RUNTIME_PORT)
     parser.add_argument("--remote", action="store_true",
                         help="Bind to 0.0.0.0 for LAN/Tailscale access. Requires --token or ORACLE_TOKEN.")
     parser.add_argument("--token", default=None,
                         help="Bearer token required on every request when --remote is set.")
     parser.add_argument("--source-discipline-smoke-test", action="store_true")
     args = parser.parse_args()
+
+    # Record the actually-bound port so in-process diagnostics, receipts, and
+    # health checks all report this exact port (single source of truth).
+    runtime_config.set_runtime_port(args.port)
 
     if args.source_discipline_smoke_test:
         raise SystemExit(_source_discipline_smoke_test())

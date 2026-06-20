@@ -1,14 +1,14 @@
 {
   "name": "oracle-ai",
   "version": "1.0.0",
-  "description": "ORACLE.AI — preview config only. Production server is python oracle_server.py --port 7777",
+  "description": "ORACLE.AI — preview config only. Production server is python oracle_server.py --port 7781",
   "scripts": {
     "start": "python oracle_server.py --port 7778",
     "dev": "python oracle_server.py --port 7778"
   },
   "oracle": {
-    "productionPort": 7777,
+    "productionPort": 7781,
     "previewPort": 7778,
-    "note": "Port 7777 is the live ORACLE server. Preview uses 7778 to avoid conflicts."
+    "note": "Port 7781 is the live ORACLE server. Preview uses 7778 to avoid conflicts."
   }
 }

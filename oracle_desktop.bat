@@ -21,7 +21,7 @@ REM Double-click to start ORACLE in the browser.
 REM If the server is already running, just open the tab.
 REM Errors are logged to Logs\oracle_startup.log
 
-set PORT=7777
+set PORT=7781
 set URL=http://localhost:%PORT%
 set LOGFILE=%~dp0Logs\oracle_startup.log
 set PYTHON_EXE=%LOCALAPPDATA%\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\pythonw.exe

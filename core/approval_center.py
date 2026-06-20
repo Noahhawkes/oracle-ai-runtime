@@ -163,6 +163,25 @@ def _pending_obs() -> list[dict]:
     ]
 
 
+def _pending_intake() -> list[dict]:
+    """Governed file-intake promotions awaiting Noah.Physical approval."""
+    try:
+        from intake_pipeline import list_pending_promotions
+        return [
+            {
+                "source": "intake",
+                "id": p.get("sha256", ""),
+                "title": f"{p.get('classification', 'unknown')}: {p.get('filename', '')}"[:80],
+                "status": "pending",
+                "created_at": p.get("created_at", ""),
+                "original_path": p.get("original_path", ""),
+            }
+            for p in list_pending_promotions()
+        ]
+    except Exception:
+        return []
+
+
 def list_pending() -> list[dict]:
     """Return all pending items across all sources, sorted by created_at."""
     items = (
@@ -171,6 +190,7 @@ def list_pending() -> list[dict]:
         + _pending_mindcoin()
         + _pending_action_candidates()
         + _pending_obs()
+        + _pending_intake()
     )
     return sorted(items, key=lambda x: x.get("created_at", ""))
 
@@ -333,9 +353,19 @@ def approve(candidate_id: str, source: str = "", approved_by: str = "noah") -> d
             "error": "[BLOCKED] Item contains a secret/credential pattern and cannot be approved. It has been auto-rejected.",
         }
 
-    sources_to_try = [source] if source else ["action_candidate", "memory", "video", "mindcoin", "obs"]
+    sources_to_try = [source] if source else ["intake", "action_candidate", "memory", "video", "mindcoin", "obs"]
     for src in sources_to_try:
-        if src == "action_candidate":
+        if src == "intake":
+            try:
+                from intake_pipeline import promote
+                res = promote(candidate_id, approved_by=approved_by)
+                if res.get("ok"):
+                    return {"ok": True, "source": "intake", "id": candidate_id,
+                            "approved_by": approved_by, "approved_at": _NOW(),
+                            "approved_path": res.get("approved_path")}
+            except Exception:
+                pass
+        elif src == "action_candidate":
             if _approve_action_candidate(candidate_id, approved_by):
                 return {"ok": True, "source": "action_candidate", "id": candidate_id,
                         "approved_by": approved_by, "approved_at": _NOW()}
@@ -506,6 +536,8 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="ORACLE Approval Center")
     parser.add_argument("--smoke-test", action="store_true")
+    parser.add_argument("--smoke-test-session-authorization", action="store_true",
+                        help="Run the Scoped Capability Broker / session-authorization smoke tests")
     parser.add_argument("--list", action="store_true", help="List pending approvals")
     parser.add_argument("--approve", metavar="ID", help="Approve candidate by id")
     parser.add_argument("--reject", metavar="ID", help="Reject candidate by id")
@@ -515,7 +547,10 @@ if __name__ == "__main__":
     parser.add_argument("--source", default="", help="Narrow source: action_candidate/memory/video/mindcoin")
     args = parser.parse_args()
 
-    if args.smoke_test:
+    if args.smoke_test_session_authorization:
+        from pending_actions import run_smoke_tests as _broker_smoke
+        sys.exit(_broker_smoke())
+    elif args.smoke_test:
         sys.exit(run_smoke_tests())
     elif args.list:
         _cli_list()

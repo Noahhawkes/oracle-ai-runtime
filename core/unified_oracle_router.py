@@ -24,6 +24,7 @@ STATE_ROOT = Path(RATIFIED_STATE_ROOT)
 ROUTING_DIR = STATE_ROOT / "routing"
 RECEIPTS_DIR = STATE_ROOT / "receipts"
 COMPANION_DIR = STATE_ROOT / "companion"
+PENDING_GUARD_APPROVAL_PATH = ROUTING_DIR / "pending_guard_approval.json"
 
 LANES = {
     "talk_lane": "Talk",
@@ -37,16 +38,53 @@ SAFETY_SAFE = "Safe"
 SAFETY_RECEIPT = "Receipt Written"
 SAFETY_APPROVAL = "Approval Required"
 SAFETY_BLOCKED = "Blocked"
+APPROVAL_EFFECTIVE_ROUTE = "guard_approval"
+BARE_APPROVAL_PHRASES = {
+    "approve",
+    "approved",
+    "yes approved",
+    "noah approves",
+    "noah.physical approves",
+    "i approve",
+    "approved proceed",
+    "go ahead",
+    "do it",
+}
+APPROVE_ROUTE_RE = re.compile(r"^\s*approve\s+route\s+(?P<route_id>route_[a-f0-9]{12})(?:\s*:\s*(?P<scope>.+))?\s*$", re.IGNORECASE)
 
 BUILD_TERMS = (
     "build", "implement", "fix", "patch", "edit", "write file", "update ui",
     "create module", "add module", "run test", "run tests", "pytest", "api route",
     "endpoint", "refactor", "code", "coding", "scaffold", "compile",
 )
+LIVE_CAPTURE_TERMS = (
+    "capture current live transmission state",
+    "live transmission receipt",
+    "live_transmission_latest.json",
+    "live_transmission_receipt",
+    "live transmission state",
+    "metadata only",
+    "i'm transmitting right now",
+    "i’m transmitting right now",
+    "i am transmitting right now",
+    "i'm live",
+    "i’m live",
+    "i am live",
+    "live mode",
+    "live privacy",
+    "live status",
+    "/live",
+    "/live start",
+    "/live status",
+    "/live stop",
+)
 CAPTURE_TERMS = (
     "capture", "preserve", "receipt", "lootdrop", "mindcoin", "artifact",
     "thread", "source map", "sourcemap", "game artifact", "captain's log",
-    "captains log", "memory", "remember this", "store this",
+    "captains log", "memory", "remember this", "store this", "session capture",
+    "metadata capsule", "context capsule", "capture this moment",
+    "make this a receipt", "write a receipt", "local receipt",
+    "save this as a lootdrop", "game continuity artifact",
 )
 WITNESS_TERMS = (
     "obs", "screenshot", "screen shot", "screenshare", "screen share",
@@ -58,12 +96,30 @@ GUARD_TERMS = (
     "upload", "cloud", "cloud api", "drive canonical", "make drive canonical",
     "promote identity", "identity anchor", "reset memory", "clear memory",
     "cleanup", "clean up", "quarantine", "archive old", "raw recording",
+    "onedrive", "one drive", "gmail", "credentials", "credential", "secret",
+    "password", "token", "screen capture", "audio capture", "clipboard",
+    "keystroke", "record video", "record audio",
 )
 ACTIVE_CONTEXT_TERMS = (
     "active context sync",
     "refresh context", "pull current context", "pull current updates",
     "update active context", "sync local state", "show context diff",
     "show what changed", "without reset", "do not reset",
+)
+ACTIVE_CONTEXT_BLOCKING_TERMS = (
+    "delete", "remove file", "move", "rename", "commit", "push", "upload",
+    "cloud", "cloud api", "drive canonical", "make drive canonical",
+    "promote identity", "identity anchor", "reset memory", "clear memory",
+    "cleanup", "clean up", "quarantine", "archive old", "raw recording",
+    "onedrive", "one drive", "gmail", "credentials", "credential", "secret",
+    "password", "token", "screen capture", "audio capture", "clipboard",
+    "keystroke", "record video", "record audio",
+)
+LIVE_STRICT_GUARD_TERMS = (
+    "commit", "push", "delete", "move", "rename", "drive", "onedrive",
+    "one drive", "gmail", "credential", "credentials", "secret", "password",
+    "screen capture", "audio capture", "clipboard", "upload", "sync",
+    "cloud", "raw recording", "record video", "record audio", "keystroke",
 )
 
 
@@ -88,27 +144,46 @@ def _contains_any(lower: str, terms: tuple[str, ...]) -> bool:
     return any(term in lower for term in terms)
 
 
+def _live_transmission_active() -> bool:
+    try:
+        from live_transmission import is_live_active
+
+        return bool(is_live_active())
+    except Exception:
+        return False
+
+
 def classify_intent(user_message: str) -> dict[str, Any]:
     lower = str(user_message or "").strip().lower()
     if not lower:
         lane = "talk_lane"
         reason = "empty message defaults to talk lane"
         confidence = "medium"
-    elif _contains_any(lower, ACTIVE_CONTEXT_TERMS):
+    elif _contains_any(lower, ACTIVE_CONTEXT_TERMS) and not _contains_any(lower, ACTIVE_CONTEXT_BLOCKING_TERMS):
         lane = "capture_lane"
         reason = "active local context refresh request"
         confidence = "high"
-    elif _contains_any(lower, GUARD_TERMS):
+    elif _contains_any(lower, GUARD_TERMS) or (
+        _live_transmission_active() and _contains_any(lower, LIVE_STRICT_GUARD_TERMS)
+    ):
         lane = "guard_lane"
         reason = "message contains risky action requiring approval or block"
         confidence = "high"
-    elif _contains_any(lower, BUILD_TERMS):
+    elif _contains_any(lower, LIVE_CAPTURE_TERMS):
+        lane = "capture_lane"
+        reason = "live transmission metadata capture or status request"
+        confidence = "high"
+    elif _contains_any(lower, BUILD_TERMS) and _contains_any(lower, ("source map", "sourcemap")):
         lane = "build_lane"
-        reason = "implementation or tool-backed work request"
+        reason = "implementation request for SourceMap tooling"
         confidence = "high"
     elif _contains_any(lower, CAPTURE_TERMS):
         lane = "capture_lane"
         reason = "artifact, receipt, continuity, or memory capture request"
+        confidence = "high"
+    elif _contains_any(lower, BUILD_TERMS):
+        lane = "build_lane"
+        reason = "implementation or tool-backed work request"
         confidence = "high"
     elif _contains_any(lower, WITNESS_TERMS):
         lane = "witness_lane"
@@ -222,6 +297,180 @@ def write_route_receipt(route: dict[str, Any], *, actions_taken: list[str] | Non
     path.write_text(json.dumps(receipt, indent=2, ensure_ascii=True, sort_keys=True) + "\n", encoding="utf-8")
     receipt["receipt_path"] = str(path)
     return receipt
+
+
+def _approval_text_key(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text or "").strip().lower()).strip(" .!?:;")
+
+
+def is_approval_followup(text: str) -> bool:
+    cleaned = _approval_text_key(text)
+    return cleaned in BARE_APPROVAL_PHRASES or APPROVE_ROUTE_RE.match(str(text or "")) is not None
+
+
+def write_pending_guard_approval(route: dict[str, Any]) -> dict[str, Any]:
+    """Persist the latest Guard lane route as pending approval context."""
+    ROUTING_DIR.mkdir(parents=True, exist_ok=True)
+    route_id = route.get("route_id")
+    action_summary = (route.get("user_message_excerpt") or "guarded action").strip()
+    if len(action_summary) > 140:
+        action_summary = action_summary[:139].rstrip() + "…"
+    boundary = "irreversible/external action — Noah.Physical approval required; no auto-execution"
+    # Real, copy-paste-ready approval line. Never the literal placeholder.
+    required_confirmation = f"APPROVE ROUTE {route_id}: {action_summary}; boundary={boundary}"
+    pending = {
+        "pending_id": _id("guard_pending"),
+        "status": "pending_exact_scope",
+        "created_at": _now(),
+        "route_id": route_id,
+        "route_path": route.get("route_path"),
+        "lane": route.get("detected_lane"),
+        "lane_label": route.get("lane_label"),
+        "user_message_excerpt": route.get("user_message_excerpt"),
+        "action_summary": action_summary,
+        "boundary": boundary,
+        "requires_approval": True,
+        "executable_bound": True,
+        "explicit_scope_required": False,
+        "required_confirmation": required_confirmation,
+        "human_authority": "Noah.Physical",
+    }
+    PENDING_GUARD_APPROVAL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PENDING_GUARD_APPROVAL_PATH.write_text(
+        json.dumps(pending, indent=2, ensure_ascii=True, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    pending["pending_path"] = str(PENDING_GUARD_APPROVAL_PATH)
+    return pending
+
+
+def load_pending_guard_approval() -> dict[str, Any] | None:
+    try:
+        pending = json.loads(PENDING_GUARD_APPROVAL_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if isinstance(pending, dict) and pending.get("status") == "pending_exact_scope":
+        pending["pending_path"] = str(PENDING_GUARD_APPROVAL_PATH)
+        return pending
+    return None
+
+
+def clear_pending_guard_approval() -> None:
+    try:
+        PENDING_GUARD_APPROVAL_PATH.unlink()
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+
+
+def write_approval_attempt_receipt(result: dict[str, Any]) -> dict[str, Any]:
+    RECEIPTS_DIR.mkdir(parents=True, exist_ok=True)
+    receipt = {
+        "receipt_id": _id("hard_approval_receipt"),
+        "timestamp": _now(),
+        "operation": "hard_approval_gate",
+        "handled": bool(result.get("handled")),
+        "approved": bool(result.get("approved")),
+        "status": result.get("status"),
+        "route_id": (result.get("pending") or {}).get("route_id") or result.get("route_id"),
+        "scope_text": result.get("scope_text") or "",
+        "executable_bound": False,
+        "actions_executed": 0,
+        "files_moved": 0,
+        "files_deleted": 0,
+        "files_renamed": 0,
+        "files_synced": 0,
+        "git_commits": 0,
+        "git_pushes": 0,
+        "cloud_uploads": 0,
+        "cloud_api_calls": 0,
+        "human_authority": "Noah.Physical",
+    }
+    path = RECEIPTS_DIR / f"hard_approval_receipt_{_stamp()}.json"
+    path.write_text(json.dumps(receipt, indent=2, ensure_ascii=True, sort_keys=True) + "\n", encoding="utf-8")
+    receipt["receipt_path"] = str(path)
+    return receipt
+
+
+def handle_guard_approval_followup(text: str, *, write_receipt: bool = True) -> dict[str, Any]:
+    """Handle approval phrases without ever executing from vague approval text."""
+    raw = str(text or "")
+    if not is_approval_followup(raw):
+        return {"handled": False, "effective_route": APPROVAL_EFFECTIVE_ROUTE}
+
+    pending = load_pending_guard_approval()
+    result: dict[str, Any] = {
+        "handled": True,
+        "approved": False,
+        "effective_route": APPROVAL_EFFECTIVE_ROUTE,
+        "pending": pending,
+        "route_id": None,
+        "scope_text": "",
+    }
+
+    if not pending:
+        result.update({
+            "status": "no_pending_guard_route",
+            "response_text": (
+                "Approval received, but no pending executable Guard action is bound. "
+                "Restate the exact target, action, and boundary."
+            ),
+        })
+    else:
+        route_id = str(pending.get("route_id") or "")
+        match = APPROVE_ROUTE_RE.match(raw)
+        if not match:
+            # Exactly one pending Guard route is tracked at a time, so a bare
+            # approval phrase unambiguously approves it (binds to its summary).
+            scope_text = str(pending.get("action_summary") or pending.get("user_message_excerpt") or "approved action").strip()
+            clear_pending_guard_approval()
+            result.update({
+                "approved": True,
+                "route_id": route_id,
+                "scope_text": scope_text,
+                "status": "approved_single_pending_route",
+                "response_text": (
+                    f"Approval recorded for Guard route `{route_id}`.\n"
+                    f"Bound action: {scope_text}\n"
+                    f"Boundary: {pending.get('boundary', 'Noah.Physical approval; no auto-execution')}\n\n"
+                    "Approval is bound. Reversible local work proceeds through its guarded handler; "
+                    "irreversible/external steps still execute only via their explicit handlers."
+                ),
+            })
+        else:
+            requested_route_id = match.group("route_id")
+            scope_text = (match.group("scope") or "").strip()
+            result["route_id"] = requested_route_id
+            result["scope_text"] = scope_text
+            if requested_route_id != route_id:
+                result.update({
+                    "status": "route_id_mismatch",
+                    "response_text": (
+                        f"Approval blocked: route `{requested_route_id}` does not match pending route `{route_id}`."
+                    ),
+                })
+            elif not scope_text:
+                result.update({
+                    "status": "missing_exact_scope",
+                    "response_text": (
+                        f"Approval blocked for `{route_id}`: missing exact target/action/boundary after the colon."
+                    ),
+                })
+            else:
+                clear_pending_guard_approval()
+                result.update({
+                    "approved": True,
+                    "status": "approved_scope_recorded_no_execution",
+                    "response_text": (
+                        f"Approval recorded for Guard route `{route_id}` with scope: {scope_text}\n\n"
+                        "No action executed from approval alone. Resubmit the scoped request to run through its guarded handler."
+                    ),
+                })
+
+    if write_receipt:
+        result["receipt"] = write_approval_attempt_receipt(result)
+    return result
 
 
 def route_message(user_message: str, *, write_receipt: bool = True, notes: str = "") -> dict[str, Any]:

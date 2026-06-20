@@ -50,7 +50,9 @@ def test_summary_separates_verified_from_declared():
     assert "BOUNDARY:" in text
     # verified section names live runtime facts
     assert "Branch/commit:" in text
-    assert "localhost:7777" in text
+    import runtime_config
+    assert f"localhost:{runtime_config.runtime_port()}" in text
+    assert "localhost:7777" not in text
 
 
 def test_declared_narrative_never_shown_as_verified():

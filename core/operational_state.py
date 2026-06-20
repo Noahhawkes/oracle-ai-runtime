@@ -66,7 +66,10 @@ def _git_state() -> dict[str, Any]:
     }
 
 
-def _port_open(port: int = 7777, host: str = "127.0.0.1") -> bool:
+def _port_open(port: int | None = None, host: str = "127.0.0.1") -> bool:
+    from runtime_config import runtime_port
+    if port is None:
+        port = runtime_port()
     try:
         with socket.create_connection((host, port), timeout=1):
             return True
@@ -149,9 +152,11 @@ def _declared() -> dict[str, Any]:
 
 def build_operational_state(*, mode_provider: Callable[[], dict] | None = None) -> dict[str, Any]:
     """Reconcile ORACLE's current operational state from live + declared sources."""
+    from runtime_config import runtime_port
     git = _git_state()
     runtime: dict[str, Any] = {
-        "localhost_7777": "online" if _port_open() else "offline",
+        "runtime_port": runtime_port(),
+        "runtime_status": "online" if _port_open() else "offline",
         "ollama_models_loaded": _ollama_loaded(),
         "conversation_model": "qwen2.5:7b",
         "pid": os.getpid(),
@@ -195,8 +200,9 @@ def summarize_operational_state(state: dict | None = None) -> str:
     tree = v.get("working_tree", "?")
     n_changed = len(v.get("changed_files", []))
     lines.append(f"- Working tree: {tree}" + (f" ({n_changed} changed)" if tree == "modified" else ""))
+    from runtime_config import runtime_authority
     lines.append(
-        f"- Runtime: localhost:7777 {rt.get('localhost_7777')}; "
+        f"- Runtime: {runtime_authority()} {rt.get('runtime_status')}; "
         f"mode {rt.get('mode', 'UNKNOWN')}; model {rt.get('conversation_model')}"
     )
     observations = vis.get("observations") if isinstance(vis.get("observations"), dict) else {}

@@ -262,10 +262,11 @@ def _last_success_by_component() -> dict[str, dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 def _smoke_web_ui() -> SmokeOutcome:
-    ok, data = _url_json("http://127.0.0.1:7777/api/mode", timeout=3)
+    from runtime_config import runtime_authority, runtime_base_url
+    ok, data = _url_json(f"{runtime_base_url()}/api/mode", timeout=3)
     if ok and data.get("mode"):
         return SmokeOutcome("success", {"endpoint": "/api/mode", "mode": data.get("mode"), "session_id": data.get("session_id")})
-    return SmokeOutcome("degraded", data, "localhost:7777 did not return a usable ORACLE mode response")
+    return SmokeOutcome("degraded", data, f"{runtime_authority()} did not return a usable ORACLE mode response")
 
 
 def _smoke_conversation_core() -> SmokeOutcome:
@@ -311,7 +312,7 @@ def _smoke_operational_world_model() -> SmokeOutcome:
         "observed_at": state.get("observed_at"),
         "branch": verified.get("branch"),
         "commit": verified.get("commit"),
-        "runtime": verified.get("runtime", {}).get("localhost_7777"),
+        "runtime": verified.get("runtime", {}).get("runtime_status"),
     })
 
 
@@ -324,7 +325,8 @@ def _smoke_vision_model() -> SmokeOutcome:
 
 
 def _smoke_live_visual_observer() -> SmokeOutcome:
-    ok, data = _url_json("http://127.0.0.1:7777/api/see/status", timeout=4)
+    from runtime_config import runtime_base_url
+    ok, data = _url_json(f"{runtime_base_url()}/api/see/status", timeout=4)
     if not ok:
         return SmokeOutcome("blocked", data, "ORACLE web vision status endpoint is not reachable")
     if data.get("available"):
@@ -614,7 +616,9 @@ def _smoke_replication_workers() -> SmokeOutcome:
 
 
 def _available_web() -> tuple[bool, dict[str, Any]]:
-    return _socket_open("127.0.0.1", 7777), {"port": 7777}
+    from runtime_config import runtime_host, runtime_port
+    port = runtime_port()
+    return _socket_open(runtime_host(), port), {"port": port}
 
 
 def _available_module(name: str) -> Callable[[], tuple[bool, dict[str, Any]]]:
