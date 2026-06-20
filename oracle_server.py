@@ -957,6 +957,50 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
 
     # ── Slash commands ────────────────────────────────────────────────────────
     lower = user_text.strip().lower()
+
+    # Approval Continuation v0.1
+    # Approval is authorization, not completion. If Noah explicitly says
+    # "proceed" after a Guard approval, resume the stored Guard intent instead
+    # of falling into generic safe command fallback.
+    if lower in ("proceed", "approval given proceed", "approved proceed") and _pending_guard_route:
+        pending = _pending_guard_route if isinstance(_pending_guard_route, dict) else {}
+        original = (
+            pending.get("bound_action")
+            or pending.get("action")
+            or pending.get("user_text")
+            or pending.get("text")
+            or pending.get("message")
+            or str(pending)
+        )
+        route_id = pending.get("route_id") or pending.get("id") or "unknown"
+        lane = pending.get("lane") or pending.get("lane_guess") or "witness_lane"
+        lane_label = pending.get("lane_label") or "Witness"
+        _pending_guard_route = None
+
+        yield _sse({
+            "type": "route",
+            "mode": "unified_oracle",
+            "lane": lane,
+            "lane_label": lane_label,
+            "safety_status": "Approval Continued",
+            "route_path": None,
+            "receipt_path": None,
+            "conversation_reset": False,
+        })
+
+        response = (
+            "Approval continuation engaged.\n\n"
+            f"Resuming approved route: {route_id}\n\n"
+            "Original approved intent:\n"
+            f"{str(original)[:1200]}\n\n"
+            "Result: I preserved the approved intent as candidate meaning and returned it to the human-facing lane. "
+            "No external action, irreversible action, file mutation, publish, delete, send, or durable-memory promotion was executed from generic proceed."
+        )
+
+        yield _sse({"type": "token", "text": response})
+        yield _sse({"type": "done", "mode": _mode})
+        return
+
     if _is_approval_followup(user_text):
         try:
             from unified_oracle_router import handle_guard_approval_followup
@@ -965,7 +1009,9 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             text = approval_result.get("response_text") or _approval_followup_response(pending)
             receipt_path = (approval_result.get("receipt") or {}).get("receipt_path")
             if approval_result.get("approved"):
-                _pending_guard_route = None
+                # Approval Continuation v0.1:
+                # keep pending route available for explicit "proceed".
+                pass
         except Exception:
             pending = _pending_guard_route
             text = _approval_followup_response(pending)
@@ -1799,6 +1845,20 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     # ── Deterministic runtime/sight answers (no LLM, both modes) ──────────────
     # Presence, active task, and sight questions must never hit the slow model or
     # depend on bootstrap. They answer from canonical accessors or a bounded error.
+    # ── Show-file: pull exact repo file contents onto the screen (no model) ───
+    if lower.startswith("/show-file") or lower.startswith("/talk show-file"):
+        raw = user_text.strip()
+        prefix = "/talk show-file" if lower.startswith("/talk show-file") else "/show-file"
+        arg = raw[len(prefix):].strip()
+        try:
+            from show_file import format_show
+            sf_text = format_show(arg)
+        except Exception as exc:
+            sf_text = f"Show-file unavailable: {type(exc).__name__}: {exc}"
+        yield _sse({"type": "token", "text": sf_text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "show_file"})
+        return
+
     # ── Witness Artifact Lane: screenshot drop + witness mode (no model) ──────
     if lower.startswith("/screenshot-drop") or lower.startswith("/witness "):
         try:
