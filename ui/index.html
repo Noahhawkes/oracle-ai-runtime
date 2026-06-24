@@ -2472,5 +2472,113 @@ function _refreshLearnCount() {
 
 init();
 </script>
+
+<!-- ============================================================= -->
+<!-- Operator Console (Bridge) — honest ship status. Additive: this -->
+<!-- block is self-contained and does not modify existing UI.       -->
+<!-- ============================================================= -->
+<button id="rr-bridge-fab" onclick="rrBridgeToggle()" title="Operator Console — honest ship status"
+  style="position:fixed;bottom:18px;right:18px;z-index:9000;background:#0b1220;color:#22d3ee;
+  border:1px solid rgba(34,211,238,0.45);border-radius:10px;padding:9px 14px;font-size:12px;
+  letter-spacing:0.14em;text-transform:uppercase;cursor:pointer;font-family:inherit;
+  box-shadow:0 4px 18px rgba(0,0,0,0.45);">⌬ Bridge</button>
+
+<div id="rr-bridge-panel" style="position:fixed;top:0;right:0;height:100vh;width:390px;max-width:92vw;
+  z-index:9001;background:#070b14;border-left:1px solid rgba(34,211,238,0.22);
+  box-shadow:-8px 0 30px rgba(0,0,0,0.55);transform:translateX(100%);transition:transform 0.22s ease;
+  display:flex;flex-direction:column;font-family:inherit;color:#e5edf5;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;
+    border-bottom:1px solid rgba(255,255,255,0.08);">
+    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#22d3ee;">
+      Operator Console</div>
+    <div>
+      <button onclick="rrBridgeLoad(true)" title="Re-run live smoke probes"
+        style="background:transparent;color:rgba(255,255,255,0.55);border:1px solid rgba(255,255,255,0.14);
+        border-radius:6px;padding:4px 9px;font-size:10px;cursor:pointer;font-family:inherit;">RE-TEST</button>
+      <button onclick="rrBridgeToggle()"
+        style="background:transparent;color:rgba(255,255,255,0.55);border:none;font-size:18px;
+        cursor:pointer;padding:0 4px;">×</button>
+    </div>
+  </div>
+  <div id="rr-bridge-runtime" style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);
+    font-size:12px;line-height:1.7;color:rgba(255,255,255,0.78);">loading runtime…</div>
+  <div id="rr-bridge-summary" style="display:flex;gap:8px;padding:12px 16px;flex-wrap:wrap;"></div>
+  <div id="rr-bridge-list" style="flex:1;overflow-y:auto;padding:4px 12px 16px;"></div>
+  <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,0.06);font-size:10px;
+    color:rgba(255,255,255,0.4);line-height:1.5;">
+    Live from the capability broker. States are verified, not decorative. A capability shows
+    its real status and sandbox level; "—" means no fresh receipt.</div>
+</div>
+
+<script>
+function rrBridgeToggle(){
+  var p=document.getElementById('rr-bridge-panel');
+  var open=p.style.transform==='translateX(0%)'||p.style.transform==='translateX(0px)';
+  if(open){p.style.transform='translateX(100%)';}
+  else{p.style.transform='translateX(0%)';rrBridgeLoad(false);}
+}
+function rrBridgeColor(s){
+  if(s==='verified')return '#22c55e';
+  if(s==='degraded')return '#f59e0b';
+  if(s==='blocked')return '#ef4444';
+  return '#64748b';
+}
+function rrBridgeLabel(s){
+  if(s==='verified')return 'available';
+  if(s==='degraded')return 'degraded';
+  if(s==='blocked')return 'blocked';
+  return s||'untested';
+}
+function rrBridgeChip(label,n,color){
+  return '<span style="background:rgba(255,255,255,0.04);border:1px solid '+color+';color:'+color+
+    ';border-radius:20px;padding:3px 11px;font-size:11px;letter-spacing:0.06em;">'+label+' '+n+'</span>';
+}
+async function rrBridgeLoad(smokes){
+  var rt=document.getElementById('rr-bridge-runtime');
+  var sum=document.getElementById('rr-bridge-summary');
+  var list=document.getElementById('rr-bridge-list');
+  list.innerHTML='<div style="padding:18px;color:rgba(255,255,255,0.4);font-size:12px;">'+
+    (smokes?'running live smoke probes…':'reading verified status…')+'</div>';
+  try{
+    var st=await (await fetch('/api/status')).json();
+    var b=st.boot||{};
+    rt.innerHTML=
+      '<div><b style="color:#22d3ee;">ORACLE</b> · session '+(st.session_id||'?')+
+      (st.paused?' · <span style="color:#f59e0b;">paused</span>':' · <span style="color:#22c55e;">live</span>')+'</div>'+
+      '<div>model: '+(b.verified_model_name||'?')+' via '+(b.verified_local_engine||'?')+'</div>'+
+      '<div>network: '+(b.network_boundary||'?')+
+      ((b.warnings&&b.warnings.length)?' · <span style="color:#f59e0b;">'+b.warnings.length+' warning(s)</span>':'')+'</div>';
+  }catch(e){ rt.innerHTML='<span style="color:#ef4444;">runtime unreachable: '+e+'</span>'; }
+  try{
+    var data=await (await fetch('/api/capabilities'+(smokes?'?smokes=true':''))).json();
+    var s=data.summary||{};
+    sum.innerHTML=
+      rrBridgeChip('available',s.verified||0,'#22c55e')+
+      rrBridgeChip('degraded',s.degraded||0,'#f59e0b')+
+      rrBridgeChip('blocked',s.blocked||0,'#ef4444');
+    var caps=(data.capabilities||[]).slice().sort(function(a,bb){
+      var ord={blocked:0,degraded:1,verified:2};
+      return (ord[a.current_status]||3)-(ord[bb.current_status]||3);
+    });
+    list.innerHTML=caps.map(function(c){
+      var col=rrBridgeColor(c.current_status);
+      var perm=(c.permitted&&c.permitted!=='read_only')?
+        '<span style="color:rgba(255,255,255,0.4);font-size:10px;"> · '+c.permitted+'</span>':'';
+      var blocker=(c.blocker&&c.blocker!=='NONE'&&c.current_status!=='verified')?
+        '<div style="font-size:10.5px;color:rgba(255,255,255,0.45);margin-top:2px;">'+c.blocker+'</div>':'';
+      var when=c.last_tested?('<span style="font-size:10px;color:rgba(255,255,255,0.3);">'+
+        (c.last_tested.split('T')[1]||'').slice(0,8)+'</span>'):'<span style="font-size:10px;color:rgba(255,255,255,0.25);">—</span>';
+      return '<div style="padding:9px 6px;border-bottom:1px solid rgba(255,255,255,0.04);">'+
+        '<div style="display:flex;align-items:center;gap:9px;">'+
+        '<span style="width:9px;height:9px;border-radius:50%;background:'+col+';flex:none;box-shadow:0 0 8px '+col+';"></span>'+
+        '<span style="flex:1;font-size:12.5px;">'+c.component+perm+'</span>'+
+        '<span style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:'+col+';">'+rrBridgeLabel(c.current_status)+'</span>'+
+        '&nbsp;'+when+'</div>'+blocker+'</div>';
+    }).join('');
+  }catch(e){
+    list.innerHTML='<div style="padding:18px;color:#ef4444;font-size:12px;">capabilities unreachable: '+e+'</div>';
+  }
+}
+</script>
 </body>
 </html>

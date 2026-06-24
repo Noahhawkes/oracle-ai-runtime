@@ -3404,6 +3404,39 @@ async def status_endpoint():
     })
 
 
+@app.get("/api/capabilities")
+async def capabilities_endpoint(smokes: bool = False):
+    """Honest ship status for the Operator Console.
+
+    Returns the real capability-broker matrix as JSON — no decorative "online".
+    Each item reports its verified current_status, the sandbox level it is
+    permitted to operate at, and the blocker (if any). `?smokes=true` re-runs the
+    non-destructive smoke probes (slower) instead of reading last receipts.
+    """
+    from datetime import datetime as _dt, timezone as _tz
+    try:
+        from capability_broker import discover_capabilities
+        statuses = await asyncio.to_thread(discover_capabilities, run_smokes=smokes)
+    except Exception as exc:
+        return JSONResponse(
+            {"error": f"{type(exc).__name__}: {exc}", "capabilities": []},
+            status_code=500,
+        )
+    items = [s.to_dict() for s in statuses]
+    summary = {
+        "total": len(statuses),
+        "verified": sum(1 for s in statuses if s.current_status == "verified"),
+        "degraded": sum(1 for s in statuses if s.current_status == "degraded"),
+        "blocked": sum(1 for s in statuses if s.current_status == "blocked"),
+        "smokes_run": bool(smokes),
+    }
+    return JSONResponse({
+        "observed_at": _dt.now(_tz.utc).isoformat(),
+        "summary": summary,
+        "capabilities": items,
+    })
+
+
 def _source_discipline_smoke_test() -> int:
     import companion_bootstrap
 
