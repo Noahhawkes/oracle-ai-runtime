@@ -64,6 +64,32 @@ def public_facebook_disclosure() -> Receipt:
     return r
 
 
+def drive_chatgpt_return_from_dark_doc() -> Receipt:
+    """The 2026-06-23 Return-from-Dark protocol / memory-promotion record found in
+    Noah's Google Drive — ChatGPT-authored. Witnessed as an AI-authored candidate:
+    provenance kept, NOT promoted to canon. The doctrine/strategy inside it (SOV1
+    successor identity, company strategy, naming) stays candidate pending Noah."""
+    return Receipt(
+        source=("gdrive:1t1pBibEEOZZG05AMN_fUnz-WfBmClf_Y53LYpt70In8 / "
+                "2026-06-23_return-from-dark-protocol_memory-promotion-record"),
+        submitting_system="claude_code_drive_lookup",
+        submitted_by="Noah.Physical",
+        original_author="chatgpt",
+        authorship_status=classify_authorship("chatgpt"),
+        author_confidence=0.9,
+        transport_path="chatgpt -> google drive -> drive mcp lookup -> oracle intake",
+        content=("Return-from-Dark Protocol + memory-promotion record. Defines protocol "
+                 "minimum fields, 'witness' over 'mirror', routing all ideas through the "
+                 "ORACLE runtime before canon, the 25-question diagnostic spine, the "
+                 "Federation replicator / pattern-buffer metaphor, and SOV1.AI successor "
+                 "identity intent."),
+        holes=["Full document remains in Drive; not re-verified line-by-line here",
+               "Doctrine/strategy items not auto-promoted to canon — pending Noah.Physical"],
+        source_type="drive_ingest",
+        canon_status=CanonStatus.RUNTIME_INGESTED_RECORD,
+    )
+
+
 def all_samples() -> list[Receipt]:
     return [
         noah_authored_note(),

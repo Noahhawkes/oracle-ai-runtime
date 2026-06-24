@@ -27,6 +27,27 @@ def test_assert_machine_observed_fails_for_return_from_dark():
         assert_machine_observed(r)
 
 
+def test_return_from_dark_protocol_minimum_fields():
+    # aligns to the 2026-06-23 Return-from-Dark Protocol doc minimum fields
+    w = Witness()
+    r = w.create_return_from_dark_record(
+        event_label="1.4 mile no-phone walk with Ashley",
+        reporter="Noah.Physical",
+        testimony="Walked 1.4 miles with Ashley, no phone, talked about important things.",
+        people=["Noah.Physical", "Ashley"],
+        meaning_summary="Offline continuity remains valid even with no device capture.",
+        boundaries=["Do not claim ORACLE observed the walk"],
+        event_time="2026-06-23 evening (approximate)",
+        promotion_recommendation="memory_candidate",
+    )
+    assert r.people == ["Noah.Physical", "Ashley"]
+    assert r.meaning_summary
+    assert any("observed" in b.lower() for b in r.boundaries)
+    assert r.event_time
+    assert r.promotion_recommendation == "memory_candidate"
+    assert r.machine_observed is False  # protocol core: never fake observation
+
+
 def test_return_from_dark_cannot_be_forced_machine_observed():
     with pytest.raises(ReceiptError):
         Receipt(source="s", submitting_system="x", submitted_by="Noah.Physical",

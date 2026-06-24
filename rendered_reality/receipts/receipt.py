@@ -74,6 +74,19 @@ OBS_MACHINE = "machine_observed"
 OBS_RETURN_FROM_DARK = "Return-from-Dark"
 OBS_POST_EVENT_TESTIMONY = "post_event_testimony"
 
+# Promotion recommendation — from the Return-from-Dark Protocol doc
+# (2026-06-23 memory-promotion record, ChatGPT-authored, witnessed candidate).
+PROMOTION_DECAY = "decay"
+PROMOTION_LEDGER = "ledger"
+PROMOTION_MEMORY_CANDIDATE = "memory_candidate"
+PROMOTION_CANON_REVIEW = "canon_review"
+
+# Documented Return-from-Dark trigger phrases.
+RETURN_FROM_DARK_TRIGGERS = (
+    "return from dark", "post-event witness note", "i lived this offline",
+    "thought tracking from ios", "bring ashley back in",
+)
+
 
 class ReceiptError(Exception):
     pass
@@ -119,6 +132,12 @@ class Receipt:
     reporter: str | None = None
     testimony_source: str | None = None
     event_label: str | None = None
+    # Return-from-Dark protocol fields (capture later, label honestly, do not invent)
+    people: list[str] = field(default_factory=list)
+    meaning_summary: str = ""
+    boundaries: list[str] = field(default_factory=list)   # what must NOT be inferred
+    event_time: str | None = None                          # exact/approx/unknown
+    promotion_recommendation: str = ""                     # decay|ledger|memory_candidate|canon_review
     # truth controls
     holes: list[str] = field(default_factory=list)
     contradictions: list[str] = field(default_factory=list)

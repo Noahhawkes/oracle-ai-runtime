@@ -30,3 +30,12 @@ def test_explicit_adoption_flips_authorship():
 
 def test_noah_note_is_noah_authored():
     assert noah_authored_note().is_noah_authored() is True
+
+
+def test_drive_chatgpt_doc_is_ai_authored_candidate():
+    from rendered_reality.samples import drive_chatgpt_return_from_dark_doc
+    r = drive_chatgpt_return_from_dark_doc()
+    assert r.authorship_status == Authorship.AI_AUTHORED
+    assert r.is_noah_authored() is False
+    # ingested from Drive, but NOT promoted to canon
+    assert r.canon_status.value != "noah_approved_canon"

@@ -11,6 +11,7 @@ from __future__ import annotations
 from ..receipts.receipt import (
     Receipt, Authorship, CanonStatus, classify_authorship,
     OBS_MACHINE, OBS_RETURN_FROM_DARK, OBS_POST_EVENT_TESTIMONY,
+    PROMOTION_MEMORY_CANDIDATE,
 )
 
 DEFAULT_SYSTEM = "oracle_witness_runtime"
@@ -62,9 +63,19 @@ class Witness:
 
     def create_return_from_dark_record(self, *, event_label: str, reporter: str,
                                        testimony: str, source: str = "post_event_testimony",
-                                       original_author: str | None = None) -> Receipt:
-        """Meaningful events that happened offline / outside machine observation
-        (NEW GROUND 2). Capture later, label honestly, do not invent."""
+                                       original_author: str | None = None,
+                                       people: list[str] | None = None,
+                                       meaning_summary: str = "",
+                                       boundaries: list[str] | None = None,
+                                       event_time: str | None = None,
+                                       promotion_recommendation: str = PROMOTION_MEMORY_CANDIDATE) -> Receipt:
+        """Meaningful events that happened offline / outside machine observation.
+
+        Implements the Return-from-Dark Protocol minimum fields from the
+        2026-06-23 protocol doc: reporter, event/capture time, observation status,
+        people, meaning summary, boundaries (what must not be inferred), and a
+        promotion recommendation. Capture later, label honestly, do not invent.
+        """
         author = original_author or reporter
         return Receipt(
             source=source,
@@ -78,6 +89,11 @@ class Witness:
             testimony_source=reporter,
             machine_observed=False,
             observation_status=OBS_RETURN_FROM_DARK,
+            people=people or [],
+            meaning_summary=meaning_summary,
+            boundaries=boundaries or [],
+            event_time=event_time,
+            promotion_recommendation=promotion_recommendation,
             holes=["No machine observation", "No transcript", "Post-event testimony only"],
             canon_status=CanonStatus.RUNTIME_INGESTED_RECORD,
         )
@@ -96,6 +112,17 @@ class Witness:
             f"approval_status: {receipt.approval_status.value}",
             f"canon_status: {receipt.canon_status.value}",
         ]
+        if receipt.event_time:
+            lines.append(f"event_time: {receipt.event_time}")
+        if receipt.people:
+            lines.append(f"people: {', '.join(receipt.people)}")
+        if receipt.meaning_summary:
+            lines.append(f"meaning: {receipt.meaning_summary}")
+        if receipt.promotion_recommendation:
+            lines.append(f"promotion_recommendation: {receipt.promotion_recommendation}")
+        if receipt.boundaries:
+            lines.append("MUST NOT INFER:")
+            lines += [f"  - {b}" for b in receipt.boundaries]
         if receipt.holes:
             lines.append("NOT OBSERVED / HOLES:")
             lines += [f"  - {h}" for h in receipt.holes]
