@@ -1,0 +1,21 @@
+{
+  "record_id": "TP_002_ENTIRE_THREAD_PASS",
+  "title": "Entire Thread Pass",
+  "source_date": "2026-06-23",
+  "source_context": "iOS in-bed thread pass, later continued on PC",
+  "submitted_by": "Noah.Physical",
+  "original_author": "mixed",
+  "authorship_status": "mixed_human_and_ai_thread_pass",
+  "transport_path": "ChatGPT thread to ORACLE runtime seed data",
+  "confidence": "high_for_user_directives_medium_for_external_ai_claims",
+  "canon_status": "candidate_seed_record",
+  "approval_status": "pending_noah_physical",
+  "holes": [
+    "Source text contains multi-agent turns; not assumed Noah-authored.",
+    "Large multi-agent dump; authorship per-segment unresolved"
+  ],
+  "contradictions": [],
+  "required_review": [
+    "Segment and separate authorship before canon"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "session_id": "2026-06-24_1700_pc_obs_live",
+  "operator": "Noah.Physical",
+  "device_context": "PC",
+  "recording_status": "OBS live recording active",
+  "start_time_local": "2026-06-24T17:00:00",
+  "source_type": "live_build_session",
+  "purpose": "Ingest iOS thread-pass data into ORACLE Witness Runtime",
+  "canon_status": "runtime_ingested_record",
+  "approval_status": "pending_noah_physical",
+  "holes": [
+    "OBS video file path not yet provided",
+    "OBS recording hash not available until recording is saved",
+    "Thread-pass source text contains multi-agent turns and must not be assumed Noah-authored"
+  ],
+  "witness_note": "This session is being recorded live on OBS. ORACLE must treat the video as future evidence once the file path and hash are available."
+}

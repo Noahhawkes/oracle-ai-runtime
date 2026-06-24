@@ -75,3 +75,6 @@ patch_approval_continuation*.py
 # Intake runtime staging (large, regenerable) + local backups
 intake/staging/
 Backups/
+
+# Generated thread-pass ingestion receipts (regenerable via seed_loader)
+data/receipts/

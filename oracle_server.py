@@ -3437,6 +3437,32 @@ async def capabilities_endpoint(smokes: bool = False):
     })
 
 
+@app.get("/session/current")
+async def session_current():
+    """Return the most recent live-session receipt (read-only)."""
+    from pathlib import Path as _P
+    sessions = _P(__file__).resolve().parent / "data" / "sessions"
+    receipts = sorted(sessions.glob("*/session_receipt.json")) if sessions.exists() else []
+    if not receipts:
+        return JSONResponse({"session": None, "note": "no session receipt found"}, status_code=404)
+    latest = max(receipts, key=lambda p: p.stat().st_mtime)
+    try:
+        return JSONResponse(json.loads(latest.read_text(encoding="utf-8")))
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/ingest-thread-passes")
+async def ingest_thread_passes():
+    """Ingest thread-pass seed data as CANDIDATE records. No canon promotion."""
+    try:
+        from rendered_reality.pattern_buffer.seed_loader import load_thread_passes
+        summary = await asyncio.to_thread(load_thread_passes, write=True)
+        return JSONResponse(summary)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
 def _source_discipline_smoke_test() -> int:
     import companion_bootstrap
 
