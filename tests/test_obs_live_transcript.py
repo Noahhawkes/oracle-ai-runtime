@@ -16,6 +16,8 @@ def _patch_paths(monkeypatch, tmp_path):
     monkeypatch.setattr(obs.importlib.util, "find_spec", lambda _name: None)
     monkeypatch.delenv("ORACLE_LOCAL_WHISPER_MODEL_PATH", raising=False)
     monkeypatch.delenv("ORACLE_WHISPER_CPP_EXE", raising=False)
+    monkeypatch.delenv("ORACLE_WHISPER_CPP_PATH", raising=False)
+    monkeypatch.delenv("ORACLE_WHISPER_CPP_BINARY", raising=False)
     monkeypatch.delenv("ORACLE_WHISPER_CPP_MODEL", raising=False)
     monkeypatch.delenv("ORACLE_VOSK_MODEL_PATH", raising=False)
     return obs
@@ -74,6 +76,78 @@ def test_status_refuses_cloud_when_no_local_stack(monkeypatch, tmp_path):
     assert stack["cloud_transcription_refused"] is True
     assert stack["cloud_providers_allowed"] == []
     assert stack["can_transcribe_locally"] is False
+
+
+def test_probe_empty_dependencies_blocks_transcription(monkeypatch, tmp_path):
+    obs = _patch_paths(monkeypatch, tmp_path)
+
+    probe = obs.probe_local_stt_dependencies()
+
+    assert probe == {
+        "local_stt_available": False,
+        "ffmpeg_available": False,
+        "whisper_cpp_available": False,
+        "python_whisper_available": False,
+        "faster_whisper_available": False,
+        "selected_engine": None,
+        "blocker_reason": "No validated local STT binaries or python packages discovered on system PATH.",
+        "network_boundary": "local-only",
+        "transcription_allowed": False,
+        "media_copied": False,
+        "cloud_fallback_used": False,
+    }
+
+
+def test_probe_cloud_fallback_is_structurally_locked_out(monkeypatch, tmp_path):
+    obs = _patch_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(obs.shutil, "which", lambda name: str(tmp_path / "ffmpeg.exe") if name == "ffmpeg" else None)
+    monkeypatch.setattr(
+        obs.importlib.util,
+        "find_spec",
+        lambda name: object() if name == "faster_whisper" else None,
+    )
+
+    probe = obs.probe_local_stt_dependencies()
+
+    assert probe["local_stt_available"] is True
+    assert probe["selected_engine"] == "faster_whisper"
+    assert probe["network_boundary"] == "local-only"
+    assert probe["transcription_allowed"] is False
+    assert probe["cloud_fallback_used"] is False
+    assert probe["media_copied"] is False
+
+
+def test_probe_mocked_path_and_import_presence_toggles_flags(monkeypatch, tmp_path):
+    obs = _patch_paths(monkeypatch, tmp_path)
+    ffmpeg = tmp_path / "bin" / "ffmpeg.exe"
+    whisper_cpp = tmp_path / "bin" / "whisper-cli.exe"
+    ffmpeg.parent.mkdir()
+    ffmpeg.write_text("", encoding="utf-8")
+    whisper_cpp.write_text("", encoding="utf-8")
+
+    def fake_which(name):
+        if name == "ffmpeg":
+            return str(ffmpeg)
+        if name == "whisper-cli":
+            return str(whisper_cpp)
+        return None
+
+    monkeypatch.setattr(obs.shutil, "which", fake_which)
+    monkeypatch.setattr(
+        obs.importlib.util,
+        "find_spec",
+        lambda name: object() if name == "whisper" else None,
+    )
+
+    probe = obs.probe_local_stt_dependencies()
+
+    assert probe["ffmpeg_available"] is True
+    assert probe["whisper_cpp_available"] is True
+    assert probe["python_whisper_available"] is True
+    assert probe["faster_whisper_available"] is False
+    assert probe["local_stt_available"] is True
+    assert probe["selected_engine"] == "whisper.cpp"
+    assert probe["blocker_reason"] == ""
 
 
 def test_pull_sidecar_writes_transcript_and_receipt(monkeypatch, tmp_path):

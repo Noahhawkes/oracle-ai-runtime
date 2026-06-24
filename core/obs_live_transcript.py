@@ -32,6 +32,19 @@ OBS_LOG_DIR = Path(os.environ.get("APPDATA", r"C:\Users\noahh\AppData\Roaming"))
 VIDEO_SUFFIXES = {".mkv", ".mp4", ".mov", ".flv", ".ts", ".m4v"}
 TRANSCRIPT_SUFFIXES = {".txt", ".md", ".srt", ".vtt", ".json"}
 MAX_TRANSCRIPT_CHARS = 250_000
+WHISPER_CPP_ENV_VARS = (
+    "ORACLE_WHISPER_CPP_EXE",
+    "ORACLE_WHISPER_CPP_PATH",
+    "ORACLE_WHISPER_CPP_BINARY",
+)
+WHISPER_CPP_BINARY_NAMES = (
+    "whisper-cli",
+    "whisper-cli.exe",
+    "whisper.cpp",
+    "whisper.cpp.exe",
+    "whisper-cpp",
+    "whisper-cpp.exe",
+)
 
 _WRITING_RE = re.compile(r"Writing file ['\"](?P<path>[^'\"]+)['\"]", re.IGNORECASE)
 _STOPPED_RE = re.compile(r"Output of file ['\"](?P<path>[^'\"]+)['\"] stopped", re.IGNORECASE)
@@ -206,8 +219,73 @@ def find_transcript_sidecars(recording_path: str | Path | None) -> list[dict[str
     return sidecars
 
 
+def _env_existing_file(var_names: tuple[str, ...]) -> str | None:
+    for var_name in var_names:
+        value = os.environ.get(var_name, "").strip()
+        if value and Path(value).is_file():
+            return value
+    return None
+
+
+def _which_any(names: tuple[str, ...]) -> str | None:
+    for name in names:
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
+
+
+def _module_available(module_name: str) -> bool:
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except (ImportError, AttributeError, ValueError):
+        return False
+
+
+def probe_local_stt_dependencies() -> dict[str, Any]:
+    """Probe local STT dependencies without transcribing, installing, or networking."""
+    ffmpeg_path = shutil.which("ffmpeg")
+    whisper_cpp_path = _env_existing_file(WHISPER_CPP_ENV_VARS) or _which_any(WHISPER_CPP_BINARY_NAMES)
+    python_whisper_available = _module_available("whisper")
+    faster_whisper_available = _module_available("faster_whisper")
+
+    ffmpeg_available = bool(ffmpeg_path)
+    whisper_cpp_available = bool(whisper_cpp_path)
+    engine_available = whisper_cpp_available or python_whisper_available or faster_whisper_available
+    selected_engine = None
+    blocker_reason = ""
+
+    if not engine_available:
+        blocker_reason = "No validated local STT binaries or python packages discovered on system PATH."
+    elif not ffmpeg_available:
+        blocker_reason = "Local STT engine detected, but ffmpeg is required for OBS media audio extraction."
+    elif whisper_cpp_available:
+        selected_engine = "whisper.cpp"
+    elif faster_whisper_available:
+        selected_engine = "faster_whisper"
+    elif python_whisper_available:
+        selected_engine = "whisper"
+
+    local_stt_available = bool(selected_engine)
+
+    return {
+        "local_stt_available": local_stt_available,
+        "ffmpeg_available": ffmpeg_available,
+        "whisper_cpp_available": whisper_cpp_available,
+        "python_whisper_available": python_whisper_available,
+        "faster_whisper_available": faster_whisper_available,
+        "selected_engine": selected_engine,
+        "blocker_reason": blocker_reason,
+        "network_boundary": "local-only",
+        "transcription_allowed": False,
+        "media_copied": False,
+        "cloud_fallback_used": False,
+    }
+
+
 def detect_local_transcript_stack() -> dict[str, Any]:
     """Detect only local transcript options. Cloud providers are always refused."""
+    dependency_probe = probe_local_stt_dependencies()
     executables = {
         "ffmpeg": shutil.which("ffmpeg"),
         "ffprobe": shutil.which("ffprobe"),
@@ -272,6 +350,7 @@ def detect_local_transcript_stack() -> dict[str, Any]:
         "local_only": True,
         "cloud_transcription_refused": True,
         "cloud_providers_allowed": [],
+        "dependency_probe": dependency_probe,
         "executables": executables,
         "python_modules": modules,
         "model_paths": model_paths,

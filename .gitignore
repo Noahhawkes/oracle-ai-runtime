@@ -62,3 +62,16 @@ Projects/patch_proposals/
 
 # generated drive scan report (regenerable)
 oracle_content_scan.txt
+
+# Live-coding backup snapshots + scratch scan output (not source, regenerable)
+*.bak_*
+*_hits.txt
+*_brief.txt
+observation_boss_lair.txt
+vision_bridge_inventory.txt
+approval-continuation.patch
+patch_approval_continuation*.py
+
+# Intake runtime staging (large, regenerable) + local backups
+intake/staging/
+Backups/

@@ -2,7 +2,7 @@
 """
 demo.py — Command-line demonstration of the Active NPC Intelligence system.
 
-Runs 10+ world events through Mira Ashford's cognitive loop and prints
+Runs 13 world events through Mira Ashford's cognitive loop and prints
 the full cycle output: perception, interpretation, action selection,
 dialogue, and policy explanation.
 
@@ -14,6 +14,10 @@ from __future__ import annotations
 import sys
 import textwrap
 from pathlib import Path
+
+# Force UTF-8 on Windows consoles so the demonstration can render dividers.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 # Allow running from repo root
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -96,13 +100,24 @@ def run_demo() -> None:
     r = npc.process_event(ev)
     print_cycle(step, "Bandit raid confirmed on north road", r); step += 1
 
-    # 7. Player offers to help investigate Brek
+    # 7. The forge ward flares - private magic inside Mira's workspace
+    ev = world.forge_ward_flares()
+    r = npc.process_event(ev)
+    print_cycle(step, "Forge ward flares (arcane anomaly)", r); step += 1
+
+    # 8. Player offers to help investigate Brek
     ev = world.player_offers_help()
     r = npc.process_event(ev, interacting_with="player",
                           player_input="I can track Brek down. For a price.")
     print_cycle(step, "Player offers to investigate Brek", r); step += 1
 
-    # 8. Player threatens Mira — should trigger fear/refuse/flee response
+    # 9. Player offers a stabilizing charm - magic becomes social trust
+    ev = world.player_offers_stabilizing_charm()
+    r = npc.process_event(ev, interacting_with="player",
+                          player_input="This charm can quiet the ward if you let me place it.")
+    print_cycle(step, "Player offers stabilizing charm", r); step += 1
+
+    # 10. Player threatens Mira - should trigger fear/refuse/flee response
     ev = world.player_threatens_mira()
     ctx = PolicyContext(
         current_location="stonecroft_forge",
@@ -112,17 +127,17 @@ def run_demo() -> None:
     r = npc.process_event(ev, interacting_with="player", policy_ctx=ctx)
     print_cycle(step, "Player threatens Mira (demands secret)", r); step += 1
 
-    # 9. Ore shipment arrives — positive; goal partially satisfied
+    # 11. Ore shipment arrives - positive; goal partially satisfied
     ev = world.ore_shipment_arrives()
     r = npc.process_event(ev)
     print_cycle(step, "Ore shipment arrives (goal progress)", r); step += 1
 
-    # 10. Dael is officially pardoned — long-term goal resolved
+    # 12. Dael is officially pardoned - long-term goal resolved
     ev = world.dael_is_pardoned()
     r = npc.process_event(ev)
     print_cycle(step, "Dael officially pardoned (goal resolved)", r); step += 1
 
-    # 11. Player returns; relationship has changed
+    # 13. Player returns; relationship has changed
     ev = world.player_enters_forge()
     r = npc.process_event(ev, interacting_with="player",
                           player_input="I'm back. Heard about the pardon.")

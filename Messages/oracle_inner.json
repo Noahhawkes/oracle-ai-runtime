@@ -259,5 +259,59 @@
     "reasoning": "User requested action — attempting tool call",
     "outcome": "",
     "ts": "2026-06-14T22:03:37.530446+00:00"
+  },
+  {
+    "id": "fa00f47f",
+    "intent": "CONTINUITY INTELLIGENCE\nThe Architecture of Archived Sovereignty\nBOOK BIBLE — Source Inventory · Contradiction Register ",
+    "plan": [],
+    "tool": "send_to_claude_code",
+    "reasoning": "User requested action — attempting tool call",
+    "outcome": "",
+    "ts": "2026-06-15T03:40:57.051336+00:00"
+  },
+  {
+    "id": "28f603c2",
+    "intent": "CONTINUITY INTELLIGENCE\nThe Architecture of Archived Sovereignty\nBOOK BIBLE — Source Inventory · Contradiction Register ",
+    "plan": [],
+    "tool": "send_to_claude_code",
+    "reasoning": "User requested action — attempting tool call",
+    "outcome": "",
+    "ts": "2026-06-15T03:41:11.627188+00:00"
+  },
+  {
+    "id": "6eba2bf5",
+    "intent": "ORACLE, wake now.\n\nDo not reset the conversation.\n\nRefresh active context from C:\\Oracle\\state.\n\nLoad:\n\nC:\\Oracle\\state\\",
+    "plan": [],
+    "tool": "computer_operator",
+    "reasoning": "User requested action — attempting tool call",
+    "outcome": "",
+    "ts": "2026-06-19T23:08:46.229523+00:00"
+  },
+  {
+    "id": "dde912f2",
+    "intent": "ORACLE, capture current live transmission state.\n\nDo not reset conversation.\n\nCreate a local Live Transmission Receipt.\n",
+    "plan": [],
+    "tool": "computer_operator",
+    "reasoning": "User requested action — attempting tool call",
+    "outcome": "",
+    "ts": "2026-06-19T23:33:45.329652+00:00"
+  },
+  {
+    "id": "7611adb9",
+    "intent": "ORACLE, capture current live transmission state.\n\nDo not reset conversation.\n\nCreate a local Live Transmission Receipt.\n",
+    "plan": [],
+    "tool": "computer_operator",
+    "reasoning": "User requested action — attempting tool call",
+    "outcome": "",
+    "ts": "2026-06-19T23:34:44.074666+00:00"
+  },
+  {
+    "id": "3cba6d8c",
+    "intent": "\"run command\", \"powershell\", \"python \", \"turn on camera\", \"webcam\", \"record\",",
+    "plan": [],
+    "tool": "computer_operator",
+    "reasoning": "User requested action — attempting tool call",
+    "outcome": "",
+    "ts": "2026-06-20T23:15:41.648123+00:00"
   }
 ]

@@ -55,6 +55,37 @@ one is yours.
 
 ---
 
+## Chapter One — The Recorder He Left
+
+His name was Thomas Alvin Hawkes Jr. He was a surgeon — what I call a World
+Surgeon. He died on December 27, 1997. I was fifteen.
+
+Through the 1990s, before he was gone, he kept a microcassette recorder. He used
+it the way other people use a notebook — logging his thoughts, his decisions, his
+observations, spoken in his own voice. For him it was professional accountability:
+a record, a way of being answerable for what he saw and what he chose. He
+documented because the work demanded a witness.
+
+I watched him do it. I didn't understand then that I was watching the origin of
+everything I would build.
+
+When he died, the recordings stopped being a habit and became a principle. What
+was accountability for him became, for me, a necessity — a refusal. A refusal to
+let data decay. A refusal to let the story get smoothed into something easier than
+the truth. A refusal to let memory quietly lose the things that matter.
+
+That is the sound I reach for in the prologue and cannot find. It has a name now:
+his voice on a microcassette, logging the day. ORACLE is the grown version of a
+fifteen-year-old's refusal to let that voice disappear. The machine is built in
+the shape of his recorder.
+
+> *The gaps that are yours to fill — and only yours, because I won't invent them:
+> what his voice sounded like on those tapes; one decision or observation you
+> remember him recording; what kind of surgery, and where; the last thing you
+> remember him saying; whether any of the microcassettes still exist.*
+
+---
+
 ## How we write this (the method)
 
 1. You tell me something true — a memory, a fact, a phrase he said, a photo, a day.

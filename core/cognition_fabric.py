@@ -354,11 +354,20 @@ def fallback_response(
     else:
         status["status_label"] = _status_label(status)
     active = status.get("active_context") or {}
-    text = (
-        "ORACLE awake. I am responding from verified local runtime state because "
-        f"{reason}. Runtime is online, SourceMap is "
-        f"{'available' if active.get('source_count', 0) else 'not fully loaded'}, "
-        "and conversation reset remains false."
+    # Speak in readable paragraphs from the user's message + thread + runtime
+    # state instead of a single static status line. No memory write, no action.
+    from response_format import compose_fallback
+    ctx = context or {}
+    text = compose_fallback(
+        user_message=message,
+        recent_turns=ctx.get("recent_turns"),
+        oracle_state={
+            "cognition": status.get("status_label"),
+            "source_count": active.get("source_count"),
+            "local_timeout": bool(status.get("local_timeout")),
+            **(ctx.get("oracle_state") or {}),
+        },
+        command_result=ctx.get("command_result"),
     )
     return _result(
         tier=TIER_RUNTIME_STATUS if not active.get("source_count") else TIER_RETRIEVAL_STATUS,

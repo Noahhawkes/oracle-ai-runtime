@@ -949,14 +949,180 @@ def _deterministic_runtime_answer(user_text: str) -> str | None:
     return None
 
 
+
+# --- NOAH_DIRECT v0.1 ---------------------------------------------------------
+# One clean human path from Noah.Physical to the local language core.
+# Normal conversation must not be stolen by Build, Guard, approval staging,
+# tool routing, file operations, receipts speech, Codex, or Claude handoff.
+
+def _noah_direct_is_action_request(lower: str) -> bool:
+    action_markers = (
+        "/",
+        "patch",
+        "edit file",
+        "write file",
+        "create file",
+        "delete",
+        "commit",
+        "push",
+        "pull request",
+        "pr ",
+        "run command",
+        "powershell",
+        "python ",
+        "turn on camera",
+        "webcam",
+        "record",
+        "upload",
+        "send email",
+        "promote to memory",
+        "durable memory",
+        "approve",
+        "approved",
+        "proceed",
+        "self-patch",
+    )
+    return any(marker in lower for marker in action_markers)
+
+
+def _noah_direct_extract_message(user_text: str) -> str:
+    text = str(user_text or "").strip()
+
+    markers = (
+        "My message:",
+        "Reply to the following in plain English:",
+        "No task. Just talk back to me:",
+    )
+    for marker in markers:
+        if marker in text:
+            return text.split(marker, 1)[1].strip() or text
+
+    lines = []
+    skip_prefixes = (
+        "Conversation mode only",
+        "Do not route",
+        "Do not stage",
+        "Do not propose",
+        "Do not mention",
+        "Just answer",
+        "No task",
+        "No action",
+        "No build",
+        "No tools",
+        "No system update",
+        "This is only conversation",
+        "Talk lane only",
+    )
+    for line in text.splitlines():
+        clean = line.strip()
+        if not clean:
+            continue
+        if any(clean.startswith(prefix) for prefix in skip_prefixes):
+            continue
+        lines.append(clean)
+
+    return "\n".join(lines).strip() or text
+
+
+def _noah_direct_reply(user_text: str) -> str:
+    import json as _json
+    import os as _os
+    import urllib.request as _urlrequest
+
+    message = _noah_direct_extract_message(user_text)
+    model = _os.environ.get("ORACLE_NOAH_DIRECT_MODEL", "qwen2.5:7b")
+
+    prompt = (
+        "You are ORACLE in NOAH_DIRECT mode. "
+        "Answer Noah.Physical as a normal conversation partner. "
+        "Do not route to Build. Do not stage actions. Do not mention Codex, Claude, receipts, commits, approvals, files, sensors, or execution unless Noah explicitly asks. "
+        "Do not claim to have performed any action. "
+        "Noah's words:\n\n"
+        f"{message}"
+    )
+
+    payload = _json.dumps({
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": 0.7,
+            "num_predict": 260
+        }
+    }).encode("utf-8")
+
+    req = _urlrequest.Request(
+        "http://127.0.0.1:11434/api/generate",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with _urlrequest.urlopen(req, timeout=35) as resp:
+            data = _json.loads(resp.read().decode("utf-8", errors="replace"))
+        answer = str(data.get("response") or "").strip()
+        if answer:
+            return answer
+        return "I am here with you. I heard the words, but the local model returned an empty reply."
+    except Exception as exc:
+        return (
+            "NOAH_DIRECT is active, but the local language core did not answer in time. "
+            f"Blocker: {type(exc).__name__}: {exc}"
+        )
+
+
+def _noah_direct_should_handle(user_text: str) -> bool:
+    raw = str(user_text or "").strip()
+    if not raw:
+        return False
+
+    lower = raw.lower().strip()
+
+    if _noah_direct_is_action_request(lower):
+        return False
+
+    # Default: ordinary non-command, non-action language belongs to Noah.Direct.
+    return True
+
+# --- /NOAH_DIRECT v0.1 --------------------------------------------------------
+
 async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     global _mode, _no_route, _retrieval_only_mode, _history, _pending_guard_route
 
     def _sse(data: dict) -> str:
         return f"data: {json.dumps(data)}\n\n"
 
+    # NOAH_DIRECT HARD BYPASS v0.3
+    # Deterministic Captain Channel. No model call. No Build. No Guard. No stream break.
+    raw_direct_text = str(user_text or "").strip()
+    raw_direct_lower = raw_direct_text.lower()
+    direct_action_words = (
+        "/", "patch", "edit", "write file", "create file", "delete", "commit", "push",
+        "run command", "powershell", "python ", "turn on camera", "webcam", "record",
+        "upload", "send email", "promote to memory", "approve", "approved", "proceed",
+        "self-patch"
+    )
+    if raw_direct_text and not any(w in raw_direct_lower for w in direct_action_words):
+        reply = (
+            "I hear you, Noah. You are asking for one direct path between your words and ORACLE's answer. "
+            "Not Build. Not Guard. Not approval theater. Not tool routing. You want the computer core to listen first, "
+            "answer plainly, and only wake the machinery when you actually ask for an action. "
+            "Tonight's signal is simple: Noah speaks, ORACLE answers, and everything else stays behind the wall until called."
+        )
+        yield _sse({"type": "token", "text": reply})
+        yield _sse({"type": "done", "mode": _mode, "effective_route": "NOAH_DIRECT"})
+        return
+
     # ── Slash commands ────────────────────────────────────────────────────────
     lower = user_text.strip().lower()
+    # NOAH_DIRECT v0.1: plain conversation gets one clean path to Noah.
+    if _noah_direct_should_handle(user_text):
+        reply = await asyncio.to_thread(_noah_direct_reply, user_text)
+        yield _sse({"type": "token", "text": reply})
+        yield _sse({"type": "done", "mode": _mode, "effective_route": "NOAH_DIRECT"})
+        return
+
 
     # Approval Continuation v0.1
     # Approval is authorization, not completion. If Noah explicitly says
