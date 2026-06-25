@@ -89,3 +89,41 @@ def test_large_directive_returns_build_lane_staging_not_crash():
 def test_build_lane_message_is_honest():
     assert "large build directive" in BUILD_LANE_STAGING.lower()
     assert "build lane" in BUILD_LANE_STAGING.lower()
+
+
+def test_markdown_bullet_list_directive_staged_safely():
+    md = "Implement:\n" + "\n".join(f"- step {i} “do this”" for i in range(200))
+    staged = build_lane_staging(md)
+    assert staged is not None
+    _text, _route, preview = staged
+    assert "“" not in preview and "”" not in preview
+    assert "\n" not in preview
+
+
+def test_staging_reply_serializes_for_sse_no_break():
+    import json
+    big = "Patch the thing.\n" * 500
+    text, _route, _preview = build_lane_staging(big)
+    # mirrors _sse(): json.dumps({"type":"token","text":text}) must round-trip
+    payload = json.dumps({"type": "token", "text": text})
+    assert json.loads(payload)["text"] == text
+
+
+def test_agenda_remains_json_healthy_after_oversized():
+    import json
+    from oracle_intent import update_agenda, get_agenda
+    update_agenda(last_large_directive_preview=safe_preview("x" * 5000),
+                  last_user_intent="implementation_intent_large")
+    snap = get_agenda()
+    assert isinstance(snap, dict)
+    json.dumps(snap)  # endpoint health: must serialize
+    assert snap["last_large_directive_preview"]
+
+
+def test_full_directive_preserved_to_local_disk(tmp_path):
+    from oracle_intent import stage_directive_to_disk
+    from pathlib import Path
+    msg = "Implement the cathedral.\n" * 100
+    p = stage_directive_to_disk(msg, tmp_path / "build_directives")
+    assert Path(p).exists()
+    assert Path(p).read_text(encoding="utf-8") == msg

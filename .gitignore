@@ -78,3 +78,6 @@ Backups/
 
 # Generated thread-pass ingestion receipts (regenerable via seed_loader)
 data/receipts/
+
+# Staged large build directives (local-only user content, may be large/personal)
+data/build_directives/

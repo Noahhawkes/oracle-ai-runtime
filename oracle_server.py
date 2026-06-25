@@ -1262,13 +1262,29 @@ def _oracle_intent_dispatch(user_text: str):
     agenda = get_agenda()
 
     # Large build directive guard: never push huge multiline text through
-    # NOAH_DIRECT or the model. Stage a safe preview and answer honestly.
+    # NOAH_DIRECT or the model. Stage a safe preview, preserve the full directive
+    # in approved local storage, and answer honestly.
     _staged = build_lane_staging(user_text)
     if _staged is not None:
         _stext, _sroute, _spreview = _staged
-        update_agenda(last_large_directive_preview=_spreview,
-                      last_user_intent="implementation_intent_large",
-                      last_system_action="staged large build directive (preview only)")
+        _spath = None
+        try:
+            from oracle_intent import stage_directive_to_disk
+            from pathlib import Path as _P
+            _spath = stage_directive_to_disk(
+                user_text, _P(__file__).resolve().parent / "data" / "build_directives")
+            _rel = str(_P(_spath).relative_to(_P(__file__).resolve().parent)).replace("\\", "/")
+            _stext = _stext + f"\nFull directive preserved locally at: {_rel}"
+        except Exception:
+            import traceback as _tb
+            _tb.print_exc()
+        update_agenda(
+            last_large_directive_preview=_spreview,
+            last_large_directive_path=_spath,
+            last_user_intent="implementation_intent_large",
+            last_system_action=("staged large build directive (full text preserved locally)"
+                                if _spath else "staged large build directive (preview only)"),
+        )
         return (_stext, _sroute)
 
     if "unsupported_capability_request" in intents:

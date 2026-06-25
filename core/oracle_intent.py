@@ -211,6 +211,7 @@ _AGENDA = {
     "last_user_intent": None,
     "last_system_action": None,
     "last_large_directive_preview": None,
+    "last_large_directive_path": None,
 }
 
 
@@ -259,6 +260,21 @@ def build_lane_staging(message: str):
         return None
     preview = safe_preview(message)
     return (BUILD_LANE_STAGING + f"\n\nPreview: {preview}", "build_lane_staged", preview)
+
+
+def stage_directive_to_disk(message: str, base_dir) -> str:
+    """Preserve the FULL large directive in approved local storage (local-only,
+    no external transmission). Returns the file path. Req #4."""
+    from pathlib import Path
+    import hashlib
+    from datetime import datetime, timezone
+    base = Path(base_dir)
+    base.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256((message or "").encode("utf-8")).hexdigest()[:12]
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = base / f"directive_{ts}_{digest}.md"
+    path.write_text(message or "", encoding="utf-8")
+    return str(path)
 
 
 def _smoke_test() -> int:
