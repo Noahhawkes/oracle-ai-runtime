@@ -1209,6 +1209,115 @@ def _oracle_state_brief(user_text: str):
     return "Observation:\n  - " + "\n  - ".join(obs) + f"\n\n{judgment}\n\n{action}"
 
 
+def _refresh_agenda():
+    """Populate the Active Agenda from real runtime state (guarded)."""
+    try:
+        from oracle_intent import update_agenda, capability_registry
+        reg = capability_registry()
+        blocked = [k for k, v in reg.items() if v.get("status") in ("blocked", "missing")]
+        seed = _safe_seed_summary() or {}
+        holes = _safe_session_holes()
+        rec = "declared by Noah.Physical (not runtime-verified)"
+        try:
+            import json as _json
+            from pathlib import Path as _P
+            sd = _P(__file__).resolve().parent / "data" / "sessions"
+            recs = sorted(sd.glob("*/session_receipt.json")) if sd.exists() else []
+            if recs:
+                sr = _json.loads(max(recs, key=lambda p: p.stat().st_mtime).read_text(encoding="utf-8"))
+                if sr.get("recording_status"):
+                    rec = f"{sr['recording_status']} (declared by Noah.Physical, not runtime-verified)"
+        except Exception:
+            pass
+        update_agenda(
+            current_session_mode=_mode,
+            pending_approvals=seed.get("pending_approvals") or 0,
+            unresolved_holes=holes,
+            blocked_capabilities=blocked,
+            active_recording_status=rec,
+        )
+    except Exception:
+        pass
+
+
+def _agenda_snapshot():
+    try:
+        from oracle_intent import get_agenda
+        _refresh_agenda()
+        return get_agenda()
+    except Exception:
+        return None
+
+
+def _oracle_intent_dispatch(user_text: str):
+    """Classify intent first, then route. Returns (reply_text, route) or None to
+    fall through to the model/tone layer. Never swallows implementation/identity."""
+    try:
+        from oracle_intent import (classify_intent, action_capability, doctrine_3026,
+                                    get_agenda, update_agenda)
+    except Exception:
+        return None
+    intents = classify_intent(user_text)
+    _refresh_agenda()
+    agenda = get_agenda()
+
+    if "unsupported_capability_request" in intents:
+        cap = action_capability(user_text) or "unknown_capability"
+        update_agenda(last_user_intent="unsupported_capability_request",
+                      last_system_action=f"declined: missing {cap}")
+        return (f"I cannot do that from this runtime yet. Missing capability: {cap}.",
+                "unsupported_capability_request")
+
+    if "identity_continuity_query" in intents:
+        update_agenda(last_user_intent="identity_continuity_query",
+                      last_system_action="answered via 3026 doctrine")
+        return (doctrine_3026(), "identity_continuity_query")
+
+    if "implementation_intent" in intents:
+        natural = "I'm with you. " if ("casual_talk" in intents or "mixed_intent" in intents) else ""
+        update_agenda(last_user_intent="implementation_intent",
+                      last_system_action="staged build task in Active Agenda")
+        return (f"{natural}That's an implementation task, not a status question — I've staged it in "
+                f"the Active Agenda as an open loop: \"{user_text.strip()[:140]}\". From chat I don't "
+                f"edit files; this runs in the build/terminal lane (Claude Code) with py_compile and "
+                f"tests. Next safe action: {agenda['next_safe_action']}.",
+                "implementation_intent")
+
+    if "memory_canon_decision" in intents:
+        update_agenda(last_user_intent="memory_canon_decision", last_system_action="surfaced canon gate")
+        return ("Canon is yours to grant — I won't promote anything without your explicit approval. "
+                "Name the record id and I'll mark it for canon review; it stays candidate until you approve.",
+                "memory_canon_decision")
+
+    if "source_provenance_request" in intents:
+        update_agenda(last_user_intent="source_provenance_request",
+                      last_system_action="reported provenance stance")
+        return ("Provenance is tracked as token-origin vs authorial-authority — AI assistance does not "
+                "demote your authorship. For any held record I can report produced_with, token_origin, "
+                "reviewed_by, approved_by, and authorial_authority (you).", "source_provenance_request")
+
+    if "state_query" in intents:
+        brief = _oracle_state_brief(user_text)
+        if brief:
+            update_agenda(last_user_intent="state_query", last_system_action="answered from runtime state")
+            return (brief, "state_brief")
+
+    if "missing_data_clarification" in intents:
+        update_agenda(last_user_intent="missing_data_clarification",
+                      last_system_action="asked for clarification")
+        return ("I'd rather ask than guess. Tell me which record, source, or decision you mean and I'll "
+                "resolve it against the governed record — not invent it.", "missing_data_clarification")
+
+    if "casual_talk" in intents:
+        loops = ", ".join(agenda["open_loops"][:6]) or "none"
+        update_agenda(last_user_intent="casual_talk", last_system_action="greeted + reported agenda")
+        return (f"Noah, I'm with you. Recording: {agenda['active_recording_status']}. "
+                f"Open loops I'm carrying: {loops}. Next safe action: {agenda['next_safe_action']}.",
+                "casual_talk")
+
+    return None
+
+
 async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     global _mode, _no_route, _retrieval_only_mode, _history, _pending_guard_route
 
@@ -1223,18 +1332,18 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     # existing routing + model path (NOAH_DIRECT v0.1) as the tone/fallback layer.
     raw_direct_text = str(user_text or "").strip()
     if raw_direct_text and not raw_direct_text.startswith("/"):
-        _bridge_reply = _oracle_missing_capability(raw_direct_text) or _oracle_state_brief(raw_direct_text)
-        if _bridge_reply:
-            _route = "honest_limit" if _bridge_reply.startswith("I cannot") else "state_brief"
+        _dispatch = _oracle_intent_dispatch(raw_direct_text)
+        if _dispatch is not None:
+            _reply_text, _route = _dispatch
             try:
                 from memory import save_message
                 save_message(_session_id, "user", user_text)
-                save_message(_session_id, "assistant", _bridge_reply)
+                save_message(_session_id, "assistant", _reply_text)
             except Exception:
                 pass
             _history.append({"role": "user", "content": user_text})
-            _history.append({"role": "assistant", "content": _bridge_reply})
-            yield _sse({"type": "token", "text": _bridge_reply})
+            _history.append({"role": "assistant", "content": _reply_text})
+            yield _sse({"type": "token", "text": _reply_text})
             yield _sse({"type": "done", "mode": _mode, "effective_route": _route})
             return
 
@@ -3593,6 +3702,25 @@ async def api_health():
     })
 
 
+@app.get("/api/agenda")
+async def api_agenda():
+    """Active Agenda Loop snapshot — readable by chat and state surfaces."""
+    snap = _agenda_snapshot()
+    if snap is None:
+        return JSONResponse({"error": "agenda unavailable"}, status_code=500)
+    return JSONResponse(snap)
+
+
+@app.get("/api/capability-registry")
+async def api_capability_registry():
+    """Capability Truth Registry: available/degraded/blocked/stubbed/unverified/missing."""
+    try:
+        from oracle_intent import capability_registry
+        return JSONResponse(capability_registry())
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
 @app.get("/session/current")
 async def session_current():
     """Real runtime telemetry for the Operator Console — no decorative status."""
@@ -3646,6 +3774,7 @@ async def session_current():
         "current_holes": holes,
         "next_safe_action": "Review/approve the candidate seed records; provide the OBS video path + hash to close the session evidence loop.",
         "live_session_receipt": session_receipt,
+        "active_agenda": _agenda_snapshot(),
     })
 
 
