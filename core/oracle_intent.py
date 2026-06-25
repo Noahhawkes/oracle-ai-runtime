@@ -210,6 +210,7 @@ _AGENDA = {
     "next_safe_action": "patch routing before polishing doctrine",
     "last_user_intent": None,
     "last_system_action": None,
+    "last_large_directive_preview": None,
 }
 
 
@@ -222,6 +223,42 @@ def update_agenda(**kw) -> dict:
         if v is not None and k in _AGENDA:
             _AGENDA[k] = v
     return get_agenda()
+
+
+# ── Large build directive guard ──────────────────────────────────────────────
+MAX_SAFE_CHARS = 2000
+MAX_SAFE_LINES = 30
+BUILD_LANE_STAGING = ("I received a large build directive and preserved a summary. "
+                      "Full execution requires the build lane.")
+
+
+def is_large_directive(message: str) -> bool:
+    if not message:
+        return False
+    return len(message) > MAX_SAFE_CHARS or message.count("\n") > MAX_SAFE_LINES
+
+
+def safe_preview(message: str, limit: int = 240) -> str:
+    """Normalize curly quotes and collapse multiline/whitespace into a short,
+    JSON-safe preview. Never raises."""
+    if not message:
+        return ""
+    t = (message.replace("“", '"').replace("”", '"')
+                .replace("‘", "'").replace("’", "'"))
+    t = " ".join(t.split())  # collapse ALL whitespace including newlines
+    if len(t) > limit:
+        t = t[:limit] + "…"
+    return t
+
+
+def build_lane_staging(message: str):
+    """If the message is too large for normal routing, return
+    (reply_text, route, preview). Otherwise None. The huge directive is NEVER
+    pushed through NOAH_DIRECT or the model."""
+    if not is_large_directive(message):
+        return None
+    preview = safe_preview(message)
+    return (BUILD_LANE_STAGING + f"\n\nPreview: {preview}", "build_lane_staged", preview)
 
 
 def _smoke_test() -> int:

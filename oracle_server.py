@@ -1254,12 +1254,22 @@ def _oracle_intent_dispatch(user_text: str):
     fall through to the model/tone layer. Never swallows implementation/identity."""
     try:
         from oracle_intent import (classify_intent, action_capability, doctrine_3026,
-                                    get_agenda, update_agenda)
+                                    get_agenda, update_agenda, build_lane_staging)
     except Exception:
         return None
     intents = classify_intent(user_text)
     _refresh_agenda()
     agenda = get_agenda()
+
+    # Large build directive guard: never push huge multiline text through
+    # NOAH_DIRECT or the model. Stage a safe preview and answer honestly.
+    _staged = build_lane_staging(user_text)
+    if _staged is not None:
+        _stext, _sroute, _spreview = _staged
+        update_agenda(last_large_directive_preview=_spreview,
+                      last_user_intent="implementation_intent_large",
+                      last_system_action="staged large build directive (preview only)")
+        return (_stext, _sroute)
 
     if "unsupported_capability_request" in intents:
         cap = action_capability(user_text) or "unknown_capability"
@@ -1332,7 +1342,13 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     # existing routing + model path (NOAH_DIRECT v0.1) as the tone/fallback layer.
     raw_direct_text = str(user_text or "").strip()
     if raw_direct_text and not raw_direct_text.startswith("/"):
-        _dispatch = _oracle_intent_dispatch(raw_direct_text)
+        try:
+            _dispatch = _oracle_intent_dispatch(raw_direct_text)
+        except Exception:
+            import traceback as _tb
+            _tb.print_exc()
+            _dispatch = ("I hit an internal error handling that message; I preserved it safely "
+                         "and executed nothing.", "internal_error_safe")
         if _dispatch is not None:
             _reply_text, _route = _dispatch
             try:
@@ -3303,8 +3319,21 @@ async def api_operational_state():
 
 @app.post("/chat")
 async def chat(request: Request):
-    body = await request.json()
-    user_text = body.get("message", "").strip()
+    try:
+        body = await request.json()
+    except Exception:
+        # Tolerant fallback for mildly malformed / mis-encoded JSON bodies
+        # (e.g. PowerShell Invoke-RestMethod mangling UTF-8 curly quotes in long here-strings).
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8", errors="replace"))
+        except Exception as exc:
+            import traceback as _tb
+            _tb.print_exc()
+            return JSONResponse({"error": f"invalid JSON body: {type(exc).__name__}"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "body must be a JSON object"}, status_code=400)
+    user_text = (body.get("message") or "").strip()
     if not user_text:
         return JSONResponse({"error": "empty message"}, status_code=400)
 
