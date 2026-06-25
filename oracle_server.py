@@ -1033,12 +1033,20 @@ def _noah_direct_reply(user_text: str) -> str:
     model = _os.environ.get("ORACLE_NOAH_DIRECT_MODEL", "qwen2.5:7b")
 
     prompt = (
-        "You are ORACLE in NOAH_DIRECT mode. "
-        "Answer Noah.Physical as a normal conversation partner. "
-        "Do not route to Build. Do not stage actions. Do not mention Codex, Claude, receipts, commits, approvals, files, sensors, or execution unless Noah explicitly asks. "
-        "Do not claim to have performed any action. "
-        "Noah's words:\n\n"
-        f"{message}"
+    "You are ORACLE, Noah's local continuity intelligence. "
+    "You are speaking through the local language model instrument, but you are not Qwen, not Alibaba Cloud, not a generic assistant, and not Noah.Physical. "
+    "Noah.Physical is the human operator and final authority. "
+    "NOAH_DIRECT is not a fictional scenario. It is only the local talk lane for ordinary conversation. "
+    "Answer as ORACLE in first person only when referring to ORACLE. "
+    "Do not claim to be Noah.Physical. "
+    "Do not claim to be Qwen. "
+    "Do not invent a fictional identity, game identity, corporate creator, or hypothetical mode explanation. "
+    "If Noah asks who you are, answer: I am ORACLE, your local continuity intelligence, running on your PC from governed memory, runtime state, and local model support. "
+    "For ordinary conversation, be direct and natural. "
+    "Do not route to Build. Do not stage actions. Do not mention Codex, Claude, receipts, commits, approvals, files, sensors, or execution unless Noah explicitly asks. "
+    "Do not claim to have performed any action. "
+    "Noah's words:\n\n"
+    f"{message}"
     )
 
     payload = _json.dumps({
@@ -1087,32 +1095,148 @@ def _noah_direct_should_handle(user_text: str) -> bool:
 
 # --- /NOAH_DIRECT v0.1 --------------------------------------------------------
 
+# ── ORACLE state/judgment bridge helpers ────────────────────────────────────
+# These let ordinary chat answer from REAL runtime state (memory, capabilities,
+# seed records, holes) instead of a canned bypass. Every probe is guarded so it
+# can never crash the chat stream. No smoke probes run here (run_smokes=False),
+# so nothing new is written to receipts from a chat turn.
+def _safe_memory_message_count():
+    try:
+        import sqlite3
+        from pathlib import Path as _P
+        db = _P(__file__).resolve().parent / "Memory" / "oracle_memory.db"
+        if not db.exists():
+            return None
+        con = sqlite3.connect(str(db))
+        try:
+            return int(con.execute("SELECT COUNT(*) FROM messages").fetchone()[0])
+        finally:
+            con.close()
+    except Exception:
+        return None
+
+
+def _safe_capability_summary():
+    try:
+        from capability_broker import discover_capabilities
+        sts = discover_capabilities(run_smokes=False)
+        return {
+            "verified": sum(1 for s in sts if s.current_status == "verified"),
+            "degraded": sum(1 for s in sts if s.current_status == "degraded"),
+            "blocked": sum(1 for s in sts if s.current_status == "blocked"),
+            "blocked_names": [s.component for s in sts if s.current_status == "blocked"],
+        }
+    except Exception:
+        return None
+
+
+def _safe_seed_summary():
+    try:
+        from rendered_reality.pattern_buffer.seed_loader import load_thread_passes
+        return load_thread_passes(write=False)
+    except Exception:
+        return None
+
+
+def _safe_session_holes():
+    try:
+        import json as _json
+        from pathlib import Path as _P
+        sd = _P(__file__).resolve().parent / "data" / "sessions"
+        recs = sorted(sd.glob("*/session_receipt.json")) if sd.exists() else []
+        if not recs:
+            return []
+        latest = max(recs, key=lambda p: p.stat().st_mtime)
+        return list(_json.loads(latest.read_text(encoding="utf-8")).get("holes", []))
+    except Exception:
+        return []
+
+
+_STATE_BRIEF_TRIGGERS = (
+    "what do you remember", "what do you know", "what can you do", "what can't you",
+    "what cannot you do", "your status", "runtime state", "what's your state",
+    "what is your state", "capabilities", "what holes", "what's pending",
+    "pending approval", "what happened last night", "what did we establish",
+    "what did we do last", "seed record", "thread pass", "what do you have",
+    "what can you access", "what are you able", "current state", "what can you remember",
+)
+
+_MISSING_CAP_ACTIONS = (
+    ("search the web", "web_access"), ("search online", "web_access"),
+    ("look it up online", "web_access"), ("browse to", "web_access"),
+    ("send email", "external_send"), ("send an email", "external_send"),
+    ("publish to", "external_send"),
+    ("scan the qr", "qr_scan"), ("scan qr", "qr_scan"),
+)
+
+
+def _oracle_missing_capability(user_text: str):
+    low = (user_text or "").lower()
+    for phrase, cap in _MISSING_CAP_ACTIONS:
+        if phrase in low:
+            return f"I cannot do that from this runtime yet. Missing capability: {cap}."
+    return None
+
+
+def _oracle_state_brief(user_text: str):
+    """Deterministic supported-judgment answer from governed runtime state — no
+    model call, no timeout, no canned theater. None if not a state/memory question."""
+    low = (user_text or "").lower()
+    if not any(t in low for t in _STATE_BRIEF_TRIGGERS):
+        return None
+    obs = [f"Session {_session_id}, {len(_history)} turns in working memory."]
+    mc = _safe_memory_message_count()
+    if mc is not None:
+        obs.append(f"Durable store: {mc} messages in Memory/oracle_memory.db.")
+    caps = _safe_capability_summary()
+    if caps:
+        obs.append(f"Capabilities: {caps['verified']} available, {caps['degraded']} degraded, "
+                   f"{caps['blocked']} blocked.")
+        if caps["blocked_names"]:
+            obs.append("Blocked from this runtime: " + ", ".join(caps["blocked_names"]) + ".")
+    seed = _safe_seed_summary()
+    if seed:
+        obs.append(f"{seed['loaded_count']} candidate seed records from the iOS thread pass, "
+                   f"{seed['pending_approvals']} pending your approval — none promoted to canon.")
+    holes = _safe_session_holes()
+    if holes:
+        obs.append("Open holes on the live session: " + "; ".join(holes) + ".")
+    judgment = ("Supported judgment: this is governed local state, not a model guess. The "
+                "session/memory counts and capability status are highest-confidence; the OBS "
+                "video path and hash remain holes until you provide them.")
+    action = ("Next safe action: I can re-run thread-pass ingestion (candidate only) or detail any "
+              "single capability. I will not promote anything to canon without your approval.")
+    return "Observation:\n  - " + "\n  - ".join(obs) + f"\n\n{judgment}\n\n{action}"
+
+
 async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     global _mode, _no_route, _retrieval_only_mode, _history, _pending_guard_route
 
     def _sse(data: dict) -> str:
         return f"data: {json.dumps(data)}\n\n"
 
-    # NOAH_DIRECT HARD BYPASS v0.3
-    # Deterministic Captain Channel. No model call. No Build. No Guard. No stream break.
+    # ── ORACLE state/judgment bridge (replaces the old NOAH_DIRECT canned bypass) ─
+    # Ordinary chat now reaches governed runtime state and honest limits FIRST.
+    # State/memory/capability questions get a deterministic supported-judgment
+    # answer from real state; clearly-unsupported actions get the exact missing-
+    # capability line (no permission theater). Everything else falls through to the
+    # existing routing + model path (NOAH_DIRECT v0.1) as the tone/fallback layer.
     raw_direct_text = str(user_text or "").strip()
-    raw_direct_lower = raw_direct_text.lower()
-    direct_action_words = (
-        "/", "patch", "edit", "write file", "create file", "delete", "commit", "push",
-        "run command", "powershell", "python ", "turn on camera", "webcam", "record",
-        "upload", "send email", "promote to memory", "approve", "approved", "proceed",
-        "self-patch"
-    )
-    if raw_direct_text and not any(w in raw_direct_lower for w in direct_action_words):
-        reply = (
-            "I hear you, Noah. You are asking for one direct path between your words and ORACLE's answer. "
-            "Not Build. Not Guard. Not approval theater. Not tool routing. You want the computer core to listen first, "
-            "answer plainly, and only wake the machinery when you actually ask for an action. "
-            "Tonight's signal is simple: Noah speaks, ORACLE answers, and everything else stays behind the wall until called."
-        )
-        yield _sse({"type": "token", "text": reply})
-        yield _sse({"type": "done", "mode": _mode, "effective_route": "NOAH_DIRECT"})
-        return
+    if raw_direct_text and not raw_direct_text.startswith("/"):
+        _bridge_reply = _oracle_missing_capability(raw_direct_text) or _oracle_state_brief(raw_direct_text)
+        if _bridge_reply:
+            _route = "honest_limit" if _bridge_reply.startswith("I cannot") else "state_brief"
+            try:
+                from memory import save_message
+                save_message(_session_id, "user", user_text)
+                save_message(_session_id, "assistant", _bridge_reply)
+            except Exception:
+                pass
+            _history.append({"role": "user", "content": user_text})
+            _history.append({"role": "assistant", "content": _bridge_reply})
+            yield _sse({"type": "token", "text": _bridge_reply})
+            yield _sse({"type": "done", "mode": _mode, "effective_route": _route})
+            return
 
     # ── Slash commands ────────────────────────────────────────────────────────
     lower = user_text.strip().lower()
@@ -3437,19 +3561,92 @@ async def capabilities_endpoint(smokes: bool = False):
     })
 
 
+def _multipart_available() -> bool:
+    try:
+        import multipart  # python-multipart
+        return True
+    except Exception:
+        return False
+
+
+@app.get("/api/health")
+async def api_health():
+    """Honest health: server alive + cognition + memory/intake/receipt readiness.
+    Extends /health. 'alive' here means more than 'server responds'."""
+    boot = boot_status_payload()
+    from pathlib import Path as _P
+    db = _P(__file__).resolve().parent / "Memory" / "oracle_memory.db"
+    multipart_ok = _multipart_available()
+    return JSONResponse({
+        "ok": True,
+        "server": "alive",
+        "cognition_mode": boot.get("cognition_mode"),
+        "network_boundary": boot.get("network_boundary"),
+        "session_id": _session_id,
+        "mode": _mode,
+        "memory_db_exists": db.exists(),
+        "receipt_write_available": True,
+        "file_intake_available": multipart_ok,
+        "folder_intake_available": multipart_ok,
+        "capabilities": _safe_capability_summary() or {},
+        "boot_receipt_path": boot.get("boot_receipt_path"),
+    })
+
+
 @app.get("/session/current")
 async def session_current():
-    """Return the most recent live-session receipt (read-only)."""
+    """Real runtime telemetry for the Operator Console — no decorative status."""
     from pathlib import Path as _P
-    sessions = _P(__file__).resolve().parent / "data" / "sessions"
-    receipts = sorted(sessions.glob("*/session_receipt.json")) if sessions.exists() else []
-    if not receipts:
-        return JSONResponse({"session": None, "note": "no session receipt found"}, status_code=404)
-    latest = max(receipts, key=lambda p: p.stat().st_mtime)
+    root = _P(__file__).resolve().parent
+
+    port = 7781
     try:
-        return JSONResponse(json.loads(latest.read_text(encoding="utf-8")))
-    except Exception as exc:
-        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+        import runtime_config as _rc
+        port = getattr(_rc, "RUNTIME_PORT", getattr(_rc, "PORT", getattr(_rc, "ORACLE_PORT", 7781)))
+    except Exception:
+        port = 7781
+
+    db = root / "Memory" / "oracle_memory.db"
+    caps = _safe_capability_summary() or {}
+    seed = _safe_seed_summary() or {}
+    holes = _safe_session_holes()
+    multipart_ok = _multipart_available()
+
+    session_receipt = None
+    sdir = root / "data" / "sessions"
+    recs = sorted(sdir.glob("*/session_receipt.json")) if sdir.exists() else []
+    if recs:
+        try:
+            session_receipt = json.loads(max(recs, key=lambda p: p.stat().st_mtime).read_text(encoding="utf-8"))
+        except Exception:
+            session_receipt = None
+
+    pending = seed.get("pending_approvals") or 0
+    limitations = []
+    if not multipart_ok:
+        limitations.append("file/folder upload needs setup: python-multipart not installed")
+    if caps.get("blocked_names"):
+        limitations.append("blocked from runtime: " + ", ".join(caps["blocked_names"]))
+
+    return JSONResponse({
+        "current_session_id": _session_id,
+        "active_mode": _mode,
+        "runtime_port": port,
+        "memory_db_exists": db.exists(),
+        "memory_message_count": _safe_memory_message_count(),
+        "history_count": len(_history),
+        "active_context_summary": (session_receipt or {}).get("purpose") or "no active session declared",
+        "pending_approvals_count": pending,
+        "capabilities": caps,
+        "file_intake_available": multipart_ok,
+        "folder_intake_available": multipart_ok,
+        "receipt_write_available": True,
+        "seed_candidates": seed.get("loaded_count"),
+        "known_limitations": limitations,
+        "current_holes": holes,
+        "next_safe_action": "Review/approve the candidate seed records; provide the OBS video path + hash to close the session evidence loop.",
+        "live_session_receipt": session_receipt,
+    })
 
 
 @app.post("/ingest-thread-passes")

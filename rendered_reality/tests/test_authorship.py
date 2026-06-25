@@ -32,10 +32,13 @@ def test_noah_note_is_noah_authored():
     assert noah_authored_note().is_noah_authored() is True
 
 
-def test_drive_chatgpt_doc_is_ai_authored_candidate():
+def test_drive_chatgpt_doc_is_noah_authorized_ai_assisted():
     from rendered_reality.samples import drive_chatgpt_return_from_dark_doc
     r = drive_chatgpt_return_from_dark_doc()
-    assert r.authorship_status == Authorship.AI_AUTHORED
-    assert r.is_noah_authored() is False
-    # ingested from Drive, but NOT promoted to canon
+    # AI assistance is NOT an authorship demotion: Noah supplied intent + review + approval
+    assert r.authorship_status == Authorship.NOAH_AUTHORIZED_AI_ASSISTED
+    assert r.is_noah_authored() is True
+    assert r.produced_with == "chatgpt" and r.token_origin == "ai"
+    assert r.authorial_authority == "Noah.Physical"
+    # authored under Noah's authority, but still a candidate until HE promotes it
     assert r.canon_status.value != "noah_approved_canon"

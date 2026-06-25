@@ -61,6 +61,7 @@ class Authorship(str, Enum):
     AI_AUTHORED = "ai_authored"
     HUMAN_OTHER = "human_other"
     ADOPTED_BY_NOAH = "adopted_by_noah"
+    NOAH_AUTHORIZED_AI_ASSISTED = "noah_authorized_ai_assisted"
     UNKNOWN = "unknown"
 
 
@@ -118,6 +119,15 @@ class Receipt:
     authorship_status: Authorship = Authorship.UNKNOWN
     adopted_by_noah: bool = False
     transport_path: str = "unknown"
+    # Authorial authority vs token origin — AI assistance is NOT an authorship
+    # demotion. Noah authoring under his intent/review/approval keeps authority.
+    authorial_authority: str = ""
+    intent_owner: str = ""
+    produced_with: str = ""        # ChatGPT / Claude / Grok / Gemini / Copilot / manual / mixed
+    token_origin: str = ""         # human / ai / mixed
+    origin_channel: str = ""
+    reviewed_by: str = ""
+    approved_by: str = ""
     # artifact
     content: str = ""
     artifact_path: str | None = None
@@ -173,7 +183,10 @@ class Receipt:
         return self.machine_observed or self.observation_status == OBS_MACHINE
 
     def is_noah_authored(self) -> bool:
-        return self.authorship_status in (Authorship.NOAH_AUTHORED, Authorship.ADOPTED_BY_NOAH)
+        return self.authorship_status in (
+            Authorship.NOAH_AUTHORED, Authorship.ADOPTED_BY_NOAH,
+            Authorship.NOAH_AUTHORIZED_AI_ASSISTED,
+        )
 
     def adopt_by_noah(self) -> None:
         """Noah explicitly takes authorship of AI/other text. Only this — never

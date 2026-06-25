@@ -29,8 +29,10 @@ RECEIPTS_DIR = REPO_ROOT / "data" / "receipts" / "thread_passes"
 
 REQUIRED_META_FIELDS = (
     "record_id", "title", "source_date", "source_context", "submitted_by",
-    "original_author", "authorship_status", "transport_path", "confidence",
-    "canon_status", "approval_status", "holes", "contradictions", "required_review",
+    "authorial_authority", "intent_owner", "produced_with", "token_origin",
+    "origin_channel", "reviewed_by", "approved_by", "authorship_status",
+    "transport_path", "confidence", "canon_status", "approval_status",
+    "holes", "contradictions", "required_review",
 )
 
 
@@ -88,7 +90,13 @@ def load_thread_passes(base=THREAD_PASSES_DIR, receipts_dir=RECEIPTS_DIR,
             "content_sha256": _sha256(content),
             "ingested_at": _utc(),
             "submitted_by": meta["submitted_by"],
-            "original_author": meta["original_author"],
+            "authorial_authority": meta["authorial_authority"],
+            "intent_owner": meta["intent_owner"],
+            "produced_with": meta["produced_with"],
+            "token_origin": meta["token_origin"],
+            "origin_channel": meta["origin_channel"],
+            "reviewed_by": meta["reviewed_by"],
+            "approved_by": meta["approved_by"],
             "authorship_status": meta["authorship_status"],
             "transport_path": meta["transport_path"],
             "confidence": meta["confidence"],
