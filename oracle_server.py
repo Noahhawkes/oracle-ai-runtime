@@ -1249,6 +1249,47 @@ def _agenda_snapshot():
         return None
 
 
+def _executive_state():
+    """State Graph snapshot: current machine/project/session truth (guarded)."""
+    import subprocess as _sp
+    from pathlib import Path as _P
+    root = _P(__file__).resolve().parent
+
+    def _git(args):
+        try:
+            return _sp.check_output(["git", "-C", str(root)] + args,
+                                    stderr=_sp.DEVNULL, timeout=5).decode("utf-8", "replace").strip()
+        except Exception:
+            return None
+
+    dirty = _git(["status", "--porcelain"])
+    dirty_count = len([ln for ln in dirty.splitlines() if ln.strip()]) if dirty else 0
+    try:
+        from oracle_intent import capability_registry
+        reg = capability_registry()
+        blocked = [k for k, v in reg.items() if v.get("status") in ("blocked", "missing")]
+    except Exception:
+        blocked = []
+    agenda = _agenda_snapshot() or {}
+    db = root / "Memory" / "oracle_memory.db"
+    return {
+        "project": "ORACLE.AI-runtime",
+        "mode": _mode,
+        "port": 7781,
+        "commit": _git(["rev-parse", "--short", "HEAD"]),
+        "branch": _git(["rev-parse", "--abbrev-ref", "HEAD"]),
+        "dirty_files": dirty_count,
+        "memory_db_exists": db.exists(),
+        "memory_message_count": _safe_memory_message_count(),
+        "agenda": agenda,
+        "blocked_capabilities": blocked,
+        "open_holes": _safe_session_holes(),
+        "pending_approvals": (agenda.get("pending_approvals") if isinstance(agenda, dict) else 0) or 0,
+        "next_safe_action": (agenda.get("next_safe_action") if isinstance(agenda, dict) else None)
+                            or "verify the latest patch live",
+    }
+
+
 def _oracle_intent_dispatch(user_text: str):
     """Classify intent first, then route. Returns (reply_text, route) or None to
     fall through to the model/tone layer. Never swallows implementation/identity."""
@@ -1294,10 +1335,35 @@ def _oracle_intent_dispatch(user_text: str):
         return (f"I cannot do that from this runtime yet. Missing capability: {cap}.",
                 "unsupported_capability_request")
 
+    if "voice_request" in intents:
+        update_agenda(last_user_intent="voice_request",
+                      last_system_action="declined: voice_io missing")
+        return ("I cannot do that from this runtime yet. Missing capability: voice_io. "
+                "Push-to-talk, STT, and TTS are the next build after this.", "voice_request")
+
     if "identity_continuity_query" in intents:
         update_agenda(last_user_intent="identity_continuity_query",
                       last_system_action="answered via 3026 doctrine")
         return (doctrine_3026(), "identity_continuity_query")
+
+    if "strategic_planning" in intents:
+        from oracle_intent import build_plan, render_plan
+        plan = build_plan("advance ORACLE's governed executive function", _executive_state())
+        update_agenda(last_user_intent="strategic_planning",
+                      last_system_action="produced grounded plan from state")
+        return (render_plan(plan), "strategic_planning")
+
+    if "reflection_request" in intents:
+        from oracle_intent import reflection_receipt, render_reflection
+        update_agenda(last_user_intent="reflection_request",
+                      last_system_action="produced reflection receipt")
+        return (render_reflection(reflection_receipt(_executive_state())), "reflection")
+
+    if "computer_action_request" in intents:
+        from oracle_intent import computer_action_staging
+        update_agenda(last_user_intent="computer_action_request",
+                      last_system_action="staged computer action (not executed)")
+        return computer_action_staging(user_text)
 
     if "implementation_intent" in intents:
         natural = "I'm with you. " if ("casual_talk" in intents or "mixed_intent" in intents) else ""
@@ -1309,11 +1375,22 @@ def _oracle_intent_dispatch(user_text: str):
                 f"tests. Next safe action: {agenda['next_safe_action']}.",
                 "implementation_intent")
 
+    if "debug_request" in intents:
+        update_agenda(last_user_intent="debug_request", last_system_action="offered debug summary")
+        brief = _oracle_state_brief("runtime state") or ""
+        return ("I can summarize current state, capability blocks, and git/test status, but I do not "
+                "auto-fix code from chat — that goes through the build lane.\n\n" + brief, "debug_request")
+
     if "memory_canon_decision" in intents:
         update_agenda(last_user_intent="memory_canon_decision", last_system_action="surfaced canon gate")
         return ("Canon is yours to grant — I won't promote anything without your explicit approval. "
                 "Name the record id and I'll mark it for canon review; it stays candidate until you approve.",
                 "memory_canon_decision")
+
+    if "approval_request" in intents:
+        update_agenda(last_user_intent="approval_request", last_system_action="acknowledged approval scope")
+        return ("Approval noted. Name the staged item — record id, build task, or computer action — and "
+                "I'll act only within that approved scope, nothing beyond it.", "approval_request")
 
     if "source_provenance_request" in intents:
         update_agenda(last_user_intent="source_provenance_request",
@@ -1334,9 +1411,10 @@ def _oracle_intent_dispatch(user_text: str):
         return ("I'd rather ask than guess. Tell me which record, source, or decision you mean and I'll "
                 "resolve it against the governed record — not invent it.", "missing_data_clarification")
 
-    if "casual_talk" in intents:
+    if "casual_talk" in intents or "presence_check" in intents:
         loops = ", ".join(agenda["open_loops"][:6]) or "none"
-        update_agenda(last_user_intent="casual_talk", last_system_action="greeted + reported agenda")
+        update_agenda(last_user_intent="presence_check" if "presence_check" in intents else "casual_talk",
+                      last_system_action="greeted + reported agenda")
         return (f"Noah, I'm with you. Recording: {agenda['active_recording_status']}. "
                 f"Open loops I'm carrying: {loops}. Next safe action: {agenda['next_safe_action']}.",
                 "casual_talk")
@@ -3763,6 +3841,18 @@ async def api_capability_registry():
         from oracle_intent import capability_registry
         return JSONResponse(capability_registry())
     except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/doctor")
+async def api_doctor():
+    """Doctor: self-diagnosis + capability truth from current State Graph."""
+    try:
+        from oracle_intent import doctor_summary
+        return JSONResponse(doctor_summary(_executive_state()))
+    except Exception as exc:
+        import traceback as _tb
+        _tb.print_exc()
         return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
 

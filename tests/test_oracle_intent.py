@@ -1,4 +1,4 @@
-"""Acceptance tests for the Intent Classification Layer + Capability Truth Registry."""
+﻿"""Acceptance tests for the Intent Classification Layer + Capability Truth Registry."""
 import sys
 from pathlib import Path
 
@@ -9,11 +9,19 @@ sys.path.insert(0, str(ROOT / "core"))
 from oracle_intent import (  # noqa: E402
     classify_intent, capability_registry, registry_status, doctrine_3026, action_capability,
     is_large_directive, safe_preview, build_lane_staging, BUILD_LANE_STAGING,
+    build_plan, render_plan, reflection_receipt, render_reflection, doctor_summary,
+    computer_action_staging, NO_AUTONOMY, ACTION_LANES,
 )
+
+_STATE = {
+    "commit": "abc1234", "branch": "feat/x", "dirty_files": 3, "memory_message_count": 4300,
+    "blocked_capabilities": ["qr_scan", "web_access"], "open_holes": ["OBS hash unknown"],
+    "pending_approvals": 14, "next_safe_action": "verify the latest patch live",
+}
 
 
 def test_1_casual_check_in():
-    assert "casual_talk" in classify_intent("hey oracle are you with me")
+    assert "presence_check" in classify_intent("hey oracle are you with me")
 
 
 def test_2_implementation_not_swallowed_by_state():
@@ -67,9 +75,9 @@ def test_large_multiline_directive_detected():
 
 
 def test_safe_preview_sanitizes_curly_quotes_and_newlines():
-    msg = "“smart”\n‘quotes’\nand newlines " + ("x" * 1000)
+    msg = "â€œsmartâ€\nâ€˜quotesâ€™\nand newlines " + ("x" * 1000)
     p = safe_preview(msg)
-    assert "“" not in p and "”" not in p and "‘" not in p and "’" not in p
+    assert "â€œ" not in p and "â€" not in p and "â€˜" not in p and "â€™" not in p
     assert "\n" not in p
     assert len(p) <= 241  # 240 + ellipsis
 
@@ -92,11 +100,11 @@ def test_build_lane_message_is_honest():
 
 
 def test_markdown_bullet_list_directive_staged_safely():
-    md = "Implement:\n" + "\n".join(f"- step {i} “do this”" for i in range(200))
+    md = "Implement:\n" + "\n".join(f"- step {i} â€œdo thisâ€" for i in range(200))
     staged = build_lane_staging(md)
     assert staged is not None
     _text, _route, preview = staged
-    assert "“" not in preview and "”" not in preview
+    assert "â€œ" not in preview and "â€" not in preview
     assert "\n" not in preview
 
 
@@ -127,3 +135,74 @@ def test_full_directive_preserved_to_local_disk(tmp_path):
     p = stage_directive_to_disk(msg, tmp_path / "build_directives")
     assert Path(p).exists()
     assert Path(p).read_text(encoding="utf-8") == msg
+
+
+# ── Governed Executive Function acceptance tests (modules 3-9) ────────────────
+def test_exec_1_what_next_grounded_plan():
+    assert "strategic_planning" in classify_intent("what should we do next?")
+    plan = build_plan("improve cognition", _STATE)
+    assert plan["smallest_safe_next_action"] == "verify the latest patch live"
+    assert plan["known_facts"] and plan["receipt_plan"]
+
+
+def test_exec_2_presence_vs_build():
+    pres = classify_intent("are you with me")
+    assert "presence_check" in pres and "implementation_intent" not in pres
+    build = classify_intent("patch the authorship wording and run py_compile")
+    assert "implementation_intent" in build and "presence_check" not in build
+
+
+def test_exec_3_capability_with_evidence():
+    reg = capability_registry()
+    qr = reg["qr_scan"]
+    for field in ("status", "evidence", "failure_message", "allowed_action_lane",
+                  "requires_approval", "last_verified"):
+        assert field in qr
+    assert qr["allowed_action_lane"] in ACTION_LANES
+    assert qr["requires_approval"] is True
+
+
+def test_exec_4_computer_action_staged_not_executed():
+    assert "computer_action_request" in classify_intent("click the button and type into the app")
+    text, route = computer_action_staging("click the button")
+    assert route == "computer_action_staged"
+    assert "will not execute" in text.lower()
+
+
+def test_exec_5_reflection_receipt():
+    assert "reflection_request" in classify_intent("reflect on where we are")
+    r = reflection_receipt(_STATE)
+    for k in ("what_changed", "what_is_stuck", "what_noah_is_trying",
+              "safe_next_action", "highest_value_next_action"):
+        assert k in r
+    assert "autonomy" in render_reflection(r).lower()
+
+
+def test_exec_6_doctor_summary():
+    d = doctor_summary(_STATE)
+    assert d["server"] == "alive"
+    assert "capability_summary" in d
+    assert d["voice"] == "missing"          # honest: voice not wired
+    assert d["recommended_next_action"] == "verify the latest patch live"
+
+
+def test_exec_7_preserve_holes_not_invented():
+    plan = build_plan("x", _STATE)
+    assert plan["unknowns"] == ["OBS hash unknown"]   # preserved, not fabricated
+
+
+def test_exec_8_smallest_safe_next_action_present():
+    assert build_plan("x", _STATE)["smallest_safe_next_action"]
+
+
+def test_exec_9_no_unrestricted_autonomy_claim():
+    for text in (render_plan(build_plan("x", _STATE)),
+                 render_reflection(reflection_receipt(_STATE)),
+                 computer_action_staging("click")[0]):
+        assert "not unrestricted autonomy" in text.lower()
+    assert "not unrestricted autonomy" in NO_AUTONOMY.lower()
+
+
+def test_exec_10_voice_request_is_honest_missing():
+    assert "voice_request" in classify_intent("use your voice and talk to me out loud")
+    assert registry_status("voice_io") == "missing"
