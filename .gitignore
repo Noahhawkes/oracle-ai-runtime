@@ -81,3 +81,6 @@ data/receipts/
 
 # Staged large build directives (local-only user content, may be large/personal)
 data/build_directives/
+
+# RedInk ingestion test workspace (scratch, recreated per test)
+noah_exocortex/
