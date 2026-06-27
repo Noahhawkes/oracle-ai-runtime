@@ -165,6 +165,11 @@ async def _lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="ORACLE", lifespan=_lifespan)
+# Let the local starship console (served at /console or opened as a file://) read
+# the honest runtime endpoints. The server binds 127.0.0.1 only, so permissive
+# CORS here is local-only and low-risk.
+from fastapi.middleware.cors import CORSMiddleware as _CORSMiddleware
+app.add_middleware(_CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 
@@ -2647,6 +2652,15 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
 @app.get("/", response_class=HTMLResponse)
 async def root():
     html_path = ROOT / "ui" / "index.html"
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
+@app.get("/console", response_class=HTMLResponse)
+async def console_page():
+    """Serve the starship console (live capability data, no hardcoded lights)."""
+    html_path = ROOT / "ui" / "console.html"
+    if not html_path.exists():
+        return HTMLResponse("<h1>console.html not present</h1>", status_code=404)
     return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
 
