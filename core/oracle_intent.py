@@ -34,7 +34,7 @@ IDENTITY = (
     "difference 1000", "difference a thousand", "successor identity",
 )
 CANON = (
-    "approve", "promote to canon", "make this canon", "is this canon", "reject this",
+    "promote to canon", "make this canon", "is this canon", "reject this",
     "remember this permanently", "promote to memory", "mark as canon", "canon review",
 )
 PROVENANCE = (
@@ -173,7 +173,9 @@ def classify_intent(message: str) -> list[str]:
         intents.append("casual_talk")
 
     if not intents:
-        intents.append("casual_talk")
+        # Unmatched text is NOT presence/casual — let it fall through to the
+        # existing pending / approval / guard / companion routing.
+        intents.append("unclassified")
 
     substantive = [i for i in intents if i in _SUBSTANTIVE]
     if len(substantive) >= 2 or ("casual_talk" in intents and len(substantive) >= 1):

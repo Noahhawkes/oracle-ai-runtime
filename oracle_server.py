@@ -1090,6 +1090,16 @@ def _noah_direct_should_handle(user_text: str) -> bool:
     if _noah_direct_is_action_request(lower):
         return False
 
+    # Pending/approval/wakeup handlers must run before generic companion routing.
+    # Defer approval-followups and bare confirmations so they reach the guard-
+    # approval handler (1524) and the pending-intent gate (2256) instead of a
+    # greeting. Side-effect-free: do NOT call decide_next here — that consumes the
+    # pending intent before the real gate sees it.
+    _affirmations = {"sure", "yes", "yep", "yeah", "ok", "okay", "do it",
+                     "go ahead", "proceed", "approved", "approve", "confirm", "confirmed"}
+    if _is_approval_followup(user_text) or lower in _affirmations:
+        return False
+
     # Default: ordinary non-command, non-action language belongs to Noah.Direct.
     return True
 
@@ -1327,6 +1337,17 @@ def _oracle_intent_dispatch(user_text: str):
                                 if _spath else "staged large build directive (preview only)"),
         )
         return (_stext, _sroute)
+
+    # Defer genuine guard-lane actions (delete/move/commit/push/sync/...) to the
+    # existing guard routing — do not answer them as "unsupported capability".
+    if any(i in intents for i in ("unsupported_capability_request", "action_request",
+                                  "computer_action_request")):
+        try:
+            from unified_oracle_router import classify_intent as _router_classify
+            if (_router_classify(user_text) or {}).get("detected_lane") == "guard_lane":
+                return None
+        except Exception:
+            pass
 
     if "unsupported_capability_request" in intents:
         cap = action_capability(user_text) or "unknown_capability"

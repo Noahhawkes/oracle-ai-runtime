@@ -369,6 +369,10 @@ def fallback_response(
         },
         command_result=ctx.get("command_result"),
     )
+    if status.get("local_timeout"):
+        text = ("ORACLE awake. The local model did not answer before timeout, so I am responding "
+                "from runtime state without resetting the conversation or calling any external model."
+                "\n\n" + text)
     return _result(
         tier=TIER_RUNTIME_STATUS if not active.get("source_count") else TIER_RETRIEVAL_STATUS,
         engine_name="cognition_fabric_fallback",
