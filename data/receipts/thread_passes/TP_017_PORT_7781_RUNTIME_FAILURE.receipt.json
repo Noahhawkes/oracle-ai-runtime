@@ -1,0 +1,53 @@
+{
+  "receipt_id": "build_TP_017_PORT_7781_RUNTIME_FAILURE",
+  "record_id": "TP_017_PORT_7781_RUNTIME_FAILURE",
+  "title": "Port 7781 Runtime Failure - Diagnosis (stale Drive copy on 7777)",
+  "kind": "diagnosis_record",
+  "ingested_at": "2026-06-28T18:30:34.386933+00:00",
+  "submitted_by": "Noah.Physical",
+  "authorial_authority": "Noah.Physical",
+  "intent_owner": "Noah.Physical",
+  "produced_with": "Claude Code",
+  "token_origin": "ai",
+  "origin_channel": "build_directive",
+  "authorship_status": "noah_authorized_ai_assisted",
+  "machine_observed": true,
+  "observation_status": "machine_observed",
+  "live_probe": {
+    "command": "python core/healthcheck.py",
+    "runtime_7781": "DOWN (connection actively refused, WinError 10061)",
+    "ollama_11434": "UP (HTTP 200)",
+    "legacy_7777": "UP (HTTP 200)",
+    "exit_code": 1
+  },
+  "findings": [
+    "Canonical runtime port is 7781 (core/runtime_config.py DEFAULT_RUNTIME_PORT=7781). 7777 is a legacy/stale port, not the governed runtime.",
+    "The process answering on 7777 is a STALE Google Drive mirror copy: 'python.exe \"G:\\My Drive\\HawkesNest LLC\\ORACLE.AI\\oracle_server.py\" --port 7777' (PID observed 37000).",
+    "7781 is empty because nothing launches THIS repo (C:\\Oracle\\ORACLE.AI-runtime) on 7781; the only ORACLE server running is the G: copy forced onto 7777.",
+    "The historical 7781 crash in Logs/oracle_startup.log ('ValueError: Unable to configure formatter default', at G: copy line 1541) is the uvicorn-under-pythonw failure: pythonw.exe gives None std streams and uvicorn's color formatter probes isatty().",
+    "This repo's oracle_server.py ALREADY fixes that at lines 43-61 (reroutes None stdout/stderr to Logs/oracle_runtime.log before uvicorn runs). The stale G: copy predates that fix.",
+    "Conclusion: not a code bug in this repo. Operational: wrong/stale copy running on the wrong port."
+  ],
+  "root_cause": "Running the stale Google Drive mirror (G:\\My Drive\\...\\ORACLE.AI) on 7777 instead of launching the patched canonical repo (C:\\Oracle\\ORACLE.AI-runtime) on 7781.",
+  "changes_made": [
+    "Added core/healthcheck.py - probes 7781 (canonical), 11434 (Ollama), 7777 (legacy/stale) reading the port from runtime_config single-source-of-truth; exits non-zero if 7781 is down.",
+    "No change to oracle_server.py (its headless fix at lines 43-61 already resolves the formatter crash)."
+  ],
+  "artifacts": [
+    {"path": "core/healthcheck.py", "sha256": "sha256:46941ae9e14c0395ecca2a3566a9bae328aa978ce17091f82507aa7ff3ab30c2"}
+  ],
+  "operator_actions_required": [
+    "Stop the stale G: copy on 7777 (it is NOT the governed runtime). Identify: netstat -ano | findstr :7777 -> Stop-Process -Id <pid>.",
+    "Launch the canonical runtime from C:\\Oracle\\ORACLE.AI-runtime via oracle_desktop.bat (binds 7781), or: python oracle_server.py --port 7781.",
+    "Re-run: python core/healthcheck.py -> expect runtime 7781 UP.",
+    "NOTE: Claude did not stop processes or start the elevated server (hands-off gate; web server runs elevated; restart is Noah.Physical's action)."
+  ],
+  "canon_status": "runtime_ingested_record",
+  "approval_status": "pending_noah_physical",
+  "holes": [
+    "G: Drive copy was not diffed against this repo; degree of divergence unknown beyond the port and the pre-fix line count.",
+    "Did not confirm whether any startup launcher still points at the G: path; oracle_desktop.bat in THIS repo correctly targets C:\\Oracle\\ORACLE.AI-runtime and 7781."
+  ],
+  "required_review": ["Noah.Physical restart canonical runtime and confirm 7781 UP"],
+  "promoted_to_canon": false
+}

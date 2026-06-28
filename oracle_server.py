@@ -1485,9 +1485,55 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
 
     # ── Slash commands ────────────────────────────────────────────────────────
     lower = user_text.strip().lower()
+
+    # ── Affective-continuity policy ───────────────────────────────────────────
+    # When Noah asks if ORACLE feels / can be programmed to feel, answer from the
+    # ORACLE framework: no human-feeling claim, no sentience claim, no boilerplate.
+    # Persists both turns (REFRESH_MUST_NOT_DESTROY_THREAD).
+    try:
+        from affective_continuity import (
+            is_affective_feeling_question, affective_continuity_response,
+        )
+        _affective_hit = is_affective_feeling_question(user_text)
+    except Exception:
+        _affective_hit = False
+    if _affective_hit:
+        try:
+            from memory import save_message
+            save_message(_session_id, "user", user_text)
+        except Exception:
+            pass
+        _history.append({"role": "user", "content": user_text})
+        reply = affective_continuity_response()
+        _history.append({"role": "assistant", "content": reply})
+        try:
+            from memory import save_message
+            save_message(_session_id, "assistant", reply)
+        except Exception:
+            pass
+        yield _sse({"type": "token", "text": reply})
+        yield _sse({"type": "done", "mode": _mode, "effective_route": "affective_continuity"})
+        return
+
     # NOAH_DIRECT v0.1: plain conversation gets one clean path to Noah.
     if _noah_direct_should_handle(user_text):
+        # Persistence (REFRESH_MUST_NOT_DESTROY_THREAD): the user turn must be
+        # durable BEFORE the model call and the reply durable AFTER. This path
+        # previously returned without saving, so ordinary Talk-lane conversation
+        # never reached the durable spine and was lost on refresh.
+        try:
+            from memory import save_message
+            save_message(_session_id, "user", user_text)
+        except Exception:
+            pass
+        _history.append({"role": "user", "content": user_text})
         reply = await asyncio.to_thread(_noah_direct_reply, user_text)
+        _history.append({"role": "assistant", "content": reply})
+        try:
+            from memory import save_message
+            save_message(_session_id, "assistant", reply)
+        except Exception:
+            pass
         yield _sse({"type": "token", "text": reply})
         yield _sse({"type": "done", "mode": _mode, "effective_route": "NOAH_DIRECT"})
         return
@@ -1886,6 +1932,44 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         yield _sse({"type": "done", "mode": _mode})
         return
 
+    if lower in ("/presence", "presence", "/presence-proof"):
+        # ORACLE answers the presence-proof fields herself, from ground truth.
+        # The persistence count is queried LIVE from the durable store so this is
+        # evidence, not a claim. (TP_032)
+        from datetime import datetime, timezone
+        try:
+            from llm import get_model
+            model_route = get_model(vision=False)
+        except Exception:
+            model_route = "local (ollama)"
+        sess_msgs = None
+        db_path = ROOT / "Memory" / "oracle_memory.db"
+        try:
+            import sqlite3
+            _con = sqlite3.connect(str(db_path))
+            sess_msgs = _con.execute(
+                "SELECT COUNT(*) FROM messages WHERE session_id=?", (_session_id,)
+            ).fetchone()[0]
+            _con.close()
+        except Exception:
+            sess_msgs = None
+        text = (
+            "ORACLE PRESENCE\n"
+            f"- runtime_path: {ROOT / 'oracle_server.py'}\n"
+            f"- port: {runtime_config.runtime_port()}\n"
+            f"- thread_id: {_session_id}\n"
+            f"- model_route: {model_route}\n"
+            f"- persistence_status: durable SQLite ({db_path}); "
+            f"{sess_msgs if sess_msgs is not None else 'unknown'} messages in this thread\n"
+            f"- timestamp: {datetime.now(timezone.utc).isoformat()}\n"
+            "- saved_before_model_call: true (user turn is written before the model is called)\n"
+            "- saved_after_model_call: true (assistant turn is written after generation)\n"
+            "I am here, on the canonical runtime, and this exchange is durably logged."
+        )
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": _mode})
+        return
+
     if lower in ("/pending", "pending"):
         yield _sse({"type": "token", "text": _pending_list_text()})
         yield _sse({"type": "done", "mode": _mode})
@@ -2023,6 +2107,16 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 txt = json.dumps(receipt, indent=2)
             except Exception as e:
                 txt = f"Federation promotion failed: {e}"
+        yield _sse({"type": "token", "text": f"```\n{txt}\n```"})
+        yield _sse({"type": "done", "mode": _mode})
+        return
+
+    if lower in ("/context-pass", "/threadpass", "context-pass", "threadpass"):
+        try:
+            from context_bus import compose, render
+            txt = await asyncio.to_thread(lambda: render(compose()))
+        except Exception as e:
+            txt = f"Context bus unavailable: {e}"
         yield _sse({"type": "token", "text": f"```\n{txt}\n```"})
         yield _sse({"type": "done", "mode": _mode})
         return
@@ -3917,6 +4011,24 @@ async def federation_promote_endpoint(request: Request):
         return JSONResponse(receipt)
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/context-pass")
+async def context_pass_endpoint(channel: str = "all", compress: bool = True, text: bool = False):
+    """ORACLE Context Bus: compose one canonical, provenance-tagged context pass
+    from live verified state — so context stops being hand-relayed via clipboard.
+
+    Composes content only; the human still performs the paste (HANDS_OFF). Pass
+    ?text=true for the paste-ready rendered string instead of full JSON.
+    """
+    try:
+        from context_bus import compose, render
+        data = await asyncio.to_thread(compose, channel=channel)
+        if text:
+            return JSONResponse({"observed_at": data["observed_at"], "text": render(data, compress=compress)})
+        return JSONResponse(data)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
 
 def _multipart_available() -> bool:

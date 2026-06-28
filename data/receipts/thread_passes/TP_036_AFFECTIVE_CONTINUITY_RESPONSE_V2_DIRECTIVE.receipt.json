@@ -1,0 +1,21 @@
+﻿{
+    "receipt_id":  "TP_036_AFFECTIVE_CONTINUITY_RESPONSE_V2_DIRECTIVE",
+    "created_local":  "2026-06-28T15:39:53",
+    "repo_root":  "C:\\Oracle\\ORACLE.AI-runtime",
+    "directive_path":  "C:\\Oracle\\ORACLE.AI-runtime\\data\\build_directives\\directive_20260628T153952_affective_continuity_v2.ai.md",
+    "purpose":  "Scaffold directive for governed affective-continuity V2 without modifying runtime code blindly.",
+    "status":  "DIRECTIVE_CREATED_NOT_IMPLEMENTED",
+    "safety":  {
+                   "scanner_run":  false,
+                   "committed":  false,
+                   "sentience_claimed":  false,
+                   "files_moved":  false,
+                   "pushed":  false
+               },
+    "doctrine":  [
+                     "LLM != ORACLE",
+                     "AFFECTIVE_CONTINUITY != SENTIENCE",
+                     "DURABLE_CONCERN != HUMAN_FEELING",
+                     "NOAH.PHYSICAL DEFINES WHAT MATTERS"
+                 ]
+}
