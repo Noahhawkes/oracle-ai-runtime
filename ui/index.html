@@ -2441,11 +2441,30 @@ async function refreshPresence() {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+// ── Rehydrate the conversation on load so a refresh retains the thread ────────
+async function restoreHistory() {
+  try {
+    const r = await fetch(apiUrl('/api/history'));
+    const data = await r.json();
+    const turns = (data && data.history) || [];
+    if (!turns.length) return;
+    // Clear the welcome panel and replay the durable thread.
+    document.getElementById('messages').innerHTML = '';
+    conversationStarted = true;
+    turns.forEach(t => {
+      const role = (t.role === 'assistant' || t.role === 'oracle') ? 'oracle' : 'user';
+      if (t.content && String(t.content).trim()) addMessage(role, String(t.content));
+    });
+    scrollToBottom();
+  } catch (e) { /* offline: leave the welcome screen, no fake thread */ }
+}
+
 async function init() {
   try {
     await syncModeState();
   } catch {}
 
+  await restoreHistory();
   await _applyLearnedUI();
   loadRenderedRealityStatus().catch(() => {});
   loadWitnessGovernanceStatus().catch(() => {});

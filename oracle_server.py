@@ -2001,6 +2001,32 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         yield _sse({"type": "done", "mode": _mode})
         return
 
+    if lower in ("/federation", "federation"):
+        try:
+            from federation import format_status
+            txt = await asyncio.to_thread(format_status)
+        except Exception as e:
+            txt = f"Federation pattern buffer unavailable: {e}"
+        yield _sse({"type": "token", "text": f"```\n{txt}\n```"})
+        yield _sse({"type": "done", "mode": _mode})
+        return
+
+    if lower.startswith("/federation-promote"):
+        parts = user_text.strip().split(maxsplit=1)
+        cand = parts[1].strip() if len(parts) > 1 else ""
+        if not cand:
+            txt = "Usage: /federation-promote <candidate_id>  (replicates one staged record into approved canon)"
+        else:
+            try:
+                from federation import promote
+                receipt = await asyncio.to_thread(promote, cand, source="memory", approved_by="Noah.Physical")
+                txt = json.dumps(receipt, indent=2)
+            except Exception as e:
+                txt = f"Federation promotion failed: {e}"
+        yield _sse({"type": "token", "text": f"```\n{txt}\n```"})
+        yield _sse({"type": "done", "mode": _mode})
+        return
+
     if lower in ("/mindcoin", "mindcoin"):
         try:
             from mindcoin import load_ledger, summarize_ledger
@@ -3478,7 +3504,31 @@ async def chat(request: Request):
 
 @app.get("/api/history")
 async def history():
-    return JSONResponse({"history": _history, "session_id": _session_id})
+    """Conversation history for UI rehydrate.
+
+    Live in-process history wins. If it is empty — a fresh page load, a UI
+    refresh, or a server restart (which opens a new empty session) — fall back to
+    the durable store so the last real conversation comes back instead of looking
+    like amnesia. This is what makes a refresh retain the thread.
+    """
+    if _history:
+        return JSONResponse({"history": _history, "session_id": _session_id, "source": "live"})
+    try:
+        import memory
+        with memory.get_conn() as conn:
+            row = conn.execute(
+                "SELECT session_id FROM messages ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        if row:
+            prior = memory.get_recent_messages(row["session_id"], limit=40)
+            return JSONResponse({
+                "history": prior,
+                "session_id": row["session_id"],
+                "source": "durable",
+            })
+    except Exception as exc:
+        return JSONResponse({"history": [], "session_id": _session_id, "source": f"error:{type(exc).__name__}: {exc}"})
+    return JSONResponse({"history": [], "session_id": _session_id, "source": "empty"})
 
 
 @app.get("/health")
@@ -3826,6 +3876,47 @@ async def capabilities_endpoint(smokes: bool = False):
         "summary": summary,
         "capabilities": items,
     })
+
+
+@app.get("/api/federation")
+async def federation_status_endpoint():
+    """Live Federation pattern-buffer status for the operator console.
+
+    Reports the approved-canon size, staged candidate records (with verbatim
+    preview), and the doctrine. Read-only — no record is promoted here.
+    """
+    try:
+        from federation import status as _fed_status, list_candidates
+        st = await asyncio.to_thread(_fed_status)
+        st["candidates"] = await asyncio.to_thread(list_candidates, 50)
+        return JSONResponse(st)
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/federation/promote")
+async def federation_promote_endpoint(request: Request):
+    """Replicate one staged candidate into approved canon (the replicator's pulse).
+
+    Body: {"id": "<candidate_id>", "source": "memory", "approved_by": "Noah.Physical"}
+    Verbatim, secret-guarded, idempotent, audited by core/federation.py.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    candidate_id = (body or {}).get("id", "")
+    source = (body or {}).get("source", "memory")
+    approved_by = (body or {}).get("approved_by", "Noah.Physical")
+    if not candidate_id:
+        return JSONResponse({"ok": False, "error": "missing candidate id"}, status_code=400)
+    try:
+        from federation import promote
+        receipt = await asyncio.to_thread(promote, candidate_id, source=source, approved_by=approved_by)
+        receipt["ok"] = receipt.get("status") in ("replicated", "noop_already_canon")
+        return JSONResponse(receipt)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
 
 def _multipart_available() -> bool:

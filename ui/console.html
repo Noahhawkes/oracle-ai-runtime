@@ -234,6 +234,26 @@
                         <li class="text-neutral-600">- awaiting live capability broker -</li>
                     </ul>
                 </div>
+
+                <!-- FEDERATION PATTERN BUFFER -->
+                <div class="mt-6 border-t border-neutral-800 pt-4">
+                    <h4 class="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-2">Federation Pattern Buffer</h4>
+                    <div id="rt-fed-status" class="text-[9px] mb-2 text-neutral-500 font-mono">connecting to pattern buffer...</div>
+                    <div class="text-[10px] font-mono text-neutral-400 space-y-1">
+                        <div class="flex items-center justify-between"><span>Approved records (canon)</span><span id="rt-fed-approved" class="text-emerald-400">—</span></div>
+                        <div class="flex items-center justify-between"><span>Candidate records staged</span><span id="rt-fed-candidates" class="text-amber-400">—</span></div>
+                        <div class="flex items-center justify-between"><span>Promotable now</span><span id="rt-fed-promotable" class="text-cyan-400">—</span></div>
+                    </div>
+                    <!-- NEXT CANDIDATE / REPLICATOR CONTROL -->
+                    <div id="rt-fed-next" class="mt-3 hidden">
+                        <div class="text-[9px] text-neutral-500 uppercase tracking-widest mb-1">Next candidate</div>
+                        <div id="rt-fed-next-title" class="text-[10px] text-zinc-300 font-mono"></div>
+                        <div id="rt-fed-next-text" class="text-[9px] text-neutral-500 font-mono mt-1 max-h-16 overflow-y-auto border-l border-neutral-800 pl-2 italic"></div>
+                        <button id="rt-fed-promote" onclick="rtPromoteNext()" class="mt-2 w-full px-2 py-1 bg-emerald-950 border border-emerald-600 text-emerald-300 rounded text-[10px] font-bold header-font hover:bg-emerald-900">⬆ REPLICATE TO CANON</button>
+                        <div id="rt-fed-promote-result" class="text-[9px] mt-1 font-mono"></div>
+                    </div>
+                    <div id="rt-fed-doctrine" class="text-[9px] mt-2 text-neutral-600 italic"></div>
+                </div>
             </div>
         </section>
 
@@ -1064,6 +1084,45 @@ The difference 1,000 years from now is not metaphysical proof of 'real' vs 'simu
         // === LIVE RUNTIME WIRING (patched: real capability broker, no fake lights) ===
         const RT_BASE = (location.protocol === 'file:') ? 'http://127.0.0.1:7781' : '';
         function rtColor(s){return ({available:'text-emerald-500',verified:'text-emerald-500',degraded:'text-amber-500',blocked:'text-red-500',missing:'text-red-500',stubbed:'text-amber-400',unverified:'text-neutral-400'})[s]||'text-neutral-500';}
+        let rtFedNext=null;
+        async function rtFederation(){
+            const fst=document.getElementById('rt-fed-status'); if(!fst) return;
+            try{
+                const d=await (await fetch(RT_BASE+'/api/federation')).json();
+                if(d.error){ fst.innerHTML='<span class="text-amber-500">buffer error: '+d.error+'</span>'; return; }
+                const promotable=d.promotable_now||0;
+                fst.innerHTML='LIVE · <span class="'+(promotable>0?'text-emerald-500">REPLICATOR ONLINE':'text-neutral-400">BUFFER IDLE')+'</span>';
+                document.getElementById('rt-fed-approved').textContent=(d.approved_records!=null?d.approved_records:'—');
+                document.getElementById('rt-fed-candidates').textContent=(d.candidate_records_staged!=null?d.candidate_records_staged:'—');
+                document.getElementById('rt-fed-promotable').textContent=promotable;
+                document.getElementById('rt-fed-doctrine').textContent=d.doctrine||'';
+                const nextBox=document.getElementById('rt-fed-next');
+                rtFedNext=d.next_candidate||null;
+                if(rtFedNext){
+                    nextBox.classList.remove('hidden');
+                    document.getElementById('rt-fed-next-title').textContent='['+rtFedNext.source+':'+rtFedNext.id+'] '+(rtFedNext.title||'');
+                    document.getElementById('rt-fed-next-text').textContent=rtFedNext.raw_text||'(no text preview)';
+                    const btn=document.getElementById('rt-fed-promote');
+                    if(rtFedNext.sensitive_flag){ btn.disabled=true; btn.textContent='⛔ BLOCKED (secret pattern)'; btn.className='mt-2 w-full px-2 py-1 bg-red-950 border border-red-700 text-red-400 rounded text-[10px] font-bold header-font cursor-not-allowed'; }
+                }else{
+                    nextBox.classList.add('hidden');
+                }
+            }catch(e){
+                fst.innerHTML='<span class="text-red-500">OFFLINE · pattern buffer unreachable - no fake lights</span>';
+            }
+        }
+        async function rtPromoteNext(){
+            if(!rtFedNext) return;
+            const res=document.getElementById('rt-fed-promote-result');
+            if(!confirm('Replicate this candidate into approved canon as Noah.Physical?\n\n'+(rtFedNext.raw_text||rtFedNext.title))) return;
+            res.innerHTML='<span class="text-amber-500">replicating…</span>';
+            try{
+                const r=await (await fetch(RT_BASE+'/api/federation/promote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:rtFedNext.id,source:rtFedNext.source,approved_by:'Noah.Physical'})})).json();
+                if(r.ok){ res.innerHTML='<span class="text-emerald-500">✓ '+(r.status==='noop_already_canon'?'already in canon':'replicated → canon id '+(r.canon_id||'?'))+'</span>'; }
+                else{ res.innerHTML='<span class="text-red-500">refused: '+(r.blocker||r.error||'unknown')+'</span>'; }
+            }catch(e){ res.innerHTML='<span class="text-red-500">request failed: '+e+'</span>'; }
+            rtFederation();
+        }
         async function rtConnectRuntime(){
             const src=document.getElementById('rt-cap-source'); const list=document.getElementById('rt-capability-list');
             try{
@@ -1076,6 +1135,8 @@ The difference 1,000 years from now is not metaphysical proof of 'real' vs 'simu
             }catch(e){
                 src.innerHTML='<span class="text-red-500">OFFLINE · runtime unreachable - refusing to show hardcoded status</span>';
                 list.innerHTML='<li class="text-red-500">- runtime not reachable; no fake lights shown -</li>';
+                const fst=document.getElementById('rt-fed-status');
+                if(fst) fst.innerHTML='<span class="text-red-500">OFFLINE · pattern buffer unreachable - no fake lights</span>';
             }
             try{
                 const st=await (await fetch(RT_BASE+'/api/status')).json(); const b=st.boot||{};
@@ -1086,6 +1147,7 @@ The difference 1,000 years from now is not metaphysical proof of 'real' vs 'simu
 
         window.onload = () => {
             rtConnectRuntime();
+            rtFederation();
             loadContinuityStorage();
             // Stardate dynamic calculation
             const now = new Date();

@@ -84,3 +84,6 @@ data/build_directives/
 
 # RedInk ingestion test workspace (scratch, recreated per test)
 noah_exocortex/
+
+# RedInk sovereign custody store (local-only, not committed)
+custody/

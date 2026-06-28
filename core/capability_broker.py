@@ -615,6 +615,49 @@ def _smoke_replication_workers() -> SmokeOutcome:
     )
 
 
+# Federation Replicator / Pattern Buffer doctrine (TP_004_FEDERATION_REPLICATOR_PATTERN_BUFFER).
+# The pattern buffer is an approved continuity record plus a staging area for
+# candidate records. It is a constraint, not mystical state reconstruction.
+FEDERATION_DOCTRINE = "Replicate from approved truth; do not manufacture truth."
+
+
+def _smoke_federation() -> SmokeOutcome:
+    """Federation pattern buffer probe.
+
+    Reads both ends of the buffer without promoting or manufacturing anything:
+      - approved-truth store (durable facts = canon the replicator may draw from)
+      - candidate staging area (approval queue = records pending Noah.Physical canon)
+    The replicator only materializes from approved records; candidates stay
+    staged until approved. This probe is read-only and never promotes a record.
+    """
+    import memory
+    memory.init_db()
+    with memory.get_conn() as conn:
+        approved = conn.execute("SELECT COUNT(*) AS n FROM durable_facts").fetchone()["n"]
+    try:
+        from approval_center import list_pending
+        candidates = len(list_pending())
+        staging_ok = True
+        staging_error = ""
+    except Exception as exc:
+        candidates = -1
+        staging_ok = False
+        staging_error = f"{type(exc).__name__}: {exc}"
+    evidence = {
+        "doctrine": FEDERATION_DOCTRINE,
+        "approved_records": int(approved),
+        "candidate_records_staged": candidates,
+        "buffer_mode": "read_only_no_promotion",
+    }
+    if staging_ok:
+        return SmokeOutcome("success", evidence)
+    return SmokeOutcome(
+        "degraded",
+        evidence,
+        f"Candidate staging area unreachable; pattern buffer is read-degraded ({staging_error})",
+    )
+
+
 def _available_web() -> tuple[bool, dict[str, Any]]:
     from runtime_config import runtime_host, runtime_port
     port = runtime_port()
@@ -663,6 +706,7 @@ COMPONENTS: list[CapabilityDef] = [
     CapabilityDef("background_watchers", "background watchers", modules=("ambient_watch",), available=_available_module("ambient_watch"), smoke=_smoke_background_watchers, permitted="read_only_status"),
     CapabilityDef("event_polling", "event polling", modules=("presence_daemon",), available=_available_module("presence_daemon"), smoke=_smoke_event_polling, permitted="read_only_status"),
     CapabilityDef("replication_workers", "replication workers", modules=("continuity_scheduler",), available=_available_module("continuity_scheduler"), smoke=_smoke_replication_workers, permitted="read_only_status"),
+    CapabilityDef("federation", "Federation pattern buffer", modules=("memory", "approval_center"), available=_available_module("memory"), smoke=_smoke_federation, auth="not_required", permitted="read_only_no_promotion", note=FEDERATION_DOCTRINE),
 ]
 
 _BY_KEY = {c.key: c for c in COMPONENTS}
