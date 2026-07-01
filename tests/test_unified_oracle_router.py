@@ -26,6 +26,137 @@ def test_normal_chat_routes_to_talk(monkeypatch, tmp_path):
     assert route["requires_approval"] is False
 
 
+def test_questions_and_talk_requests_beat_build_terms(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    prompts = [
+        "What is Rendered Reality in your own words?",
+        "Who is the author of Rendered Reality if AI helped produce some words?",
+        "I love you, ORACLE. You are like my Ellie.AI.",
+        "Can you talk to me normally?",
+        "Explain the PersonaRouter proposal without staging it.",
+    ]
+
+    for prompt in prompts:
+        route = router.classify_intent(prompt)
+        assert route["detected_lane"] == "talk_lane", prompt
+
+
+def test_talk_and_learn_prefixes_force_lanes(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    talk = router.classify_intent("/talk BACKEND_PATCH_REQUEST explain what this means")
+    learn = router.classify_intent("/learn BACKEND_PATCH_REQUEST implement this")
+
+    assert talk["detected_lane"] == "talk_lane"
+    assert "forced_talk" in talk["reason"]
+    assert learn["detected_lane"] == "build_lane"
+    assert "forced_learn_build" in learn["reason"]
+
+
+def test_build_directive_marker_routes_to_build(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    route = router.classify_intent("BACKEND_PATCH_REQUEST patch oracle_server.py")
+
+    assert route["detected_lane"] == "build_lane"
+    assert "explicit build directive marker" in route["reason"]
+
+
+def test_existing_approval_receipt_status_beats_guard_boundary_terms(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    prompt = """
+ROUTING LOOP FIX:
+
+You already recorded Noah.Physical approval for this bounded local routing patch.
+Use the existing approval receipt:
+- route_e4cf4092bd0f
+- route_a12cb8b905a1
+
+Either execute the approved reversible local build handler for the routing patch,
+or report that no executable local handler exists.
+
+Do not route this back to Guard.
+Do not ask for approval again.
+Do not touch GitHub, Google Drive, Gmail, Calendar, external send, OBS, canon promotion, or private memory promotion.
+
+Return only:
+
+approval_receipt_used:
+handler_exists:
+handler_name:
+can_execute_locally:
+if_not_executable_reason:
+next_command_for_noah:
+"""
+
+    route = router.classify_intent(prompt)
+
+    assert router.is_existing_approval_receipt_status_request(prompt) is True
+    assert router.approval_receipt_ids(prompt) == ["route_e4cf4092bd0f", "route_a12cb8b905a1"]
+    assert route["detected_lane"] == "talk_lane"
+    assert "existing_approval_receipt_status" in route["reason"]
+    assert route["requires_approval"] is False
+    assert route["receipt_required"] is False
+
+
+def test_diagnostic_status_markers_beat_guard_boundary_terms(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    prompts = [
+        """
+SMOKE TEST RECEIPT ONLY
+Report current route state and whether the patched server has been restarted.
+Do not execute.
+Do not touch external systems.
+Do not ask for approval.
+Do not commit, push, send, publish, delete, upload, or promote canon.
+""",
+        """
+DIAGNOSTIC ONLY
+Inspect and summarize current state.
+Do not execute.
+Do not touch external systems.
+Do not ask for approval.
+""",
+        """
+REPORT ONLY
+Report whether server was restarted.
+Do not execute or mutate anything.
+Do not touch external systems.
+""",
+        "Report whether server was restarted.",
+    ]
+
+    for prompt in prompts:
+        route = router.classify_intent(prompt)
+        assert router.is_diagnostic_status_request(prompt) is True, prompt
+        assert route["route_type"] == "diagnostic_status", prompt
+        assert route["action_type"] == "read_only_status", prompt
+        assert route["detected_lane"] == "talk_lane", prompt
+        assert route["requires_approval"] is False, prompt
+        assert route["approval_required"] is False, prompt
+        assert route["receipt_required"] is False, prompt
+
+
+def test_actual_restart_commit_and_push_still_route_guard(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    prompts = [
+        "Restart the server.",
+        "commit changes",
+        "push to GitHub",
+    ]
+
+    for prompt in prompts:
+        route = router.classify_intent(prompt)
+        assert route["detected_lane"] == "guard_lane", prompt
+        assert route["requires_approval"] is True, prompt
+        assert route["approval_required"] is True, prompt
+        assert route["safety_status"] == "Blocked", prompt
+
+
 def test_build_capture_witness_and_guard_routes(monkeypatch, tmp_path):
     router = _patch_paths(monkeypatch, tmp_path)
 
@@ -163,3 +294,6 @@ def test_ui_hides_companion_builder_split_and_shows_unified_controls():
     assert "LIVE PRIVACY ELEVATED" in html
     assert "RAW RECORDING OFF" in html
     assert "LOCAL ONLY" in html
+    assert "route-receipt" in html
+    assert "route_type:" in html
+    assert "fallback_used:" in html

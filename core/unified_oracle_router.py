@@ -51,11 +51,27 @@ BARE_APPROVAL_PHRASES = {
     "do it",
 }
 APPROVE_ROUTE_RE = re.compile(r"^\s*approve\s+route\s+(?P<route_id>route_[a-f0-9]{12})(?:\s*:\s*(?P<scope>.+))?\s*$", re.IGNORECASE)
+ROUTE_RECEIPT_RE = re.compile(r"\broute_[a-f0-9]{12}\b", re.IGNORECASE)
 
 BUILD_TERMS = (
     "build", "implement", "fix", "patch", "edit", "write file", "update ui",
     "create module", "add module", "run test", "run tests", "pytest", "api route",
     "endpoint", "refactor", "code", "coding", "scaffold", "compile",
+)
+FORCE_TALK_PREFIX = "/talk"
+FORCE_LEARN_PREFIX = "/learn"
+BUILD_DIRECTIVE_MARKERS = (
+    "backend_patch_request",
+    "self_patch_staging_request",
+    "thread_pass",
+    ".ai build pass",
+    ".ai:thread_pass",
+)
+QUESTION_OR_TALK_TERMS = (
+    "?", "what is", "what are", "who is", "who are", "why", "how does",
+    "how do", "can you talk", "talk to me", "speak to me", "explain",
+    "in your own words", "tell me about", "tell me what", "recall",
+    "remember when", "what do you remember", "memory question",
 )
 LIVE_CAPTURE_TERMS = (
     "capture current live transmission state",
@@ -98,7 +114,10 @@ GUARD_TERMS = (
     "cleanup", "clean up", "quarantine", "archive old", "raw recording",
     "onedrive", "one drive", "gmail", "credentials", "credential", "secret",
     "password", "token", "screen capture", "audio capture", "clipboard",
-    "keystroke", "record video", "record audio",
+    "keystroke", "record video", "record audio", "restart server",
+    "restart the server", "restart oracle", "restart backend",
+    "restart runtime", "send ", "send to", "publish", "promote canon",
+    "external call", "call external", "computer control", "control the computer",
 )
 ACTIVE_CONTEXT_TERMS = (
     "active context sync",
@@ -120,6 +139,66 @@ LIVE_STRICT_GUARD_TERMS = (
     "one drive", "gmail", "credential", "credentials", "secret", "password",
     "screen capture", "audio capture", "clipboard", "upload", "sync",
     "cloud", "raw recording", "record video", "record audio", "keystroke",
+)
+EXISTING_APPROVAL_STATUS_MARKERS = (
+    "routing loop fix",
+    "already recorded noah.physical approval",
+    "use the existing approval receipt",
+    "existing approval receipt",
+    "do not route this back to guard",
+    "do not ask for approval again",
+)
+EXISTING_APPROVAL_STATUS_FIELDS = (
+    "approval_receipt_used:",
+    "handler_exists:",
+    "handler_name:",
+    "can_execute_locally:",
+    "if_not_executable_reason:",
+    "next_command_for_noah:",
+)
+DIAGNOSTIC_STATUS_MARKERS = (
+    "diagnostic only",
+    "smoke test receipt only",
+    "report only",
+    "status only",
+    "do not execute",
+    "do not touch external systems",
+    "do not ask for approval",
+)
+DIAGNOSTIC_STATUS_TERMS = (
+    "report",
+    "inspect",
+    "diagnose",
+    "diagnostic",
+    "status",
+    "summarize",
+    "summary",
+    "current state",
+    "receipt only",
+    "smoke test",
+    "whether",
+    "was restarted",
+)
+DIAGNOSTIC_NEGATED_ACTION_RE = re.compile(
+    r"\b(?:do\s+not|don't|no)\s+"
+    r"(?:execute|touch|ask|restart|write|mutate|patch|commit|push|send|publish|delete|promote|upload|call|control|external)\b"
+    r"[^.\n;]*",
+    re.IGNORECASE,
+)
+DIAGNOSTIC_ACTION_PATTERNS = (
+    re.compile(r"\brestart(?:\s+the)?\s+(?:server|oracle|backend|runtime)\b", re.IGNORECASE),
+    re.compile(r"\bwrite(?:\s+|$)", re.IGNORECASE),
+    re.compile(r"\bmutate\b", re.IGNORECASE),
+    re.compile(r"\bpatch\b", re.IGNORECASE),
+    re.compile(r"\bcommit\b", re.IGNORECASE),
+    re.compile(r"\bpush\b", re.IGNORECASE),
+    re.compile(r"\bsend\b", re.IGNORECASE),
+    re.compile(r"\bpublish\b", re.IGNORECASE),
+    re.compile(r"\bdelete\b", re.IGNORECASE),
+    re.compile(r"\bpromote(?:\s+\w+){0,3}\s+canon\b", re.IGNORECASE),
+    re.compile(r"\bupload\b", re.IGNORECASE),
+    re.compile(r"\bexternal\s+call\b|\bcall\s+external\b", re.IGNORECASE),
+    re.compile(r"\bcomputer\s+control\b|\bcontrol\s+(?:the\s+)?computer\b", re.IGNORECASE),
 )
 
 
@@ -144,6 +223,107 @@ def _contains_any(lower: str, terms: tuple[str, ...]) -> bool:
     return any(term in lower for term in terms)
 
 
+def _strip_command_prefix(lower: str, prefix: str) -> str:
+    if lower == prefix:
+        return ""
+    if lower.startswith(prefix + " "):
+        return lower[len(prefix):].strip()
+    return lower
+
+
+def _starts_with_build_directive_marker(lower: str) -> bool:
+    stripped = lower.lstrip()
+    return any(stripped.startswith(marker) for marker in BUILD_DIRECTIVE_MARKERS)
+
+
+def approval_receipt_ids(text: str) -> list[str]:
+    """Return route receipt ids mentioned in text, preserving first-seen order."""
+    seen: set[str] = set()
+    ids: list[str] = []
+    for match in ROUTE_RECEIPT_RE.finditer(str(text or "")):
+        receipt_id = match.group(0).lower()
+        if receipt_id not in seen:
+            seen.add(receipt_id)
+            ids.append(receipt_id)
+    return ids
+
+
+def is_existing_approval_receipt_status_request(user_message: str) -> bool:
+    """Detect requests to use already-recorded approval receipts.
+
+    These prompts often include risky words in a negative boundary list
+    ("do not touch GitHub/Drive/Gmail"). They are status/handler questions,
+    not new Guard approval requests.
+    """
+    lower = str(user_message or "").strip().lower()
+    if not lower:
+        return False
+    has_receipt_id = ROUTE_RECEIPT_RE.search(lower) is not None
+    has_existing_marker = _contains_any(lower, EXISTING_APPROVAL_STATUS_MARKERS)
+    has_status_field = _contains_any(lower, EXISTING_APPROVAL_STATUS_FIELDS)
+    asks_handler_status = any(
+        phrase in lower
+        for phrase in (
+            "handler exists",
+            "handler_exists",
+            "executable local handler",
+            "can_execute_locally",
+            "if_not_executable_reason",
+        )
+    )
+    return bool(
+        (has_receipt_id or has_existing_marker)
+        and (has_status_field or asks_handler_status)
+        and (
+            "approval" in lower
+            or "do not route this back to guard" in lower
+            or "do not ask for approval again" in lower
+        )
+    )
+
+
+def _diagnostic_action_surface(lower: str) -> str:
+    return DIAGNOSTIC_NEGATED_ACTION_RE.sub(" ", lower)
+
+
+def _contains_unnegated_diagnostic_action(lower: str) -> bool:
+    surface = _diagnostic_action_surface(lower)
+    return any(pattern.search(surface) for pattern in DIAGNOSTIC_ACTION_PATTERNS)
+
+
+def is_diagnostic_status_request(user_message: str) -> bool:
+    """Detect read-only report/status prompts before risky-word Guard matching."""
+    lower = str(user_message or "").strip().lower()
+    if not lower:
+        return False
+    if _contains_unnegated_diagnostic_action(lower):
+        return False
+    has_marker = _contains_any(lower, DIAGNOSTIC_STATUS_MARKERS)
+    asks_status = _contains_any(lower, DIAGNOSTIC_STATUS_TERMS)
+    read_only_restart_report = (
+        "report whether" in lower
+        and ("server was restarted" in lower or "was restarted" in lower)
+    )
+    return bool((has_marker and asks_status) or read_only_restart_report)
+
+
+def _question_or_talk_request(user_message: str) -> bool:
+    lower = str(user_message or "").strip().lower()
+    if not lower:
+        return False
+    return _contains_any(lower, QUESTION_OR_TALK_TERMS)
+
+
+def _read_only_synthesis(user_message: str) -> bool:
+    """Doctrine / identity / memory-domain question (or explicit synthesis
+    request) with NO action requested -> keep in Talk, not Guard/Build."""
+    try:
+        from talk_synthesis import should_stay_talk
+        return should_stay_talk(user_message)
+    except Exception:
+        return False
+
+
 def _live_transmission_active() -> bool:
     try:
         from live_transmission import is_live_active
@@ -155,40 +335,83 @@ def _live_transmission_active() -> bool:
 
 def classify_intent(user_message: str) -> dict[str, Any]:
     lower = str(user_message or "").strip().lower()
+    route_type = "unified_intent"
+    action_type = "conversation"
     if not lower:
         lane = "talk_lane"
         reason = "empty message defaults to talk lane"
         confidence = "medium"
+    elif lower == FORCE_TALK_PREFIX or lower.startswith(FORCE_TALK_PREFIX + " "):
+        lane = "talk_lane"
+        reason = "forced_talk: /talk prefix"
+        confidence = "high"
+    elif lower == FORCE_LEARN_PREFIX or lower.startswith(FORCE_LEARN_PREFIX + " "):
+        lane = "build_lane"
+        reason = "forced_learn_build: /learn prefix"
+        confidence = "high"
+    elif is_existing_approval_receipt_status_request(user_message):
+        lane = "talk_lane"
+        reason = "existing_approval_receipt_status: report bound approval/handler status without re-entering Guard"
+        confidence = "high"
+        action_type = "read_only_status"
+    elif is_diagnostic_status_request(user_message):
+        lane = "talk_lane"
+        reason = "diagnostic_status: read-only report/status prompt, no execution requested"
+        confidence = "high"
+        route_type = "diagnostic_status"
+        action_type = "read_only_status"
+    elif _starts_with_build_directive_marker(lower):
+        lane = "build_lane"
+        reason = "explicit build directive marker"
+        confidence = "high"
+        action_type = "build_directive"
+    elif _read_only_synthesis(user_message):
+        lane = "talk_lane"
+        reason = "read_only_synthesis: doctrine/identity/memory-domain question, no action requested"
+        confidence = "high"
+        action_type = "read_only_synthesis"
+    elif _question_or_talk_request(user_message):
+        lane = "talk_lane"
+        reason = "talk_question_or_explanation: question/speak/recall/explain request"
+        confidence = "high"
+        action_type = "answer"
     elif _contains_any(lower, ACTIVE_CONTEXT_TERMS) and not _contains_any(lower, ACTIVE_CONTEXT_BLOCKING_TERMS):
         lane = "capture_lane"
         reason = "active local context refresh request"
         confidence = "high"
+        action_type = "local_context_refresh"
     elif _contains_any(lower, GUARD_TERMS) or (
         _live_transmission_active() and _contains_any(lower, LIVE_STRICT_GUARD_TERMS)
     ):
         lane = "guard_lane"
         reason = "message contains risky action requiring approval or block"
         confidence = "high"
+        action_type = "guarded_action"
     elif _contains_any(lower, LIVE_CAPTURE_TERMS):
         lane = "capture_lane"
         reason = "live transmission metadata capture or status request"
         confidence = "high"
+        action_type = "local_capture"
     elif _contains_any(lower, BUILD_TERMS) and _contains_any(lower, ("source map", "sourcemap")):
         lane = "build_lane"
         reason = "implementation request for SourceMap tooling"
         confidence = "high"
+        action_type = "build_request"
     elif _contains_any(lower, CAPTURE_TERMS):
         lane = "capture_lane"
         reason = "artifact, receipt, continuity, or memory capture request"
         confidence = "high"
+        action_type = "local_capture"
     elif _contains_any(lower, BUILD_TERMS):
         lane = "build_lane"
         reason = "implementation or tool-backed work request"
         confidence = "high"
+        action_type = "build_request"
     elif _contains_any(lower, WITNESS_TERMS):
         lane = "witness_lane"
         reason = "live context, OBS, screen, recording, or transcript request"
         confidence = "medium"
+        action_type = "witness_request"
     else:
         lane = "talk_lane"
         reason = "normal conversation or question"
@@ -231,11 +454,14 @@ def classify_intent(user_message: str) -> dict[str, Any]:
         "route_id": _id("route"),
         "timestamp": _now(),
         "user_message_excerpt": _excerpt(user_message),
+        "route_type": route_type,
+        "action_type": action_type,
         "detected_lane": lane,
         "lane_label": LANES[lane],
         "confidence": confidence,
         "reason": reason,
         "requires_approval": requires_approval,
+        "approval_required": requires_approval,
         "allowed_actions": allowed_by_lane[lane],
         "blocked_actions": blocked_actions,
         "receipt_required": lane != "talk_lane",
@@ -274,6 +500,8 @@ def write_route_receipt(route: dict[str, Any], *, actions_taken: list[str] | Non
         "receipt_id": _id("unified_oracle_receipt"),
         "timestamp": _now(),
         "operation": "unified_oracle_route",
+        "route_type": route.get("route_type"),
+        "action_type": route.get("action_type"),
         "detected_lane": route.get("detected_lane"),
         "lane_label": route.get("lane_label"),
         "user_message_excerpt": route.get("user_message_excerpt"),

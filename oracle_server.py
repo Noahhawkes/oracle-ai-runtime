@@ -204,6 +204,63 @@ def _approval_followup_response(pending_route: dict[str, Any] | None) -> str:
         "Restate the exact target, action, and boundary, and I will route it through the correct guarded handler."
     )
 
+
+def _is_existing_approval_receipt_status_request(text: str) -> bool:
+    try:
+        from unified_oracle_router import is_existing_approval_receipt_status_request
+        return is_existing_approval_receipt_status_request(text)
+    except Exception:
+        lower = str(text or "").strip().lower()
+        return (
+            "approval_receipt_used:" in lower
+            and "handler_exists:" in lower
+            and "do not route this back to guard" in lower
+        )
+
+
+def _approval_receipt_status_response(text: str) -> str:
+    try:
+        from unified_oracle_router import approval_receipt_ids
+        receipt_ids = approval_receipt_ids(text)
+    except Exception:
+        receipt_ids = _re.findall(r"\broute_[a-f0-9]{12}\b", str(text or ""), flags=_re.IGNORECASE)
+    receipt_line = ", ".join(receipt_ids) if receipt_ids else "none_provided"
+    return "\n".join(
+        [
+            f"approval_receipt_used: {receipt_line}",
+            "handler_exists: false",
+            "handler_name: none_registered_in_web_runtime",
+            "can_execute_locally: false",
+            (
+                "if_not_executable_reason: no executable local build handler is registered in the ORACLE web/chat "
+                "runtime for this approved routing patch; no action was executed from the approval receipt."
+            ),
+            "next_command_for_noah: run the approved routing patch through Codex/terminal lane, then return py_compile, pytest, and git diff receipts.",
+        ]
+    )
+
+
+def _diagnostic_status_response(route: dict[str, Any]) -> str:
+    route_path = route.get("route_path") or "not_written"
+    return "\n".join(
+        [
+            "route_type: diagnostic_status",
+            f"lane: {route.get('detected_lane', 'talk_lane')}",
+            f"action_type: {route.get('action_type', 'read_only_status')}",
+            f"approval_required: {bool(route.get('requires_approval'))}",
+            f"route_reason: {route.get('reason', 'diagnostic status request')}",
+            f"route_path: {route_path}",
+            "server_restarted_by_this_request: false",
+            "actions_executed: 0",
+            "files_mutated: 0",
+            "git_commit: false",
+            "git_push: false",
+            "external_action: false",
+            "canon_promotion: false",
+        ]
+    )
+
+
 def _boot():
     global _session_id, _active_context_latest
     from memory import init_db, new_session
@@ -330,6 +387,10 @@ _ROUTING_PHRASES = (
     "sending to claude code",
     "[build] ↗ routing to claude code",
 )
+_INLINE_ROUTING_PATTERNS = (
+    _re.compile(r"\s*(?:routing|sending)\s+to\s+claude\s+code\.?", _re.I),
+    _re.compile(r"\s*\[build\].*?routing\s+to\s+claude\s+code\.?", _re.I),
+)
 
 # Block prefixes that are system-internal noise, never shown to Noah
 _BLOCK_PREFIXES = (
@@ -351,6 +412,13 @@ def _strip_routing_artifacts(reply: str, mode: str = "companion") -> str:
     """
     if not reply:
         return reply
+
+    def _strip_inline_routing(line: str) -> str:
+        cleaned = line
+        for pattern in _INLINE_ROUTING_PATTERNS:
+            cleaned = pattern.sub("", cleaned)
+        return cleaned.strip()
+
     lines = reply.splitlines()
     cleaned: list[str] = []
     skip_block = False
@@ -369,7 +437,9 @@ def _strip_routing_artifacts(reply: str, mode: str = "companion") -> str:
             continue
         if skip_block:
             continue
-        cleaned.append(line)
+        line = _strip_inline_routing(line)
+        if line:
+            cleaned.append(line)
     result = "\n".join(cleaned).strip()
     if result:
         return result
@@ -1091,8 +1161,20 @@ def _noah_direct_should_handle(user_text: str) -> bool:
         return False
 
     lower = raw.lower().strip()
+    talk_lane_requests = (
+        "can you talk",
+        "talk to me",
+        "speak to me",
+        "communicate normally",
+        "talk normally",
+        "talk to me normally",
+        "respond normally",
+    )
 
     if _noah_direct_is_action_request(lower):
+        return False
+
+    if any(term in lower for term in talk_lane_requests):
         return False
 
     # Pending/approval/wakeup handlers must run before generic companion routing.
@@ -1104,6 +1186,13 @@ def _noah_direct_should_handle(user_text: str) -> bool:
                      "go ahead", "proceed", "approved", "approve", "confirm", "confirmed"}
     if _is_approval_followup(user_text) or lower in _affirmations:
         return False
+
+    try:
+        from talk_synthesis import is_doctrine_or_domain, should_stay_talk, wants_synthesis
+        if should_stay_talk(raw) and (is_doctrine_or_domain(raw) or wants_synthesis(raw)):
+            return False
+    except Exception:
+        pass
 
     # Default: ordinary non-command, non-action language belongs to Noah.Direct.
     return True
@@ -1316,11 +1405,30 @@ def _oracle_intent_dispatch(user_text: str):
     intents = classify_intent(user_text)
     _refresh_agenda()
     agenda = get_agenda()
+    _pre_route = {}
+    try:
+        from unified_oracle_router import classify_intent as _router_classify
+        _pre_route = _router_classify(user_text) or {}
+    except Exception:
+        _pre_route = {}
+    _pre_lane = str(_pre_route.get("detected_lane") or "")
+    _pre_reason = str(_pre_route.get("reason") or "")
+    if _pre_route.get("route_type") == "diagnostic_status":
+        return None
 
     # Large build directive guard: never push huge multiline text through
     # NOAH_DIRECT or the model. Stage a safe preview, preserve the full directive
-    # in approved local storage, and answer honestly.
+    # in approved local storage, and answer honestly. This is now a fallback
+    # only: unified route precedence must win first for Talk synthesis, Build,
+    # Guard, Capture, and Witness lanes.
     _staged = build_lane_staging(user_text)
+    if _staged is not None and (
+        _pre_lane in ("guard_lane", "capture_lane", "witness_lane")
+        or (_pre_lane == "talk_lane" and "read_only_synthesis" in _pre_reason)
+        or (_pre_lane == "talk_lane" and "talk_question_or_explanation" in _pre_reason)
+        or (_pre_lane == "talk_lane" and "forced_talk" in _pre_reason)
+    ):
+        return None
     if _staged is not None:
         _stext, _sroute, _spreview = _staged
         _spath = None
@@ -1368,6 +1476,15 @@ def _oracle_intent_dispatch(user_text: str):
                 "Push-to-talk, STT, and TTS are the next build after this.", "voice_request")
 
     if "identity_continuity_query" in intents:
+        try:
+            from talk_synthesis import wants_synthesis as _wants_synth
+            _synth = _wants_synth(user_text)
+        except Exception:
+            _synth = False
+        if _synth:
+            update_agenda(last_user_intent="identity_continuity_query",
+                          last_system_action="synthesis requested - deferred to fresh generation")
+            return None
         update_agenda(last_user_intent="identity_continuity_query",
                       last_system_action="answered via 3026 doctrine")
         return (doctrine_3026(), "identity_continuity_query")
@@ -1419,6 +1536,19 @@ def _oracle_intent_dispatch(user_text: str):
                 "I'll act only within that approved scope, nothing beyond it.", "approval_request")
 
     if "source_provenance_request" in intents:
+        # Anti-parrot: if Noah asked for fresh synthesis ("in your own words",
+        # "from the soul", "do not repeat"), do NOT replay the canned provenance
+        # line. Fall through so the model synthesizes from the digested
+        # principles instead. Otherwise keep the precise canned stance.
+        try:
+            from talk_synthesis import wants_synthesis as _wants_synth
+            _synth = _wants_synth(user_text)
+        except Exception:
+            _synth = False
+        if _synth:
+            update_agenda(last_user_intent="source_provenance_request",
+                          last_system_action="synthesis requested - deferred to fresh generation")
+            return None
         update_agenda(last_user_intent="source_provenance_request",
                       last_system_action="reported provenance stance")
         return ("Provenance is tracked as token-origin vs authorial-authority — AI assistance does not "
@@ -1461,6 +1591,57 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     # capability line (no permission theater). Everything else falls through to the
     # existing routing + model path (NOAH_DIRECT v0.1) as the tone/fallback layer.
     raw_direct_text = str(user_text or "").strip()
+    if raw_direct_text and not raw_direct_text.startswith("/") and _is_existing_approval_receipt_status_request(raw_direct_text):
+        _reply_text = _approval_receipt_status_response(raw_direct_text)
+        try:
+            from unified_oracle_router import route_message
+            _route_result = route_message(
+                raw_direct_text,
+                notes="existing approval receipt status request; no new guard approval required",
+            )
+            _route_payload = _route_result.get("route") or {}
+        except Exception:
+            _route_payload = {
+                "detected_lane": "talk_lane",
+                "lane_label": "Talk",
+                "reason": "existing_approval_receipt_status",
+                "safety_status": "Safe",
+                "route_path": None,
+            }
+            _route_result = {"receipt": None}
+        try:
+            from memory import save_message
+            save_message(_session_id, "user", user_text)
+            save_message(_session_id, "assistant", _reply_text)
+        except Exception:
+            pass
+        _history.append({"role": "user", "content": user_text})
+        _history.append({"role": "assistant", "content": _reply_text})
+        yield _sse({
+            "type": "route",
+            "route_type": "approval_receipt_status",
+            "mode": "unified_oracle",
+            "lane": _route_payload.get("detected_lane", "talk_lane"),
+            "lane_label": _route_payload.get("lane_label", "Talk"),
+            "reason": _route_payload.get("reason", "existing_approval_receipt_status"),
+            "fallback_used": False,
+            "safety_status": _route_payload.get("safety_status", "Safe"),
+            "route_path": _route_payload.get("route_path"),
+            "receipt_path": (_route_result.get("receipt") or {}).get("receipt_path"),
+            "conversation_reset": False,
+        })
+        yield _sse({"type": "token", "text": _reply_text})
+        yield _sse({
+            "type": "done",
+            "route_type": "approval_receipt_status",
+            "mode": "unified_oracle",
+            "lane": _route_payload.get("detected_lane", "talk_lane"),
+            "reason": _route_payload.get("reason", "existing_approval_receipt_status"),
+            "fallback_used": False,
+            "effective_route": "approval_receipt_status",
+        })
+        return
+
     if raw_direct_text and not raw_direct_text.startswith("/"):
         try:
             _dispatch = _oracle_intent_dispatch(raw_direct_text)
@@ -1471,6 +1652,13 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                          "and executed nothing.", "internal_error_safe")
         if _dispatch is not None:
             _reply_text, _route = _dispatch
+            _route_type = "build_directive_preservation" if _route == "build_lane_staged" else "legacy_intent_dispatch"
+            _lane = "build_lane" if _route == "build_lane_staged" else "talk_lane"
+            _reason = (
+                "explicit large build directive preserved locally"
+                if _route == "build_lane_staged"
+                else f"handled by oracle_intent dispatch: {_route}"
+            )
             try:
                 from memory import save_message
                 save_message(_session_id, "user", user_text)
@@ -1479,12 +1667,326 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 pass
             _history.append({"role": "user", "content": user_text})
             _history.append({"role": "assistant", "content": _reply_text})
+            yield _sse({
+                "type": "route",
+                "route_type": _route_type,
+                "mode": "unified_oracle",
+                "lane": _lane,
+                "lane_label": "Build" if _lane == "build_lane" else "Talk",
+                "reason": _reason,
+                "fallback_used": False,
+                "safety_status": "Receipt Written" if _lane == "build_lane" else "Safe",
+                "conversation_reset": False,
+            })
             yield _sse({"type": "token", "text": _reply_text})
-            yield _sse({"type": "done", "mode": _mode, "effective_route": _route})
+            yield _sse({
+                "type": "done",
+                "route_type": _route_type,
+                "mode": _mode,
+                "lane": _lane,
+                "reason": _reason,
+                "fallback_used": False,
+                "effective_route": _route,
+            })
             return
 
     # ── Slash commands ────────────────────────────────────────────────────────
     lower = user_text.strip().lower()
+
+    def _thread_archive_compact(result: dict) -> dict:
+        if not isinstance(result, dict):
+            return {"ok": False, "error": str(result)}
+        op = result.get("operation")
+        if op == "export_all_sessions_to_txt":
+            exports = result.get("exports") or []
+            first = exports[0] if exports else {}
+            last = exports[-1] if exports else {}
+            return {
+                "ok": result.get("ok"),
+                "operation": op,
+                "session_count": result.get("session_count"),
+                "first_export_path": first.get("path"),
+                "last_export_path": last.get("path"),
+                "first_manifest_path": ((first.get("recall") or {}) if isinstance(first, dict) else {}).get("manifest_path"),
+                "last_manifest_path": ((last.get("recall") or {}) if isinstance(last, dict) else {}).get("manifest_path"),
+                "cloud_upload": False,
+                "git_commit": False,
+                "git_push": False,
+                "canon_promotion": False,
+            }
+        if op == "import_thread_directory":
+            imports = result.get("imports") or []
+            first = imports[0] if imports else {}
+            last = imports[-1] if imports else {}
+            return {
+                "ok": result.get("ok"),
+                "operation": op,
+                "directory": result.get("directory"),
+                "file_count": result.get("file_count"),
+                "first_stored_txt_path": first.get("stored_txt_path"),
+                "last_stored_txt_path": last.get("stored_txt_path"),
+                "first_manifest_path": first.get("manifest_path"),
+                "last_manifest_path": last.get("manifest_path"),
+                "cloud_upload": False,
+                "git_commit": False,
+                "git_push": False,
+                "canon_promotion": False,
+            }
+        return result
+
+    def _thread_archive_json(result: dict) -> str:
+        return json.dumps(_thread_archive_compact(result), indent=2, ensure_ascii=True)
+
+    def _thread_archive_arg(command: str) -> str:
+        arg = user_text.strip()[len(command):].strip()
+        if len(arg) >= 2 and arg[0] == arg[-1] and arg[0] in ("\"", "'"):
+            arg = arg[1:-1].strip()
+        return arg
+
+    def _remember_thread_archive_turn(reply: str, *, user_summary: str | None = None) -> None:
+        try:
+            from memory import save_message
+            save_message(_session_id, "user", user_summary or user_text)
+            save_message(_session_id, "assistant", reply)
+        except Exception:
+            pass
+        _history.append({"role": "user", "content": user_summary or user_text})
+        _history.append({"role": "assistant", "content": reply})
+        if len(_history) > 40:
+            _history[:] = _history[-40:]
+
+    if lower in ("/thread-archive-status", "/thread-recall-status"):
+        try:
+            from thread_archive import status as _thread_archive_status
+            result = await asyncio.to_thread(_thread_archive_status)
+            text = "THREAD ARCHIVE STATUS\n```json\n" + _thread_archive_json(result) + "\n```"
+        except Exception as exc:
+            text = f"Thread archive status unavailable: {type(exc).__name__}: {exc}"
+        _remember_thread_archive_turn(text)
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "thread_archive_status"})
+        return
+
+    if lower in ("/thread-export-current", "/thread-export-active"):
+        try:
+            from thread_archive import export_session_to_txt
+            result = await asyncio.to_thread(export_session_to_txt, _session_id)
+            text = "THREAD EXPORT RECEIPT\n```json\n" + _thread_archive_json(result) + "\n```"
+        except Exception as exc:
+            text = f"Thread export failed: {type(exc).__name__}: {exc}"
+        _remember_thread_archive_turn(text)
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "thread_export_current"})
+        return
+
+    if lower == "/thread-export-latest":
+        try:
+            from thread_archive import export_session_to_txt
+            result = await asyncio.to_thread(export_session_to_txt)
+            text = "THREAD EXPORT RECEIPT\n```json\n" + _thread_archive_json(result) + "\n```"
+        except Exception as exc:
+            text = f"Thread export failed: {type(exc).__name__}: {exc}"
+        _remember_thread_archive_turn(text)
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "thread_export_latest"})
+        return
+
+    if lower == "/thread-export-all":
+        try:
+            from thread_archive import export_all_sessions_to_txt
+            result = await asyncio.to_thread(export_all_sessions_to_txt)
+            text = "THREAD EXPORT ALL RECEIPT\n```json\n" + _thread_archive_json(result) + "\n```"
+        except Exception as exc:
+            text = f"Thread export-all failed: {type(exc).__name__}: {exc}"
+        _remember_thread_archive_turn(text)
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "thread_export_all"})
+        return
+
+    if lower.startswith("/thread-import-dir"):
+        path_arg = _thread_archive_arg("/thread-import-dir")
+        if not path_arg:
+            text = "Usage: `/thread-import-dir <directory>`"
+        else:
+            try:
+                from thread_archive import import_thread_directory
+                result = await asyncio.to_thread(
+                    import_thread_directory,
+                    path_arg,
+                    source_system="manual_import_dir",
+                )
+                text = "THREAD IMPORT DIRECTORY RECEIPT\n```json\n" + _thread_archive_json(result) + "\n```"
+            except Exception as exc:
+                text = f"Thread import-dir failed: {type(exc).__name__}: {exc}"
+        _remember_thread_archive_turn(text)
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "thread_import_dir"})
+        return
+
+    if lower.startswith("/thread-import"):
+        path_arg = _thread_archive_arg("/thread-import")
+        if not path_arg:
+            text = "Usage: `/thread-import <path-to-txt-md-or-json>`"
+        else:
+            try:
+                from thread_archive import register_thread_file
+                result = await asyncio.to_thread(
+                    register_thread_file,
+                    path_arg,
+                    source_system="manual_import",
+                    source_ref=path_arg,
+                )
+                text = "THREAD IMPORT RECEIPT\n```json\n" + _thread_archive_json(result) + "\n```"
+            except Exception as exc:
+                text = f"Thread import failed: {type(exc).__name__}: {exc}"
+        _remember_thread_archive_turn(text)
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "thread_import"})
+        return
+
+    if lower in ("/thread-ingest-status", "/thread-capture-status", "/black-box-status"):
+        try:
+            from thread_capture import status as _capture_status
+            result = await asyncio.to_thread(_capture_status)
+            text = "THREAD CAPTURE STATUS\n```json\n" + json.dumps(result, indent=2, ensure_ascii=True) + "\n```"
+        except Exception as exc:
+            text = f"Thread capture status unavailable: {type(exc).__name__}: {exc}"
+        _remember_thread_archive_turn(text)
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "thread_capture_status"})
+        return
+
+    if lower.startswith("/thread-ingest-file"):
+        payload = user_text.strip()[len("/thread-ingest-file"):].strip()
+        parts = [part.strip() for part in payload.split("|", 3)]
+        if len(parts) < 2 or not parts[0] or not parts[1]:
+            text = "Usage: `/thread-ingest-file <source-system> | <path> | <optional-thread-id> | <optional-capture-method>`"
+        else:
+            source_system = parts[0]
+            path_arg = parts[1]
+            source_thread_id = parts[2] if len(parts) > 2 and parts[2] else None
+            capture_method = parts[3] if len(parts) > 3 and parts[3] else "export_file"
+            try:
+                from thread_capture import _compact_result, ingest_file
+                result = await asyncio.to_thread(
+                    ingest_file,
+                    path_arg,
+                    source_system=source_system,
+                    source_thread_id=source_thread_id,
+                    capture_method=capture_method,
+                    captured_by="Noah.Physical",
+                )
+                text = "THREAD FILE INGEST RECEIPT\n```json\n" + json.dumps(_compact_result(result), indent=2, ensure_ascii=True) + "\n```"
+            except Exception as exc:
+                text = f"Thread file ingest failed: {type(exc).__name__}: {exc}"
+        _remember_thread_archive_turn(text)
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "thread_ingest_file"})
+        return
+
+    if lower.startswith("/thread-ingest-dir"):
+        payload = user_text.strip()[len("/thread-ingest-dir"):].strip()
+        parts = [part.strip() for part in payload.split("|", 4)]
+        if len(parts) < 2 or not parts[0] or not parts[1]:
+            text = "Usage: `/thread-ingest-dir <source-system> | <directory> | <optional-pattern> | <optional-capture-method> | <recursive:true|false>`"
+        else:
+            source_system = parts[0]
+            dir_arg = parts[1]
+            pattern = parts[2] if len(parts) > 2 and parts[2] else "*"
+            capture_method = parts[3] if len(parts) > 3 and parts[3] else "directory_import"
+            recursive = (len(parts) > 4 and parts[4].lower() in ("1", "true", "yes", "recursive"))
+            try:
+                from thread_capture import ingest_directory
+                result = await asyncio.to_thread(
+                    ingest_directory,
+                    dir_arg,
+                    source_system=source_system,
+                    capture_method=capture_method,
+                    captured_by="Noah.Physical",
+                    pattern=pattern,
+                    recursive=recursive,
+                )
+                text = "THREAD DIRECTORY INGEST RECEIPT\n```json\n" + json.dumps(result, indent=2, ensure_ascii=True) + "\n```"
+            except Exception as exc:
+                text = f"Thread directory ingest failed: {type(exc).__name__}: {exc}"
+        _remember_thread_archive_turn(text)
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "thread_ingest_dir"})
+        return
+
+    if lower.startswith("/thread-ingest-paste") or lower.startswith("/thread-capture-evidence"):
+        prefix = "/thread-capture-evidence" if lower.startswith("/thread-capture-evidence") else "/thread-ingest-paste"
+        payload = user_text.strip()[len(prefix):].strip()
+        parts = [part.strip() for part in payload.split("|", 2)]
+        if len(parts) < 3 or not parts[0] or not parts[2]:
+            text = "Usage: `/thread-ingest-paste <source-system> | <source-thread-id> | <transcript text>`"
+            user_summary = user_text
+        else:
+            source_system = parts[0]
+            source_thread_id = parts[1] or None
+            transcript_text = parts[2]
+            try:
+                from thread_capture import _compact_result, ingest_paste
+                result = await asyncio.to_thread(
+                    ingest_paste,
+                    transcript_text,
+                    source_system=source_system,
+                    source_thread_id=source_thread_id,
+                    captured_by="Noah.Physical",
+                )
+                text = "THREAD PASTE INGEST RECEIPT\n```json\n" + json.dumps(_compact_result(result), indent=2, ensure_ascii=True) + "\n```"
+                user_summary = f"{prefix} {source_system} | {source_thread_id or '[generated]'} | [captured {len(transcript_text)} chars into raw transcript custody]"
+            except Exception as exc:
+                text = f"Thread paste ingest failed: {type(exc).__name__}: {exc}"
+                user_summary = f"{prefix} {source_system} | {source_thread_id or '[generated]'} | [capture failed, {len(transcript_text)} chars not echoed]"
+        _remember_thread_archive_turn(text, user_summary=user_summary)
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "thread_ingest_paste"})
+        return
+
+    if lower.startswith("/thread-ingest-search") or lower.startswith("/thread-capture-search"):
+        prefix = "/thread-capture-search" if lower.startswith("/thread-capture-search") else "/thread-ingest-search"
+        query = user_text.strip()[len(prefix):].strip()
+        if not query:
+            text = f"Usage: `{prefix} <query>`"
+        else:
+            try:
+                from thread_capture import search_index
+                rows = await asyncio.to_thread(search_index, query, limit=10)
+                text = "THREAD CAPTURE SEARCH\n```json\n" + json.dumps(rows, indent=2, ensure_ascii=True) + "\n```"
+            except Exception as exc:
+                text = f"Thread capture search failed: {type(exc).__name__}: {exc}"
+        _remember_thread_archive_turn(text)
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "thread_capture_search"})
+        return
+
+    if lower.startswith("/thread-capture"):
+        payload = user_text.strip()[len("/thread-capture"):].strip()
+        source, sep, body = payload.partition("|")
+        if not sep or not body.strip():
+            text = "Usage: `/thread-capture <source-system> | <text copied from that thread>`"
+            user_summary = user_text
+        else:
+            source_system = source.strip() or "manual_capture"
+            capture_text = body.strip()
+            try:
+                from thread_archive import append_ongoing_capture
+                result = await asyncio.to_thread(
+                    append_ongoing_capture,
+                    capture_text,
+                    source_system=source_system,
+                    source_ref="ORACLE slash command",
+                )
+                text = "ONGOING THREAD CAPTURE RECEIPT\n```json\n" + _thread_archive_json(result) + "\n```"
+                user_summary = f"/thread-capture {source_system} | [captured {len(capture_text)} chars into ongoing_cross_system_thread.txt]"
+            except Exception as exc:
+                text = f"Ongoing thread capture failed: {type(exc).__name__}: {exc}"
+                user_summary = f"/thread-capture {source_system} | [capture failed, {len(capture_text)} chars not echoed]"
+        _remember_thread_archive_turn(text, user_summary=user_summary)
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "thread_capture"})
+        return
 
     # ── Affective-continuity policy ───────────────────────────────────────────
     # When Noah asks if ORACLE feels / can be programmed to feel, answer from the
@@ -1621,20 +2123,55 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         from unified_oracle_router import format_lane_boundary, route_message
         _unified_route_result = route_message(user_text, notes="chat turn classified by unified ORACLE router")
         _unified_route = _unified_route_result.get("route") or {}
+        _unified_lane = str(_unified_route.get("detected_lane") or "talk_lane")
+        _unified_reason = str(_unified_route.get("reason") or "")
+        _force_talk_lane = (
+            _unified_lane == "talk_lane"
+            and (
+                "forced_talk" in _unified_reason
+                or "talk_question_or_explanation" in _unified_reason
+                or "read_only_synthesis" in _unified_reason
+            )
+        )
         yield _sse({
             "type": "route",
+            "route_type": _unified_route.get("route_type", "unified_intent"),
             "mode": "unified_oracle",
-            "lane": _unified_route.get("detected_lane", "talk_lane"),
+            "lane": _unified_lane,
             "lane_label": _unified_route.get("lane_label", "Talk"),
+            "reason": _unified_route.get("reason"),
+            "fallback_used": False,
             "safety_status": _unified_route.get("safety_status", "Safe"),
             "route_path": _unified_route.get("route_path"),
             "receipt_path": (_unified_route_result.get("receipt") or {}).get("receipt_path"),
             "conversation_reset": False,
         })
+        if _unified_route.get("route_type") == "diagnostic_status":
+            text = _diagnostic_status_response(_unified_route)
+            try:
+                from memory import save_message
+                save_message(_session_id, "user", user_text)
+                save_message(_session_id, "assistant", text)
+            except Exception:
+                pass
+            _history.append({"role": "user", "content": user_text})
+            _history.append({"role": "assistant", "content": text})
+            yield _sse({"type": "token", "text": text})
+            yield _sse({
+                "type": "done",
+                "route_type": "diagnostic_status",
+                "mode": "unified_oracle",
+                "lane": _unified_lane,
+                "reason": _unified_route.get("reason"),
+                "fallback_used": False,
+                "effective_route": "diagnostic_status",
+            })
+            return
     except Exception:
         format_lane_boundary = None  # type: ignore[assignment]
         _unified_route_result = {"route": {"detected_lane": "talk_lane", "lane_label": "Talk", "safety_status": "Safe"}}
         _unified_route = _unified_route_result["route"]
+        _force_talk_lane = False
 
     if lower in ("/companion", "companion mode"):
         _mode = "companion"
@@ -2418,7 +2955,9 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     # External routing only if user explicitly requests it (LCL: no_route by default)
     try:
         from conversation_mode import classify_route, MODE_COMPANION, direct_response, load_mode_state
-        if _no_route or (_mode == "companion" and not is_explicit_route(user_text)):
+        if _force_talk_lane:
+            effective_mode = "companion"
+        elif _no_route or (_mode == "companion" and not is_explicit_route(user_text)):
             effective_mode = "companion"
         else:
             _route = classify_route(user_text, current_mode=_mode, no_route=_no_route)
@@ -2452,7 +2991,10 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             pass
         return
 
-    if (_unified_route or {}).get("detected_lane") == "build_lane" and not lower.startswith("/"):
+    if (
+        (_unified_route or {}).get("detected_lane") == "build_lane"
+        and (not lower.startswith("/") or lower.startswith("/learn "))
+    ):
         try:
             from cognition_fabric import TIER_PENDING_ACTION, run_cognition
             result = run_cognition(user_text, _unified_route, {}, force_tier=TIER_PENDING_ACTION)
@@ -2657,7 +3199,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                         history=_history[-12:],
                         session_id=_session_id,
                         mode=effective_mode,
-                        no_route=_no_route,
+                        no_route=(_no_route or _force_talk_lane),
                         grounding_block=_grounding_block,
                     ),
                 )
@@ -2719,7 +3261,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                     history=_history[-12:],
                     session_id=_session_id,
                     mode=effective_mode,
-                    no_route=_no_route,
+                    no_route=(_no_route or _force_talk_lane),
                     grounding_block=_grounding_block,
                 ),
             )
@@ -3564,6 +4106,95 @@ async def api_operational_state():
             "error": f"{type(exc).__name__}: {exc}",
             "observed_at": datetime.now(timezone.utc).isoformat(),
         }, status_code=500)
+
+
+@app.get("/api/durability")
+async def api_durability():
+    """Read-only save/custody indicator payload for the operator UI."""
+    generated_at = datetime.now(timezone.utc).isoformat()
+    db_payload: dict[str, Any] = {
+        "path": str((ROOT / "Memory" / "oracle_memory.db").resolve()),
+        "exists": False,
+        "message_count": 0,
+        "valid_session_count": 0,
+        "current_session_message_count": 0,
+        "latest_session_id": None,
+        "malformed_session_rows": 0,
+    }
+    fact_counts = {"thread_recall": 0, "thread_capture": 0, "total_thread_evidence": 0}
+    try:
+        import sqlite3
+        db_path = ROOT / "Memory" / "oracle_memory.db"
+        db_payload["exists"] = db_path.exists()
+        if db_path.exists():
+            con = sqlite3.connect(str(db_path))
+            con.row_factory = sqlite3.Row
+            db_payload["message_count"] = con.execute("select count(*) n from messages").fetchone()["n"]
+            db_payload["valid_session_count"] = con.execute(
+                "select count(distinct cast(session_id as integer)) n "
+                "from messages where trim(cast(session_id as text)) != ''"
+            ).fetchone()["n"]
+            db_payload["current_session_message_count"] = con.execute(
+                "select count(*) n from messages where session_id=?",
+                (_session_id,),
+            ).fetchone()["n"]
+            latest = con.execute("select session_id from messages order by id desc limit 1").fetchone()
+            db_payload["latest_session_id"] = latest["session_id"] if latest else None
+            db_payload["malformed_session_rows"] = con.execute(
+                "select count(*) n from messages "
+                "where session_id is null or trim(cast(session_id as text)) = ''"
+            ).fetchone()["n"]
+            fact_counts["thread_recall"] = con.execute(
+                "select count(*) n from facts where category='thread_recall'"
+            ).fetchone()["n"]
+            fact_counts["thread_capture"] = con.execute(
+                "select count(*) n from facts where category='thread_capture'"
+            ).fetchone()["n"]
+            fact_counts["total_thread_evidence"] = con.execute(
+                "select count(*) n from facts where category in ('thread_recall', 'thread_capture')"
+            ).fetchone()["n"]
+            con.close()
+    except Exception as exc:
+        db_payload["error"] = f"{type(exc).__name__}: {exc}"
+
+    capture_payload: dict[str, Any] = {}
+    try:
+        from thread_capture import status as thread_capture_status
+        capture_payload = await asyncio.to_thread(thread_capture_status)
+    except Exception as exc:
+        capture_payload = {"error": f"{type(exc).__name__}: {exc}"}
+
+    last_receipt_path = None
+    try:
+        receipt_dir = ROOT / "Memory" / "thread_ingest" / "custody_receipts"
+        receipts = [p for p in receipt_dir.rglob("*.json") if p.is_file()] if receipt_dir.exists() else []
+        if receipts:
+            last_receipt_path = str(max(receipts, key=lambda p: p.stat().st_mtime).resolve())
+    except Exception:
+        last_receipt_path = None
+
+    persistence_safe = bool(
+        db_payload.get("exists")
+        and (
+            int(db_payload.get("current_session_message_count") or 0) > 0
+            or db_payload.get("latest_session_id") is not None
+        )
+    )
+    return JSONResponse({
+        "ok": True,
+        "generated_at": generated_at,
+        "session_id": _session_id,
+        "sqlite": db_payload,
+        "thread_evidence_facts": fact_counts,
+        "thread_capture": capture_payload,
+        "last_custody_receipt_path": last_receipt_path,
+        "persistence_safe_to_refresh": persistence_safe,
+        "canon_status_for_captures": "candidate",
+        "promotion_status_for_captures": "not_promoted",
+        "cloud_upload": False,
+        "git_commit": False,
+        "git_push": False,
+    })
 
 
 @app.post("/chat")
