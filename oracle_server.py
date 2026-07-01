@@ -4197,6 +4197,55 @@ async def api_durability():
     })
 
 
+@app.post("/api/sandbox/write")
+async def api_sandbox_write(request: Request):
+    """Write one harmless text file inside C:\\ORACLE.AI\\sandbox only."""
+    try:
+        body = await request.json()
+        from sandbox_files import SandboxWriteError, write_sandbox_file
+
+        result = await asyncio.to_thread(
+            write_sandbox_file,
+            str(body.get("folder") or ""),
+            str(body.get("filename") or ""),
+            str(body.get("content") or ""),
+            caller=str(body.get("caller") or "ORACLE.web"),
+            action_id=str(body.get("action_id") or "").strip() or None,
+        )
+        return JSONResponse(result)
+    except SandboxWriteError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/sandbox/read")
+async def api_sandbox_read(request: Request):
+    """Read one allowed sandbox text file; no writes and no execution."""
+    try:
+        body = await request.json()
+        from sandbox_files import SandboxWriteError, read_sandbox_file
+
+        return JSONResponse(await asyncio.to_thread(read_sandbox_file, str(body.get("path") or "")))
+    except SandboxWriteError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/sandbox/list")
+async def api_sandbox_list(folder: str):
+    """List allowed files in one approved sandbox folder."""
+    try:
+        from sandbox_files import SandboxWriteError, list_sandbox_files
+
+        return JSONResponse(await asyncio.to_thread(list_sandbox_files, folder))
+    except SandboxWriteError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
 @app.post("/chat")
 async def chat(request: Request):
     try:

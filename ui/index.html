@@ -324,6 +324,24 @@
   .copy-btn:hover { color: var(--text); border-color: var(--accent); }
   .copy-btn.copied { color: var(--accent); border-color: var(--accent); }
 
+  .route-receipt {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 7px;
+    color: var(--text-dim);
+    font-size: 10px;
+    line-height: 1.3;
+  }
+  .route-receipt span {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 6px;
+    background: rgba(255,255,255,0.025);
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
   .msg-bubble.user {
     background: var(--user-bg);
     padding: 12px 16px;
@@ -474,6 +492,123 @@
     font-size: 11px;
     color: var(--text-dim);
     text-align: center;
+  }
+
+  #durability-strip {
+    max-width: 800px;
+    margin: 8px auto 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+    min-height: 24px;
+  }
+
+  .durability-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 22px;
+    padding: 3px 8px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    color: var(--text-dim);
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .durability-chip[data-durability-detail],
+  #mode-indicator,
+  #safety-indicator {
+    cursor: pointer;
+  }
+
+  .durability-chip[data-durability-detail]:hover,
+  .durability-chip[data-durability-detail]:focus {
+    border-color: var(--accent);
+    color: var(--text);
+    outline: none;
+  }
+
+  .durability-chip::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-dim);
+  }
+
+  .durability-chip.saved {
+    color: #b7f7df;
+    border-color: rgba(16,163,127,0.42);
+    background: rgba(16,163,127,0.12);
+  }
+  .durability-chip.saved::before { background: var(--accent); }
+
+  .durability-chip.pending {
+    color: #fde68a;
+    border-color: rgba(245,158,11,0.45);
+    background: rgba(245,158,11,0.10);
+  }
+  .durability-chip.pending::before { background: var(--warning); }
+
+  .durability-chip.warn {
+    color: #fecaca;
+    border-color: rgba(239,68,68,0.50);
+    background: rgba(239,68,68,0.10);
+  }
+  .durability-chip.warn::before { background: var(--danger); }
+
+  #durability-detail {
+    max-width: 800px;
+    margin: 8px auto 0;
+    border: 1px solid rgba(34,211,238,0.24);
+    background: rgba(9,14,22,0.96);
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.36);
+    overflow: hidden;
+    display: none;
+  }
+
+  #durability-detail.visible {
+    display: block;
+  }
+
+  .durability-detail-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 11px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .durability-detail-head button {
+    border: 1px solid rgba(255,255,255,0.14);
+    background: transparent;
+    color: var(--text-dim);
+    border-radius: 6px;
+    cursor: pointer;
+    padding: 3px 8px;
+    font: inherit;
+  }
+
+  #durability-detail-body {
+    padding: 10px 12px;
+    color: var(--text-muted);
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
   /* ── Input toolbar (eyes / mic / voice) ── */
@@ -784,8 +919,8 @@
   <div id="topbar">
     <button id="toggle-sidebar" onclick="toggleSidebar()" title="Toggle sidebar">☰</button>
     <span id="topbar-title">ORACLE</span>
-    <div id="mode-indicator" class="talk_lane">Talk</div>
-    <div id="safety-indicator" class="safe">Safe</div>
+    <div id="mode-indicator" class="talk_lane" role="button" tabindex="0" onclick="showRuntimeDetail()" title="Show live runtime status">Talk</div>
+    <div id="safety-indicator" class="safe" role="button" tabindex="0" onclick="showRuntimeDetail()" title="Show live runtime status">Safe</div>
     <button id="sourcemap-btn" onclick="toggleSourceMapPanel()" title="ORACLE SourceMap">SourceMap</button>
     <a href="/miracledrive" id="md-link" title="MiracleDrive OS" style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.28);text-decoration:none;padding:4px 10px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;transition:0.2s;" onmouseover="this.style.color='#22d3ee';this.style.borderColor='rgba(34,211,238,0.35)'" onmouseout="this.style.color='rgba(255,255,255,0.28)';this.style.borderColor='rgba(255,255,255,0.1)'">MiracleDrive ↗</a>
   </div>
@@ -1020,6 +1155,21 @@
         <svg viewBox="0 0 24 24"><path d="M2 21L23 12 2 3v7l15 2-15 2z"/></svg>
       </button>
     </div>
+    <div id="durability-strip" aria-live="polite">
+      <span class="durability-chip pending" id="dur-save-state" role="button" tabindex="0" data-durability-detail="save">checking save</span>
+      <span class="durability-chip pending" id="dur-history-source" role="button" tabindex="0" data-durability-detail="history">history unknown</span>
+      <span class="durability-chip pending" id="dur-session-count" role="button" tabindex="0" data-durability-detail="thread">thread --</span>
+      <span class="durability-chip pending" id="dur-custody-count" role="button" tabindex="0" data-durability-detail="custody">custody --</span>
+      <span class="durability-chip pending" id="dur-index-count" role="button" tabindex="0" data-durability-detail="index">index --</span>
+      <span class="durability-chip pending" id="dur-receipt" role="button" tabindex="0" data-durability-detail="receipt">receipt --</span>
+    </div>
+    <div id="durability-detail" aria-live="polite">
+      <div class="durability-detail-head">
+        <span id="durability-detail-title">Durability Receipt</span>
+        <button type="button" onclick="hideDurabilityDetail()">Close</button>
+      </div>
+      <div id="durability-detail-body">Select a durability chip to inspect its receipt.</div>
+    </div>
     <div id="input-hint">Enter to send · 👁 webcam · 🎤 voice in · 🔊 voice out · /help for commands</div>
   </div>
 </div>
@@ -1030,15 +1180,16 @@
   if (window.location.protocol === 'file:') {
     document.body.innerHTML =
       '<div style="font-family:monospace;color:#ef4444;padding:40px;background:#0a0a0c;height:100vh">' +
-      '<h2>ORACLE must be opened through http://127.0.0.1:7777</h2>' +
-      '<p>Run <code>oracle_desktop.bat</code> or start the server and navigate to that URL.<br>' +
+      '<h2>ORACLE must be opened through the active local ORACLE port</h2>' +
+      '<p>Run <code>oracle_desktop.bat</code> or start the server and navigate to the operator console URL.<br>' +
+      'For this workstation session, use <code>http://127.0.0.1:7781</code>.<br>' +
       'Opening <code>index.html</code> directly as a file:// URL breaks all fetch calls.</p></div>';
     throw new Error('file:// origin — fetch calls would fail');
   }
 })();
 
 // ── Safe API base — resolves fetch calls against the correct HTTP origin ──────
-const API_ORIGIN = window.location.origin;  // e.g. http://127.0.0.1:7777
+const API_ORIGIN = window.location.origin;  // e.g. http://127.0.0.1:7781
 function apiUrl(path) { return API_ORIGIN + path; }
 
 // ── Pre-fill from MiracleDrive ?q= param ──────────────────────────────────────
@@ -1059,6 +1210,8 @@ let noRoute = false;
 let isStreaming = false;
 let conversationStarted = false;
 let historyItems = [];
+let lastHistorySource = 'unknown';
+let lastDurabilityData = null;
 
 // ── Marked config ─────────────────────────────────────────────────────────────
 marked.setOptions({ breaks: true, gfm: true });
@@ -1111,6 +1264,203 @@ async function syncModeState() {
   return data;
 }
 
+function setDurabilityChip(id, text, state, title) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'durability-chip ' + (state || 'pending');
+  const clickHint = el.dataset && el.dataset.durabilityDetail ? ' | click for live receipt details' : '';
+  el.title = (title || '') + clickHint;
+}
+
+function shortPath(path) {
+  const value = String(path || '');
+  if (!value) return 'none';
+  const parts = value.split(/[\\/]/).filter(Boolean);
+  return parts.slice(-2).join('/') || value;
+}
+
+function detailValue(value) {
+  if (value === undefined || value === null || value === '') return 'none';
+  if (Array.isArray(value)) return value.length ? value.join(', ') : 'none';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  return String(value);
+}
+
+function detailLines(title, rows) {
+  const head = document.getElementById('durability-detail-title');
+  const body = document.getElementById('durability-detail-body');
+  const panel = document.getElementById('durability-detail');
+  if (!head || !body || !panel) return;
+  head.textContent = title;
+  body.textContent = rows.map(([key, value]) => key + ': ' + detailValue(value)).join('\n');
+  panel.classList.add('visible');
+}
+
+function hideDurabilityDetail() {
+  const panel = document.getElementById('durability-detail');
+  if (panel) panel.classList.remove('visible');
+}
+
+function durabilityRows(kind, data) {
+  const payload = data || {};
+  const sqlite = payload.sqlite || {};
+  const capture = payload.thread_capture || {};
+  const facts = payload.thread_evidence_facts || {};
+  if (kind === 'history') {
+    return ['History Source', [
+      ['ui_history_source', lastHistorySource],
+      ['api_history_endpoint', '/api/history'],
+      ['current_session_id', payload.session_id],
+      ['current_session_messages', sqlite.current_session_message_count],
+      ['latest_sqlite_session_id', sqlite.latest_session_id],
+      ['sqlite_path', sqlite.path],
+    ]];
+  }
+  if (kind === 'thread') {
+    return ['Thread Persistence', [
+      ['current_session_id', payload.session_id],
+      ['current_session_messages', sqlite.current_session_message_count],
+      ['total_message_count', sqlite.message_count],
+      ['valid_session_count', sqlite.valid_session_count],
+      ['malformed_session_rows_isolated', sqlite.malformed_session_rows],
+      ['persistence_safe_to_refresh', payload.persistence_safe_to_refresh],
+    ]];
+  }
+  if (kind === 'custody') {
+    return ['Custody Archive', [
+      ['raw_artifact_count', capture.raw_artifact_count],
+      ['parsed_transcript_count', capture.parsed_transcript_count],
+      ['custody_receipt_count', capture.custody_receipt_count],
+      ['source_manifest_rows', capture.source_manifest_rows],
+      ['raw_transcripts_dir', capture.raw_transcripts_dir],
+      ['custody_receipts_dir', capture.custody_receipts_dir],
+      ['canon_status_for_new_captures', capture.canon_status_for_new_captures || payload.canon_status_for_captures],
+      ['promotion_status_for_new_captures', capture.promotion_status_for_new_captures || payload.promotion_status_for_captures],
+    ]];
+  }
+  if (kind === 'index') {
+    return ['Search Index', [
+      ['search_index_rows', capture.search_index_rows],
+      ['thread_recall_facts', facts.thread_recall],
+      ['thread_capture_facts', facts.thread_capture],
+      ['total_thread_evidence', facts.total_thread_evidence],
+      ['search_index_jsonl', capture.search_index_jsonl],
+      ['source_manifest_jsonl', capture.source_manifest_jsonl],
+    ]];
+  }
+  if (kind === 'receipt') {
+    return ['Latest Custody Receipt', [
+      ['last_custody_receipt_path', payload.last_custody_receipt_path],
+      ['cloud_upload', payload.cloud_upload],
+      ['git_commit', payload.git_commit],
+      ['git_push', payload.git_push],
+      ['account_scraping', capture.account_scraping],
+      ['new_capture_canon_status', payload.canon_status_for_captures],
+      ['new_capture_promotion_status', payload.promotion_status_for_captures],
+    ]];
+  }
+  return ['Durable Save', [
+    ['persistence_safe_to_refresh', payload.persistence_safe_to_refresh],
+    ['sqlite_exists', sqlite.exists],
+    ['sqlite_path', sqlite.path],
+    ['message_count', sqlite.message_count],
+    ['current_session_id', payload.session_id],
+    ['current_session_messages', sqlite.current_session_message_count],
+    ['generated_at', payload.generated_at],
+  ]];
+}
+
+async function showDurabilityDetail(kind) {
+  if (!lastDurabilityData) {
+    await refreshDurability(lastHistorySource).catch(() => {});
+  }
+  const [title, rows] = durabilityRows(kind || 'save', lastDurabilityData || {});
+  detailLines(title, rows);
+}
+
+async function showRuntimeDetail() {
+  try {
+    const r = await fetch(apiUrl('/api/status'));
+    if (!r.ok) throw new Error(`status ${r.status}`);
+    const status = await r.json();
+    const boot = status.boot || {};
+    detailLines('Runtime Status', [
+      ['endpoint', '/api/status'],
+      ['session_id', status.session_id],
+      ['paused', status.paused],
+      ['notifications_queued', status.notifications_queued],
+      ['mode', currentMode],
+      ['lane', currentLane],
+      ['safety', currentSafety],
+      ['local_model', boot.verified_model_name],
+      ['local_engine', boot.verified_local_engine],
+      ['network_boundary', boot.network_boundary],
+      ['boot_receipt_path', boot.boot_receipt_path],
+      ['warnings', boot.warnings || []],
+    ]);
+  } catch (e) {
+    detailLines('Runtime Status', [['endpoint', '/api/status'], ['error', e.message]]);
+  }
+}
+
+function bindDurabilityControls() {
+  document.querySelectorAll('[data-durability-detail]').forEach(el => {
+    const kind = el.dataset.durabilityDetail || 'save';
+    el.addEventListener('click', () => showDurabilityDetail(kind));
+    el.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        showDurabilityDetail(kind);
+      }
+    });
+  });
+  ['mode-indicator', 'safety-indicator'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        showRuntimeDetail();
+      }
+    });
+  });
+}
+
+async function refreshDurability(historySource) {
+  if (historySource) lastHistorySource = historySource;
+  try {
+    const r = await fetch(apiUrl('/api/durability'));
+    if (!r.ok) throw new Error(`durability ${r.status}`);
+    const data = await r.json();
+    lastDurabilityData = data;
+    const sqlite = data.sqlite || {};
+    const capture = data.thread_capture || {};
+    const facts = data.thread_evidence_facts || {};
+    const safe = !!data.persistence_safe_to_refresh;
+    const sessionMessages = Number(sqlite.current_session_message_count || 0);
+    const totalMessages = Number(sqlite.message_count || 0);
+    const rawCount = Number(capture.raw_artifact_count || 0);
+    const indexRows = Number(capture.search_index_rows || 0);
+    const factCount = Number(facts.total_thread_evidence || 0);
+    const receipt = data.last_custody_receipt_path || '';
+
+    setDurabilityChip('dur-save-state', safe ? 'saved' : 'save pending', safe ? 'saved' : 'pending', sqlite.path || '');
+    setDurabilityChip('dur-history-source', 'history ' + (lastHistorySource || 'unknown'), lastHistorySource === 'error' ? 'warn' : (lastHistorySource === 'empty' ? 'pending' : 'saved'));
+    setDurabilityChip('dur-session-count', 'thread ' + sessionMessages + '/' + totalMessages, sessionMessages > 0 ? 'saved' : 'pending', 'session ' + (data.session_id || '?') + ', latest ' + (sqlite.latest_session_id || '?'));
+    setDurabilityChip('dur-custody-count', 'custody ' + rawCount, rawCount > 0 ? 'saved' : 'pending', capture.raw_transcripts_dir || '');
+    setDurabilityChip('dur-index-count', 'index ' + indexRows + ' / facts ' + factCount, indexRows > 0 ? 'saved' : 'pending', capture.search_index_jsonl || '');
+    setDurabilityChip('dur-receipt', 'receipt ' + shortPath(receipt), receipt ? 'saved' : 'pending', receipt || 'no custody receipt found');
+  } catch (e) {
+    setDurabilityChip('dur-save-state', 'save unknown', 'warn', e.message);
+    setDurabilityChip('dur-history-source', 'history ' + (lastHistorySource || 'unknown'), 'pending');
+    setDurabilityChip('dur-session-count', 'thread --', 'pending');
+    setDurabilityChip('dur-custody-count', 'custody --', 'pending');
+    setDurabilityChip('dur-index-count', 'index --', 'pending');
+    setDurabilityChip('dur-receipt', 'receipt --', 'pending');
+  }
+}
+
 // ── New chat ──────────────────────────────────────────────────────────────────
 async function newChat() {
   await fetch(apiUrl('/api/clear'), { method: 'POST' });
@@ -1122,6 +1472,8 @@ async function newChat() {
       <div class="suggestion-chips" id="welcome-chips"></div>
     </div>`;
   conversationStarted = false;
+  lastHistorySource = 'empty';
+  refreshDurability('empty').catch(() => {});
   _applyLearnedUI();
 }
 
@@ -1190,6 +1542,11 @@ function addMessage(role, content, streaming = false) {
     };
 
     wrap.appendChild(bubble);
+    const routeReceipt = document.createElement('div');
+    routeReceipt.className = 'route-receipt';
+    routeReceipt.style.display = 'none';
+    bubble._routeReceiptEl = routeReceipt;
+    wrap.appendChild(routeReceipt);
     wrap.appendChild(copyBtn);
     row.appendChild(avatar);
     row.appendChild(wrap);
@@ -1207,6 +1564,22 @@ function addMessage(role, content, streaming = false) {
   }
 
   return bubble;
+}
+
+function updateRouteReceipt(bubble, patch) {
+  if (!bubble || !bubble._routeReceiptEl) return;
+  const next = Object.assign({}, bubble._routeReceipt || {}, patch || {});
+  bubble._routeReceipt = next;
+  const lane = next.lane || next.effective_route || 'unknown';
+  const routeType = next.route_type || next.type || 'unknown';
+  const reason = next.reason || 'no reason supplied';
+  const fallback = next.fallback_used === true ? 'true' : 'false';
+  bubble._routeReceiptEl.innerHTML =
+    '<span>route_type: ' + escapeHtml(String(routeType)) + '</span>' +
+    '<span>lane: ' + escapeHtml(String(lane)) + '</span>' +
+    '<span>reason: ' + escapeHtml(String(reason)) + '</span>' +
+    '<span>fallback_used: ' + fallback + '</span>';
+  bubble._routeReceiptEl.style.display = 'flex';
 }
 
 function escapeHtml(str) {
@@ -1243,6 +1616,7 @@ async function sendMessage() {
   input.style.height = 'auto';
   document.getElementById('send-btn').disabled = true;
   isStreaming = true;
+  setDurabilityChip('dur-save-state', 'saving', 'pending');
   stopSpeaking(); // cut any in-progress speech when Noah sends something new
 
   // Show user message
@@ -1290,10 +1664,23 @@ async function sendMessage() {
 
         if (event.type === 'route') {
           updateModeUI(event.mode, event.lane, event.safety_status);
+          updateRouteReceipt(bubble, {
+            route_type: event.route_type || 'unified_intent',
+            lane: event.lane || event.current_lane,
+            reason: event.reason,
+            fallback_used: !!event.fallback_used
+          });
         }
 
         if (event.type === 'done') {
           if (event.mode) updateModeUI(event.mode, event.lane || event.current_lane, event.safety_status);
+          const existingRouteReceipt = bubble._routeReceipt || {};
+          updateRouteReceipt(bubble, {
+            route_type: event.route_type || existingRouteReceipt.route_type || 'done',
+            lane: event.lane || event.current_lane || existingRouteReceipt.lane || event.effective_route,
+            reason: event.reason || existingRouteReceipt.reason,
+            fallback_used: !!event.fallback_used
+          });
         }
       } catch {}
     }
@@ -1318,6 +1705,7 @@ async function sendMessage() {
     bubble.innerHTML = `<em style="color:#ef4444">Connection error: ${err.message}</em>`;
   } finally {
     syncModeState().catch(() => {});
+    refreshDurability(lastHistorySource).catch(() => {});
   }
 
   isStreaming = false;
@@ -2446,8 +2834,14 @@ async function restoreHistory() {
   try {
     const r = await fetch(apiUrl('/api/history'));
     const data = await r.json();
+    lastHistorySource = (data && data.source) || 'unknown';
+    await refreshDurability(lastHistorySource).catch(() => {});
     const turns = (data && data.history) || [];
-    if (!turns.length) return;
+    if (!turns.length) {
+      lastHistorySource = 'empty';
+      await refreshDurability('empty').catch(() => {});
+      return;
+    }
     // Clear the welcome panel and replay the durable thread.
     document.getElementById('messages').innerHTML = '';
     conversationStarted = true;
@@ -2456,15 +2850,22 @@ async function restoreHistory() {
       if (t.content && String(t.content).trim()) addMessage(role, String(t.content));
     });
     scrollToBottom();
-  } catch (e) { /* offline: leave the welcome screen, no fake thread */ }
+  } catch (e) {
+    lastHistorySource = 'error';
+    refreshDurability('error').catch(() => {});
+    /* offline: leave the welcome screen, no fake thread */
+  }
 }
 
 async function init() {
+  bindDurabilityControls();
+
   try {
     await syncModeState();
   } catch {}
 
   await restoreHistory();
+  refreshDurability(lastHistorySource).catch(() => {});
   await _applyLearnedUI();
   loadRenderedRealityStatus().catch(() => {});
   loadWitnessGovernanceStatus().catch(() => {});
@@ -2474,6 +2875,7 @@ async function init() {
 
   refreshPresence();
   setInterval(refreshPresence, 5000);
+  setInterval(() => refreshDurability(lastHistorySource).catch(() => {}), 15000);
 
   document.getElementById('input').focus();
 }
