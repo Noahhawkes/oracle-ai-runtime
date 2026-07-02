@@ -487,6 +487,7 @@ def write_route(route: dict[str, Any]) -> dict[str, Any]:
             "git_commits": 0,
             "git_pushes": 0,
             "recordings_created": 0,
+            "preferences_applied": list(route.get("preferences_applied") or []),
         }
     )
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=True, sort_keys=True) + "\n", encoding="utf-8")
@@ -517,6 +518,7 @@ def write_route_receipt(route: dict[str, Any], *, actions_taken: list[str] | Non
         "cloud_api_calls": 0,
         "recordings_created": 0,
         "conversation_reset": False,
+        "preferences_applied": list(route.get("preferences_applied") or []),
         "human_authority": "Noah.Physical",
         "approval_required": bool(route.get("requires_approval")),
         "notes": notes,
@@ -701,8 +703,16 @@ def handle_guard_approval_followup(text: str, *, write_receipt: bool = True) -> 
     return result
 
 
-def route_message(user_message: str, *, write_receipt: bool = True, notes: str = "") -> dict[str, Any]:
-    route = write_route(classify_intent(user_message))
+def route_message(
+    user_message: str,
+    *,
+    write_receipt: bool = True,
+    notes: str = "",
+    preferences_applied: list[str] | None = None,
+) -> dict[str, Any]:
+    route = classify_intent(user_message)
+    route["preferences_applied"] = list(preferences_applied or [])
+    route = write_route(route)
     receipt = None
     if write_receipt and route.get("receipt_required"):
         receipt = write_route_receipt(route, notes=notes)

@@ -295,12 +295,51 @@ MAX_SAFE_CHARS = 2000
 MAX_SAFE_LINES = 30
 BUILD_LANE_STAGING = ("I received a large build directive and preserved a summary. "
                       "Full execution requires the build lane.")
+BUILD_DIRECTIVE_MARKERS = (
+    "backend_patch_request",
+    "self_patch_staging_request",
+    "thread_pass",
+    ".ai build pass",
+    ".ai:thread_pass",
+)
+BUILD_DIRECTIVE_TERMS = (
+    "patch", "build", "implement", "write code", "write the code",
+    "save directive", "stage plan", "stage the plan", "stage the build",
+    "backend patch", "self patch", "add endpoint", "add test", "run tests",
+)
+TALK_EXPLANATION_TERMS = (
+    "?", "what is", "who is", "why", "how", "can you talk", "talk to me",
+    "speak to me", "explain", "in your own words", "tell me about",
+    "recall", "what do you remember",
+)
 
 
 def is_large_directive(message: str) -> bool:
     if not message:
         return False
     return len(message) > MAX_SAFE_CHARS or message.count("\n") > MAX_SAFE_LINES
+
+
+def is_build_directive_preservation_candidate(message: str) -> bool:
+    """True only for explicit or oversized implementation directives.
+
+    Size protects the model context, but size alone must not steal normal Talk.
+    Explicit build markers are custody directives even when short.
+    """
+    low = (message or "").strip().lower()
+    if low.startswith("/talk"):
+        return False
+    if low.startswith("/learn"):
+        return True
+    if any(low.startswith(marker) for marker in BUILD_DIRECTIVE_MARKERS):
+        return True
+    if not is_large_directive(message):
+        return False
+    if any(term in low for term in TALK_EXPLANATION_TERMS) and not any(
+        term in low for term in BUILD_DIRECTIVE_TERMS
+    ):
+        return False
+    return any(term in low for term in BUILD_DIRECTIVE_TERMS)
 
 
 def safe_preview(message: str, limit: int = 240) -> str:
@@ -320,7 +359,7 @@ def build_lane_staging(message: str):
     """If the message is too large for normal routing, return
     (reply_text, route, preview). Otherwise None. The huge directive is NEVER
     pushed through NOAH_DIRECT or the model."""
-    if not is_large_directive(message):
+    if not is_build_directive_preservation_candidate(message):
         return None
     preview = safe_preview(message)
     return (BUILD_LANE_STAGING + f"\n\nPreview: {preview}", "build_lane_staged", preview)

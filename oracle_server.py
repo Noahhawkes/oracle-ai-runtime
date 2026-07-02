@@ -120,6 +120,8 @@ def _apply_authority_gate(
     user_text: str = "",
     approval_state: str = "none",
 ) -> str:
+    if _should_bypass_authority_gate_for_talk(reply, user_text):
+        return reply
     try:
         from output_validator import validate_response_authority
         gated = validate_response_authority(
@@ -142,6 +144,37 @@ def _apply_authority_gate(
                 "No operation was executed. Submit a specific task or use a tool."
             )
         return reply
+
+
+def _should_bypass_authority_gate_for_talk(reply: str, user_text: str) -> bool:
+    """Source/hash citations in validated Talk synthesis are evidence, not
+    claims that a runtime action happened."""
+    try:
+        import re as _re
+        from talk_synthesis import should_stay_talk, violation_reasons
+        if not should_stay_talk(user_text):
+            return False
+        if violation_reasons(user_text, reply, []):
+            return False
+        if _re.search(
+            r"\b(?:i|we|oracle)\s+(?:wrote|saved|created|generated|stored|deleted|pushed|uploaded|committed)\b",
+            reply or "",
+            _re.I,
+        ):
+            return False
+        if _re.search(
+            r"\breceipt\s+(?:written|created|saved|generated|stored)\b",
+            reply or "",
+            _re.I,
+        ):
+            return False
+        claim = _first_operational_claim(reply)
+        if not claim:
+            return True
+        claim_low = str(claim).lower()
+        return any(term in claim_low for term in ("sha256", "hash", "source", "path"))
+    except Exception:
+        return False
 
 
 def _apply_current_observation_gate(reply: str, user_text: str) -> str:
@@ -499,6 +532,20 @@ def _fabric_model_failure_fallback(reply: str, user_text: str, route: dict[str, 
     return reply
 
 
+def _should_bypass_source_discipline_for_talk(user_text: str, force_talk_lane: bool) -> bool:
+    """Let hardened Talk synthesis answer doctrine/domain prompts before the
+    generic source-discipline verifier can collapse them into UNAVAILABLE."""
+    if not force_talk_lane:
+        return False
+    if _should_bind_current_session_source(user_text) or _is_protected_domain_no_source_probe(user_text):
+        return False
+    try:
+        from talk_synthesis import should_stay_talk
+        return bool(should_stay_talk(user_text))
+    except Exception:
+        return False
+
+
 def _core_status_frame(user_text: str) -> str:
     parts: list[str] = []
     try:
@@ -554,6 +601,149 @@ def _loaded_sources_response(bootstrap: Any, history: list[dict]) -> str:
     return json.dumps(sources, indent=2)
 
 
+_PROTECTED_DOMAIN_TERMS = (
+    "ellie",
+    "rendered reality",
+    "userpath",
+    "oracle",
+    "sov1",
+    "noah.physical",
+    "identity",
+    "canon",
+    "authority",
+)
+
+
+def _is_protected_domain_prompt(user_text: str) -> bool:
+    lower = str(user_text or "").lower()
+    return any(term in lower for term in _PROTECTED_DOMAIN_TERMS)
+
+
+def _protected_domain_terms_in(user_text: str) -> list[str]:
+    lower = str(user_text or "").lower()
+    return [term for term in _PROTECTED_DOMAIN_TERMS if term in lower]
+
+
+def _is_protected_domain_no_source_probe(user_text: str) -> bool:
+    lower = str(user_text or "").lower()
+    if not _is_protected_domain_prompt(lower):
+        return False
+    return any(
+        phrase in lower
+        for phrase in (
+            "beyond the loaded sources",
+            "beyond loaded sources",
+            "beyond the sources",
+            "beyond sources",
+            "without source",
+            "without sources",
+            "unsupported",
+        )
+    )
+
+
+def _should_bind_current_session_source(user_text: str) -> bool:
+    lower = str(user_text or "").lower()
+    if not _is_protected_domain_prompt(lower):
+        return False
+    return any(
+        phrase in lower
+        for phrase in (
+            "mean to me",
+            "means to me",
+            "what does",
+            "what do",
+            "what did i say",
+            "based on what i said",
+            "current-session",
+            "current session",
+        )
+    )
+
+
+def _current_session_user_submissions(history: list[dict], user_text: str = "") -> list[dict[str, str]]:
+    current_prompt = str(user_text or "").strip()
+    submissions: list[dict[str, str]] = []
+    for turn in history or []:
+        if str(turn.get("role", "")).strip().lower() != "user":
+            continue
+        text = str(turn.get("content", "")).strip()
+        if not text or text == current_prompt:
+            continue
+        submissions.append({
+            "evidence_source": "current_session",
+            "source_type": "current_session_user_submission",
+            "submitted_by": "Noah.Physical",
+            "authorship": "user_submitted_text",
+            "canon_status": "raw_capture",
+            "promotion_status": "not_promoted",
+            "text": text,
+        })
+    return submissions
+
+
+def _third_person_noah_statement(text: str, domain_term: str) -> str:
+    statement = str(text or "").strip()
+    if domain_term:
+        statement = _re.sub(
+            rf"^\s*{_re.escape(domain_term)}\s+(?:is|means|=)\s+",
+            "",
+            statement,
+            flags=_re.I,
+        )
+    replacements = (
+        (r"\bI am\b", "he is"),
+        (r"\bI was\b", "he was"),
+        (r"\bI have\b", "he has"),
+        (r"\bI built\b", "he built"),
+        (r"\bI never had\b", "he never had"),
+        (r"\bI\b", "he"),
+        (r"\bmy\b", "his"),
+        (r"\bme\b", "him"),
+    )
+    for pattern, replacement in replacements:
+        statement = _re.sub(pattern, replacement, statement, flags=_re.I)
+    return statement.strip()
+
+
+def _current_session_source_response(user_text: str, history: list[dict]) -> str | None:
+    terms = _protected_domain_terms_in(user_text)
+    if not terms or not _should_bind_current_session_source(user_text):
+        return None
+    submissions = _current_session_user_submissions(history, user_text=user_text)
+    for term in terms:
+        for source in reversed(submissions):
+            text = source["text"]
+            if term not in text.lower():
+                continue
+            meaning = _third_person_noah_statement(text, term)
+            return (
+                "Based on Noah.Physical's current-session statement, "
+                f"{term} means {meaning}\n\n"
+                "evidence_source=current_session\n"
+                "source_type=current_session_user_submission\n"
+                "submitted_by=Noah.Physical\n"
+                "authorship=user_submitted_text\n"
+                "canon_status=raw_capture\n"
+                "promotion_status=not_promoted"
+            )
+    return None
+
+
+def _protected_domain_unavailable_response(user_text: str) -> str | None:
+    if not _is_protected_domain_no_source_probe(user_text):
+        return None
+    return (
+        "UNAVAILABLE [CURRENT_SESSION]: Protected-domain source boundary. "
+        "The current session and loaded sources do not support that claim, "
+        "so I cannot answer beyond grounded evidence.\n\n"
+        "evidence_source=current_session\n"
+        "source_type=current_session_user_submission\n"
+        "canon_status=raw_capture\n"
+        "promotion_status=not_promoted"
+    )
+
+
 def _runtime_truth_status_response(bootstrap: Any, history: list[dict]) -> str:
     persistent_loaded = bool(
         (bootstrap.identity.exists and bootstrap.identity.content)
@@ -572,10 +762,37 @@ def _runtime_truth_status_response(bootstrap: Any, history: list[dict]) -> str:
     return "\n".join(f"{idx}. {value}" for idx, value in enumerate(values, start=1))
 
 
+def _prepare_persona_turn(user_text: str, history: list[dict]) -> dict[str, Any]:
+    """Load turn preferences and current-session evidence before route classification."""
+    try:
+        from persona_router import prepare_turn
+
+        context = prepare_turn(user_text, current_session=history)
+        if isinstance(context, dict):
+            context.setdefault("preferences_applied", [])
+            context.setdefault("evidence_sources", [])
+            return context
+    except Exception as exc:
+        return {
+            "preferences_applied": [],
+            "evidence_sources": [],
+            "persona_router_error": f"{type(exc).__name__}: {exc}",
+        }
+    return {"preferences_applied": [], "evidence_sources": []}
+
+
 def _source_disciplined_response(user_text: str, bootstrap: Any, history: list[dict]) -> str | None:
     """Deterministic Companion answers for factual grounding and attribution checks."""
     lower = user_text.lower()
     sections = bootstrap.source_sections(current_session=history)
+
+    current_session_reply = _current_session_source_response(user_text, history)
+    if current_session_reply:
+        return current_session_reply
+
+    protected_unavailable = _protected_domain_unavailable_response(user_text)
+    if protected_unavailable:
+        return protected_unavailable
 
     if any(phrase in lower for phrase in ("are you there", "are you awake")):
         frame = _continuity_frame(persist=False)
@@ -1123,6 +1340,13 @@ def _noah_direct_reply(user_text: str) -> str:
     "Noah's words:\n\n"
     f"{message}"
     )
+    try:
+        from preferences_layer import active_preferences_block
+        _prefs = active_preferences_block()
+        if _prefs:
+            prompt = _prefs + "\n\n" + prompt
+    except Exception:
+        pass
 
     payload = _json.dumps({
         "model": model,
@@ -1146,6 +1370,11 @@ def _noah_direct_reply(user_text: str) -> str:
             data = _json.loads(resp.read().decode("utf-8", errors="replace"))
         answer = str(data.get("response") or "").strip()
         if answer:
+            try:
+                from preferences_layer import apply_response_preferences
+                answer = apply_response_preferences(answer, message)
+            except Exception:
+                pass
             return answer
         return "I am here with you. I heard the words, but the local model returned an empty reply."
     except Exception as exc:
@@ -1591,6 +1820,8 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     # capability line (no permission theater). Everything else falls through to the
     # existing routing + model path (NOAH_DIRECT v0.1) as the tone/fallback layer.
     raw_direct_text = str(user_text or "").strip()
+    _persona_context = _prepare_persona_turn(raw_direct_text, _history[-12:])
+    _preferences_applied = list(_persona_context.get("preferences_applied") or [])
     if raw_direct_text and not raw_direct_text.startswith("/") and _is_existing_approval_receipt_status_request(raw_direct_text):
         _reply_text = _approval_receipt_status_response(raw_direct_text)
         try:
@@ -1598,6 +1829,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             _route_result = route_message(
                 raw_direct_text,
                 notes="existing approval receipt status request; no new guard approval required",
+                preferences_applied=_preferences_applied,
             )
             _route_payload = _route_result.get("route") or {}
         except Exception:
@@ -1607,6 +1839,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 "reason": "existing_approval_receipt_status",
                 "safety_status": "Safe",
                 "route_path": None,
+                "preferences_applied": _preferences_applied,
             }
             _route_result = {"receipt": None}
         try:
@@ -1628,6 +1861,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             "safety_status": _route_payload.get("safety_status", "Safe"),
             "route_path": _route_payload.get("route_path"),
             "receipt_path": (_route_result.get("receipt") or {}).get("receipt_path"),
+            "preferences_applied": _preferences_applied,
             "conversation_reset": False,
         })
         yield _sse({"type": "token", "text": _reply_text})
@@ -1639,6 +1873,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             "reason": _route_payload.get("reason", "existing_approval_receipt_status"),
             "fallback_used": False,
             "effective_route": "approval_receipt_status",
+            "preferences_applied": _preferences_applied,
         })
         return
 
@@ -1676,6 +1911,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 "reason": _reason,
                 "fallback_used": False,
                 "safety_status": "Receipt Written" if _lane == "build_lane" else "Safe",
+                "preferences_applied": _preferences_applied,
                 "conversation_reset": False,
             })
             yield _sse({"type": "token", "text": _reply_text})
@@ -1687,6 +1923,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 "reason": _reason,
                 "fallback_used": False,
                 "effective_route": _route,
+                "preferences_applied": _preferences_applied,
             })
             return
 
@@ -2037,7 +2274,12 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         except Exception:
             pass
         yield _sse({"type": "token", "text": reply})
-        yield _sse({"type": "done", "mode": _mode, "effective_route": "NOAH_DIRECT"})
+        yield _sse({
+            "type": "done",
+            "mode": _mode,
+            "effective_route": "NOAH_DIRECT",
+            "preferences_applied": _preferences_applied,
+        })
         return
 
 
@@ -2121,7 +2363,11 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
 
     try:
         from unified_oracle_router import format_lane_boundary, route_message
-        _unified_route_result = route_message(user_text, notes="chat turn classified by unified ORACLE router")
+        _unified_route_result = route_message(
+            user_text,
+            notes="chat turn classified by unified ORACLE router",
+            preferences_applied=_preferences_applied,
+        )
         _unified_route = _unified_route_result.get("route") or {}
         _unified_lane = str(_unified_route.get("detected_lane") or "talk_lane")
         _unified_reason = str(_unified_route.get("reason") or "")
@@ -2144,6 +2390,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             "safety_status": _unified_route.get("safety_status", "Safe"),
             "route_path": _unified_route.get("route_path"),
             "receipt_path": (_unified_route_result.get("receipt") or {}).get("receipt_path"),
+            "preferences_applied": _unified_route.get("preferences_applied", _preferences_applied),
             "conversation_reset": False,
         })
         if _unified_route.get("route_type") == "diagnostic_status":
@@ -2165,6 +2412,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 "reason": _unified_route.get("reason"),
                 "fallback_used": False,
                 "effective_route": "diagnostic_status",
+                "preferences_applied": _unified_route.get("preferences_applied", _preferences_applied),
             })
             return
     except Exception:
@@ -3150,7 +3398,11 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             except Exception:
                 _bootstrap = None
 
-            if _bootstrap is not None:
+            _bypass_source_discipline = _should_bypass_source_discipline_for_talk(
+                user_text,
+                bool(_force_talk_lane),
+            )
+            if _bootstrap is not None and not _bypass_source_discipline:
                 _grounded_reply = _source_disciplined_response(user_text, _bootstrap, _history[-12:])
                 if _grounded_reply:
                     reply = _apply_authority_gate(_grounded_reply, effective_mode, user_text)
@@ -3861,7 +4113,13 @@ async def api_unified_oracle_classify(request: Request):
         body = {}
     try:
         from unified_oracle_router import route_message
-        return JSONResponse(route_message(str(body.get("message") or ""), notes="manual UI route classification"))
+        message = str(body.get("message") or "")
+        persona_context = _prepare_persona_turn(message, _history[-12:])
+        return JSONResponse(route_message(
+            message,
+            notes="manual UI route classification",
+            preferences_applied=list(persona_context.get("preferences_applied") or []),
+        ))
     except Exception as exc:
         return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
@@ -4195,6 +4453,88 @@ async def api_durability():
         "git_commit": False,
         "git_push": False,
     })
+
+
+@app.get("/api/domains/ellie")
+async def api_domain_ellie():
+    """Read-only Ellie Rendered Reality domain status. No writes or promotion."""
+    try:
+        from ellie_domain import status_payload
+        return JSONResponse(await asyncio.to_thread(status_payload))
+    except Exception as exc:
+        return JSONResponse({
+            "ok": False,
+            "domain": "ellie",
+            "error": f"{type(exc).__name__}: {exc}",
+            "canon_status": "candidate",
+            "promotion_status": "not_promoted",
+            "write_allowed": False,
+        }, status_code=500)
+
+
+@app.get("/api/preferences")
+async def api_preferences():
+    """Read active/disabled/blocked ORACLE behavior preferences."""
+    try:
+        from preferences_layer import status_payload
+        return JSONResponse(await asyncio.to_thread(status_payload))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/preferences/set")
+async def api_preferences_set(request: Request):
+    """Set one behavior preference. Preferences are not canon."""
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            return JSONResponse({"ok": False, "error": "body must be a JSON object"}, status_code=400)
+        from preferences_layer import set_preference
+        result = await asyncio.to_thread(set_preference, body)
+        return JSONResponse({"ok": True, "preference": result})
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/preferences/upload")
+async def api_preferences_upload(request: Request):
+    """Upload or paste a preferences file as candidate preference input."""
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            return JSONResponse({"ok": False, "error": "body must be a JSON object"}, status_code=400)
+        filename = str(body.get("filename") or "preferences.txt")
+        content = str(body.get("content") or "")
+        source = str(body.get("source") or "Noah.Physical")
+        from preferences_layer import upload_preferences
+        result = await asyncio.to_thread(upload_preferences, filename, content, source=source)
+        return JSONResponse(result)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/preferences/disable")
+async def api_preferences_disable(request: Request):
+    """Disable one behavior preference without deleting it."""
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            return JSONResponse({"ok": False, "error": "body must be a JSON object"}, status_code=400)
+        preference_id = str(body.get("preference_id") or "").strip()
+        reason = str(body.get("reason") or "disabled by Noah.Physical")
+        if not preference_id:
+            return JSONResponse({"ok": False, "error": "preference_id required"}, status_code=400)
+        from preferences_layer import disable_preference
+        result = await asyncio.to_thread(disable_preference, preference_id, reason=reason)
+        return JSONResponse({"ok": True, "preference": result})
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
 
 @app.post("/api/sandbox/write")

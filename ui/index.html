@@ -797,7 +797,7 @@
     flex-wrap: wrap;
     gap: 8px;
   }
-  .witness-actions button, #sourcemap-btn {
+  .witness-actions button, #sourcemap-btn, #preferences-btn {
     border: 1px solid var(--border);
     background: var(--surface);
     color: var(--text);
@@ -807,7 +807,7 @@
     padding: 7px 9px;
     cursor: pointer;
   }
-  .witness-actions button:hover, #sourcemap-btn:hover {
+  .witness-actions button:hover, #sourcemap-btn:hover, #preferences-btn:hover {
     border-color: var(--accent);
     color: #fff;
   }
@@ -921,6 +921,8 @@
     <span id="topbar-title">ORACLE</span>
     <div id="mode-indicator" class="talk_lane" role="button" tabindex="0" onclick="showRuntimeDetail()" title="Show live runtime status">Talk</div>
     <div id="safety-indicator" class="safe" role="button" tabindex="0" onclick="showRuntimeDetail()" title="Show live runtime status">Safe</div>
+    <button id="preferences-btn" onclick="showPreferencesDrawer()" title="ORACLE behavior preferences">Preferences</button>
+    <input type="file" id="preferences-upload-input" accept=".json,.md,.txt,.ai" style="display:none" onchange="uploadPreferencesFile(this)">
     <button id="sourcemap-btn" onclick="toggleSourceMapPanel()" title="ORACLE SourceMap">SourceMap</button>
     <a href="/miracledrive" id="md-link" title="MiracleDrive OS" style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.28);text-decoration:none;padding:4px 10px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;transition:0.2s;" onmouseover="this.style.color='#22d3ee';this.style.borderColor='rgba(34,211,238,0.35)'" onmouseout="this.style.color='rgba(255,255,255,0.28)';this.style.borderColor='rgba(255,255,255,0.1)'">MiracleDrive ↗</a>
   </div>
@@ -1124,6 +1126,7 @@
       <div class="suggestion-chips" id="welcome-chips">
         <div class="chip" onclick="sendSuggestion('Are you there?')">Are you there?</div>
         <div class="chip" onclick="sendSuggestion('What are you working on?')">What are you working on?</div>
+        <div class="chip" onclick="sendSuggestion('Who is Ellie from the grounded Ellie Rendered Reality domain?')">Ask Ellie domain</div>
         <div class="chip" onclick="sendSuggestion('/self-patch')">Propose a self-improvement</div>
         <div class="chip" onclick="sendSuggestion('/focus')">Show current focus</div>
         <div class="chip" onclick="sendSuggestion('/help')">Show commands</div>
@@ -1161,6 +1164,7 @@
       <span class="durability-chip pending" id="dur-session-count" role="button" tabindex="0" data-durability-detail="thread">thread --</span>
       <span class="durability-chip pending" id="dur-custody-count" role="button" tabindex="0" data-durability-detail="custody">custody --</span>
       <span class="durability-chip pending" id="dur-index-count" role="button" tabindex="0" data-durability-detail="index">index --</span>
+      <span class="durability-chip pending" id="dur-ellie-domain" role="button" tabindex="0" onclick="showEllieDomainDetail()" title="Ellie Rendered Reality read-domain">ellie domain --</span>
       <span class="durability-chip pending" id="dur-receipt" role="button" tabindex="0" data-durability-detail="receipt">receipt --</span>
     </div>
     <div id="durability-detail" aria-live="polite">
@@ -1212,6 +1216,8 @@ let conversationStarted = false;
 let historyItems = [];
 let lastHistorySource = 'unknown';
 let lastDurabilityData = null;
+let lastEllieDomainData = null;
+let lastPreferencesData = null;
 
 // ── Marked config ─────────────────────────────────────────────────────────────
 marked.setOptions({ breaks: true, gfm: true });
@@ -1379,6 +1385,223 @@ async function showDurabilityDetail(kind) {
   detailLines(title, rows);
 }
 
+function ellieDomainRows(data) {
+  const payload = data || {};
+  const layers = payload.layers || {};
+  const families = payload.source_family_counts || {};
+  const prompts = payload.suggested_prompts || [];
+  return ['Ellie Rendered Reality Domain', [
+    ['endpoint', '/api/domains/ellie'],
+    ['domain', payload.domain],
+    ['status', payload.status],
+    ['canon_status', payload.canon_status],
+    ['promotion_status', payload.promotion_status],
+    ['sensitivity', payload.sensitivity],
+    ['read_allowed', payload.read_allowed],
+    ['write_allowed', payload.write_allowed],
+    ['source_count', payload.source_count],
+    ['hash_verified_source_count', payload.hash_verified_source_count],
+    ['verified_source_count', payload.verified_source_count],
+    ['pending_source_count', payload.pending_source_count],
+    ['layers', Object.entries(layers).map(([k, v]) => k + '=' + v).join(', ')],
+    ['source_families', Object.entries(families).map(([k, v]) => k + '=' + v).join(', ')],
+    ['profile_path', payload.profile_path],
+    ['manifest_path', payload.manifest_path],
+    ['domain_document_path', payload.domain_document_path],
+    ['answer_policy', payload.answer_policy],
+    ['suggested_prompts', prompts.join(' | ')],
+    ['cloud_upload', payload.no_write_actions && payload.no_write_actions.cloud_upload],
+    ['git_commit', payload.no_write_actions && payload.no_write_actions.git_commit],
+    ['git_push', payload.no_write_actions && payload.no_write_actions.git_push],
+  ]];
+}
+
+async function refreshEllieDomainStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/domains/ellie'));
+    if (!r.ok) throw new Error(`ellie domain ${r.status}`);
+    const data = await r.json();
+    lastEllieDomainData = data;
+    const count = Number(data.source_count || 0);
+    const verified = Number(data.verified_source_count || 0);
+    const pending = Number(data.pending_source_count || 0);
+    const state = data.ok && count > 0 ? 'saved' : 'pending';
+    setDurabilityChip(
+      'dur-ellie-domain',
+      'ellie domain ' + count,
+      state,
+      'verified ' + verified + ', pending ' + pending + ' | read-only candidate domain'
+    );
+  } catch (e) {
+    lastEllieDomainData = { ok: false, domain: 'ellie', error: e.message };
+    setDurabilityChip('dur-ellie-domain', 'ellie domain ?', 'warn', e.message);
+  }
+}
+
+async function showEllieDomainDetail() {
+  if (!lastEllieDomainData) {
+    await refreshEllieDomainStatus().catch(() => {});
+  }
+  const [title, rows] = ellieDomainRows(lastEllieDomainData || {});
+  detailLines(title, rows);
+}
+
+function escapeAttr(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function preferenceBadge(pref) {
+  if (pref.blocked_reason) return 'blocked: ' + pref.blocked_reason;
+  return pref.active ? 'active' : 'disabled';
+}
+
+function preferenceListHtml(title, prefs) {
+  const rows = (prefs || []).map(pref => {
+    const canDisable = pref.active && !pref.blocked_reason;
+    return (
+      '<div style="border:1px solid var(--border);border-radius:8px;padding:8px;background:rgba(255,255,255,0.03);margin-top:6px">' +
+        '<div style="display:flex;gap:8px;align-items:flex-start;justify-content:space-between">' +
+          '<div>' +
+            '<div style="font-size:11px;color:var(--text);font-weight:700">' + escapeHtml(pref.preference_id || 'unknown') + '</div>' +
+            '<div style="font-size:12px;color:var(--text-dim);margin-top:4px">' + escapeHtml(pref.preference || '') + '</div>' +
+          '</div>' +
+          (canDisable ? '<button data-pref-disable="' + escapeAttr(pref.preference_id) + '" style="border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;padding:4px 7px;font-size:11px;cursor:pointer">Disable</button>' : '') +
+        '</div>' +
+        '<div style="font-size:10px;color:var(--text-dim);margin-top:6px">' +
+          'scope=' + escapeHtml(pref.scope || '') +
+          ' | category=' + escapeHtml(pref.category || '') +
+          ' | priority=' + escapeHtml(pref.priority || '') +
+          ' | ' + escapeHtml(preferenceBadge(pref)) +
+          ' | canon_status=' + escapeHtml(pref.canon_status || '') +
+        '</div>' +
+        '<div style="font-size:10px;color:var(--text-dim);margin-top:3px">receipt=' + escapeHtml(pref.receipt_id || 'none') + '</div>' +
+      '</div>'
+    );
+  }).join('');
+  return '<h3 style="font-size:12px;margin-top:12px">' + escapeHtml(title) + ' (' + (prefs || []).length + ')</h3>' + (rows || '<div style="font-size:12px;color:var(--text-dim);margin-top:6px">none</div>');
+}
+
+function preferencesReceiptsHtml(receipts) {
+  const lines = (receipts || []).slice(-5).reverse().map(r =>
+    '<div style="font-size:10px;color:var(--text-dim);margin-top:3px">' +
+      escapeHtml(r.timestamp || '') + ' | ' +
+      escapeHtml(r.action || '') + ' | ' +
+      escapeHtml(r.preference_id || '') + ' | ' +
+      escapeHtml(r.receipt_id || '') +
+    '</div>'
+  ).join('');
+  return '<h3 style="font-size:12px;margin-top:12px">Receipts</h3>' + (lines || '<div style="font-size:12px;color:var(--text-dim)">none</div>');
+}
+
+async function refreshPreferencesStatus() {
+  const r = await fetch(apiUrl('/api/preferences'));
+  if (!r.ok) throw new Error(`preferences ${r.status}`);
+  const data = await r.json();
+  lastPreferencesData = data;
+  const btn = document.getElementById('preferences-btn');
+  if (btn) {
+    btn.textContent = 'Preferences ' + Number(data.active_count || 0);
+    btn.title = 'active ' + Number(data.active_count || 0) + ', blocked ' + Number(data.blocked_count || 0);
+  }
+  return data;
+}
+
+async function showPreferencesDrawer() {
+  let data = lastPreferencesData;
+  try {
+    data = await refreshPreferencesStatus();
+  } catch (e) {
+    detailLines('Preferences', [['endpoint', '/api/preferences'], ['error', e.message]]);
+    return;
+  }
+  const head = document.getElementById('durability-detail-title');
+  const body = document.getElementById('durability-detail-body');
+  const panel = document.getElementById('durability-detail');
+  if (!head || !body || !panel) return;
+  head.textContent = 'ORACLE Preferences';
+  body.innerHTML =
+    '<div style="font-size:12px;color:var(--text-dim);line-height:1.45">' +
+      'Behavior layer only. Preferences are not canon and do not override safety, provenance, or Noah.Physical approval.' +
+    '</div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">' +
+      '<button id="preferences-upload-btn" style="border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;padding:6px 9px;cursor:pointer">Upload</button>' +
+      '<button onclick="pastePreferenceText()" style="border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;padding:6px 9px;cursor:pointer">Paste</button>' +
+    '</div>' +
+    '<textarea id="preferences-paste" placeholder="Paste .txt/.md/.ai preference lines here" style="width:100%;min-height:64px;margin-top:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-family:inherit;font-size:12px"></textarea>' +
+    '<div style="font-size:10px;color:var(--text-dim);margin-top:8px">preferences_path: ' + escapeHtml(data.preferences_path || '') + '</div>' +
+    '<div style="font-size:10px;color:var(--text-dim);margin-top:3px">receipt_path: ' + escapeHtml(data.receipt_path || '') + '</div>' +
+    preferenceListHtml('Active', data.active_preferences || []) +
+    preferenceListHtml('Disabled', data.disabled_preferences || []) +
+    preferenceListHtml('Blocked', data.blocked_preferences || []) +
+    preferencesReceiptsHtml(data.recent_receipts || []);
+  panel.classList.add('visible');
+  const uploadBtn = body.querySelector('#preferences-upload-btn');
+  if (uploadBtn) {
+    uploadBtn.addEventListener('click', () => document.getElementById('preferences-upload-input')?.click());
+  }
+  body.querySelectorAll('[data-pref-disable]').forEach(btn => {
+    btn.addEventListener('click', () => disablePreference(btn.getAttribute('data-pref-disable')));
+  });
+}
+
+async function uploadPreferencesPayload(filename, content) {
+  const r = await fetch(apiUrl('/api/preferences/upload'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, content, source: 'Noah.Physical' }),
+  });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(text || `preferences upload ${r.status}`);
+  }
+  await refreshPreferencesStatus();
+  await showPreferencesDrawer();
+}
+
+async function uploadPreferencesFile(input) {
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  try {
+    const content = await file.text();
+    await uploadPreferencesPayload(file.name, content);
+  } catch (e) {
+    detailLines('Preferences Upload', [['error', e.message]]);
+  } finally {
+    if (input) input.value = '';
+  }
+}
+
+async function pastePreferenceText() {
+  const el = document.getElementById('preferences-paste');
+  const text = (el && el.value || '').trim();
+  if (!text) return;
+  try {
+    await uploadPreferencesPayload('pasted_preferences.txt', text);
+  } catch (e) {
+    detailLines('Preferences Paste', [['error', e.message]]);
+  }
+}
+
+async function disablePreference(preferenceId) {
+  if (!preferenceId) return;
+  try {
+    const r = await fetch(apiUrl('/api/preferences/disable'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preference_id: preferenceId, reason: 'disabled from ORACLE UI' }),
+    });
+    if (!r.ok) throw new Error(`disable ${r.status}`);
+    await refreshPreferencesStatus();
+    await showPreferencesDrawer();
+  } catch (e) {
+    detailLines('Preferences Disable', [['preference_id', preferenceId], ['error', e.message]]);
+  }
+}
+
 async function showRuntimeDetail() {
   try {
     const r = await fetch(apiUrl('/api/status'));
@@ -1425,6 +1648,15 @@ function bindDurabilityControls() {
       }
     });
   });
+  const ellie = document.getElementById('dur-ellie-domain');
+  if (ellie) {
+    ellie.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        showEllieDomainDetail();
+      }
+    });
+  }
 }
 
 async function refreshDurability(historySource) {
@@ -1474,6 +1706,8 @@ async function newChat() {
   conversationStarted = false;
   lastHistorySource = 'empty';
   refreshDurability('empty').catch(() => {});
+  refreshEllieDomainStatus().catch(() => {});
+  refreshPreferencesStatus().catch(() => {});
   _applyLearnedUI();
 }
 
@@ -1725,6 +1959,7 @@ const _CHIP_MAP = {
   "/self-patch":              "/self-patch",
   "/focus":                   "/focus",
   "/help":                    "/help",
+  "/ellie-domain":            "Who is Ellie from the grounded Ellie Rendered Reality domain?",
   "/review-learned":          "/review-learned",
   "/pending":                 "/pending",
 };
@@ -1732,6 +1967,7 @@ const _CHIP_LABELS = {
   "/self-patch":       "Propose a self-improvement",
   "/focus":            "Show current focus",
   "/help":             "Show commands",
+  "/ellie-domain":     "Ask Ellie domain",
   "/review-learned":   "What have you learned?",
   "/pending":          "Review pending items",
 };
@@ -2866,6 +3102,8 @@ async function init() {
 
   await restoreHistory();
   refreshDurability(lastHistorySource).catch(() => {});
+  refreshEllieDomainStatus().catch(() => {});
+  refreshPreferencesStatus().catch(() => {});
   await _applyLearnedUI();
   loadRenderedRealityStatus().catch(() => {});
   loadWitnessGovernanceStatus().catch(() => {});
@@ -2876,6 +3114,8 @@ async function init() {
   refreshPresence();
   setInterval(refreshPresence, 5000);
   setInterval(() => refreshDurability(lastHistorySource).catch(() => {}), 15000);
+  setInterval(() => refreshEllieDomainStatus().catch(() => {}), 30000);
+  setInterval(() => refreshPreferencesStatus().catch(() => {}), 30000);
 
   document.getElementById('input').focus();
 }

@@ -69,3 +69,14 @@ def test_fallback_companion_uses_unified_lane_language():
     out = srv._strip_routing_artifacts("Routing to Claude Code.", "companion")
     assert "unified oracle" in out.lower()
     assert "switch to builder" not in out.lower()
+
+
+def test_inline_routing_artifact_is_removed_without_replacing_answer():
+    out = srv._strip_routing_artifacts(
+        "BACKEND_PATCH_REQUEST is a backend directive. Routing to Claude Code.",
+        "companion",
+    )
+
+    assert "backend directive" in out.lower()
+    assert "routing to claude code" not in out.lower()
+    assert "unified oracle" not in out.lower()

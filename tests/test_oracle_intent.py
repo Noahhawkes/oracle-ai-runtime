@@ -94,6 +94,40 @@ def test_large_directive_returns_build_lane_staging_not_crash():
     assert build_lane_staging("patch the wording") is None
 
 
+def test_large_talk_prompt_is_not_build_lane_staged():
+    big = "Can you talk to me normally?\n" * 500
+
+    assert is_large_directive(big) is True
+    assert build_lane_staging(big) is None
+
+
+def test_large_doctrine_prompt_is_not_build_lane_staged():
+    big = "What is Rendered Reality in your own words?\n" * 500
+
+    assert is_large_directive(big) is True
+    assert build_lane_staging(big) is None
+
+
+def test_large_marker_directive_is_build_lane_staged():
+    big = "BACKEND_PATCH_REQUEST patch oracle_server.py\n" * 500
+
+    staged = build_lane_staging(big)
+
+    assert staged is not None
+    text, route, _preview = staged
+    assert route == "build_lane_staged"
+    assert "large build directive" in text.lower()
+
+
+def test_explicit_marker_directive_is_staged_even_when_short():
+    staged = build_lane_staging("BACKEND_PATCH_REQUEST patch oracle_server.py")
+
+    assert staged is not None
+    _text, route, preview = staged
+    assert route == "build_lane_staged"
+    assert preview == "BACKEND_PATCH_REQUEST patch oracle_server.py"
+
+
 def test_build_lane_message_is_honest():
     assert "large build directive" in BUILD_LANE_STAGING.lower()
     assert "build lane" in BUILD_LANE_STAGING.lower()

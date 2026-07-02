@@ -688,6 +688,63 @@ def _inject_local_context(user_input: str) -> str:
     return "\n".join(lines)
 
 
+def _talk_synthesis_packet(user_input: str) -> dict:
+    try:
+        from talk_synthesis import synthesis_grounding_packet
+        return synthesis_grounding_packet(user_input)
+    except Exception:
+        return {
+            "active": False,
+            "grounding_block": "",
+            "retrieved_lines": [],
+            "retrieved_sources": [],
+            "direct_reply": None,
+        }
+
+
+def _talk_synthesis_retry_block(user_input: str, reply: str, packet: dict) -> str:
+    if not packet or not packet.get("active"):
+        return ""
+    try:
+        from talk_synthesis import retry_grounding_block
+        return retry_grounding_block(user_input, reply, packet.get("retrieved_lines") or [])
+    except Exception:
+        return ""
+
+
+def _talk_synthesis_sanitize_reply(user_input: str, reply: str, packet: dict) -> str:
+    if not packet or not packet.get("active"):
+        return reply
+    try:
+        from talk_synthesis import suppress_generic_opener
+        return suppress_generic_opener(user_input, reply)
+    except Exception:
+        return reply
+
+
+def _talk_synthesis_boundary_reply(user_input: str, reply: str, packet: dict) -> str:
+    try:
+        from talk_synthesis import synthesis_boundary_message, violation_reasons
+        reasons = violation_reasons(user_input, reply, packet.get("retrieved_lines") or [])
+        return synthesis_boundary_message(reasons, user_input)
+    except Exception:
+        return (
+            "I cannot answer that safely from this lane without breaking the custody boundary. "
+            "I need stronger grounding or a cleaner prompt before I speak from it."
+        )
+
+
+def _talk_synthesis_final_repair_block(user_input: str, reply: str, packet: dict) -> str:
+    if not packet or not packet.get("active"):
+        return ""
+    try:
+        from talk_synthesis import final_repair_block, violation_reasons
+        reasons = violation_reasons(user_input, reply, packet.get("retrieved_lines") or [])
+        return final_repair_block(user_input, reasons)
+    except Exception:
+        return ""
+
+
 def _show_scoped_path_table() -> str:
     """
     Read Memory/scoped_paths_proposed.json and return a formatted review table.
@@ -1503,19 +1560,58 @@ def web_engine_response(
     if engine_history and engine_history[-1].get("role") == "user" and engine_history[-1].get("content") == user_input:
         engine_history = engine_history[:-1]
 
+    def _apply_preferences(reply_text: str) -> str:
+        try:
+            from preferences_layer import apply_response_preferences
+            return apply_response_preferences(reply_text, user_input)
+        except Exception:
+            return reply_text
+
+    def _active_preferences_block() -> str:
+        try:
+            from preferences_layer import active_preferences_block
+            return active_preferences_block()
+        except Exception:
+            return ""
+
+    synthesis_packet = _talk_synthesis_packet(user_input)
+    synthesis_active = bool(synthesis_packet.get("active")) if synthesis_packet else False
+    direct_synthesis_reply = synthesis_packet.get("direct_reply") if synthesis_packet else None
+    if direct_synthesis_reply:
+        reply = _apply_preferences(str(direct_synthesis_reply))
+        engine_history.append({"role": "user", "content": user_input})
+        engine_history.append({"role": "assistant", "content": reply})
+        save_message(session_id, "user", user_input)
+        save_message(session_id, "assistant", reply)
+        return reply, engine_history, MODE_COMPANION
+
     local = is_local()
     client = make_client()
     model = get_model(vision=False)
     system_prompt = build_system_prompt(local=local)
     if grounding_block:
         system_prompt = grounding_block + "\n\n" + system_prompt
-    try:
-        from salience_filter import focus_report
-        focus = focus_report()
-        if focus:
-            system_prompt += "\n\n[ORACLE SALIENCE FOCUS]\n" + focus
-    except Exception:
-        pass
+    synthesis_grounding = synthesis_packet.get("grounding_block") if synthesis_packet else ""
+    if synthesis_grounding:
+        if synthesis_active:
+            # Doctrine/internal-domain synthesis needs the packet as a hard,
+            # compact instruction layer. The full companion grounding block can
+            # bury it under unrelated source-discipline text and cause false
+            # missing-grounding refusals.
+            system_prompt = synthesis_grounding
+        else:
+            system_prompt = synthesis_grounding + "\n\n" + system_prompt
+    preference_block = _active_preferences_block()
+    if preference_block:
+        system_prompt = preference_block + "\n\n" + system_prompt
+    if not synthesis_active:
+        try:
+            from salience_filter import focus_report
+            focus = focus_report()
+            if focus:
+                system_prompt += "\n\n[ORACLE SALIENCE FOCUS]\n" + focus
+        except Exception:
+            pass
 
     # ── Execution policy — parse once, passed to all fallback paths ───────────
     try:
@@ -1527,7 +1623,7 @@ def web_engine_response(
     # ── Deterministic bypass — no LLM for diagnostic/schema requests ──────────
     if _policy is not None and _policy.is_diagnostic:
         log("DIAGNOSTIC_BYPASS", f"deterministic bypass for: {user_input[:80]}")
-        reply = build_deterministic_response(_policy)
+        reply = _apply_preferences(build_deterministic_response(_policy))
         engine_history.append({"role": "user", "content": user_input})
         engine_history.append({"role": "assistant", "content": reply})
         save_message(session_id, "user", user_input)
@@ -1541,23 +1637,82 @@ def web_engine_response(
     )
     if route_decision.route == MODE_COMPANION:
         begin_debug_turn(user_input, route_decision, current_mode=mode, no_route=no_route)
+        model_history = [] if synthesis_active else engine_history
         direct = direct_response(
             user_input,
-            history=engine_history,
+            history=model_history,
             model=model,
             timeout_s=DEFAULT_TIMEOUT_SECONDS,
             base_prompt=system_prompt,
             policy=_policy,
         )
         reply = direct.text
+        reply = _talk_synthesis_sanitize_reply(user_input, reply, synthesis_packet)
 
         # Handle schema-preserving timeout sentinel
         if reply == "__ORACLE_TIMEOUT_SCHEMA_PRESERVE__" and _policy is not None:
             log("COMPANION_TIMEOUT_SCHEMA", f"schema-preserving timeout: {user_input[:80]}")
             reply = build_timeout_response(_policy)
+        elif synthesis_packet.get("active"):
+            if (
+                reply == "__ORACLE_TIMEOUT_SCHEMA_PRESERVE__"
+                or direct.timed_out
+                or direct.fallback_used
+            ):
+                if direct.timed_out:
+                    log("COMPANION_TIMEOUT", f"web local model timeout for synthesis: {user_input[:80]}")
+                reply = _talk_synthesis_boundary_reply(user_input, reply, synthesis_packet)
+            elif (retry_block := _talk_synthesis_retry_block(user_input, reply, synthesis_packet)):
+                retry = direct_response(
+                    user_input,
+                    history=model_history,
+                    model=model,
+                    timeout_s=DEFAULT_TIMEOUT_SECONDS,
+                    base_prompt=system_prompt + "\n\n" + retry_block,
+                    policy=_policy,
+                )
+                retry_reply = retry.text
+                retry_reply = _talk_synthesis_sanitize_reply(user_input, retry_reply, synthesis_packet)
+                if retry_reply != "__ORACLE_TIMEOUT_SCHEMA_PRESERVE__" and not retry.fallback_used:
+                    retry_failed = _talk_synthesis_retry_block(user_input, retry_reply, synthesis_packet)
+                    if not retry_failed:
+                        reply = retry_reply
+                    else:
+                        repair_block = _talk_synthesis_final_repair_block(
+                            user_input, retry_reply, synthesis_packet
+                        )
+                        if repair_block:
+                            repair = direct_response(
+                                user_input,
+                                history=[],
+                                model=model,
+                                timeout_s=DEFAULT_TIMEOUT_SECONDS,
+                                base_prompt=repair_block,
+                                policy=_policy,
+                            )
+                            repair_reply = _talk_synthesis_sanitize_reply(
+                                user_input, repair.text, synthesis_packet
+                            )
+                            repair_failed = _talk_synthesis_retry_block(
+                                user_input, repair_reply, synthesis_packet
+                            )
+                            reply = repair_reply if (
+                                repair_reply != "__ORACLE_TIMEOUT_SCHEMA_PRESERVE__"
+                                and not repair.fallback_used
+                                and not repair_failed
+                            ) else _talk_synthesis_boundary_reply(
+                                user_input, retry_reply, synthesis_packet
+                            )
+                        else:
+                            reply = _talk_synthesis_boundary_reply(
+                                user_input, retry_reply, synthesis_packet
+                            )
+                else:
+                    reply = _talk_synthesis_boundary_reply(user_input, reply, synthesis_packet)
         elif direct.timed_out:
             log("COMPANION_TIMEOUT", f"web local model timeout for: {user_input[:80]}")
 
+        reply = _apply_preferences(reply)
         engine_history.append({"role": "user", "content": user_input})
         engine_history.append({"role": "assistant", "content": reply})
         save_message(session_id, "user", user_input)
@@ -1566,14 +1721,18 @@ def web_engine_response(
 
     if local:
         reply, engine_history = chat_local(client, session_id, system_prompt, engine_history, user_input, model)
+        reply = _apply_preferences(reply)
         blocked = _detect_hallucination(reply, [])
         if blocked:
             log("HALLUCINATION_DETECTED", f"web reply: {reply[:120]}")
             reply = blocked
-            if engine_history and engine_history[-1].get("role") == "assistant":
-                engine_history[-1]["content"] = reply
+        if engine_history and engine_history[-1].get("role") == "assistant":
+            engine_history[-1]["content"] = reply
     else:
         reply, engine_history = chat(client, session_id, system_prompt, engine_history, user_input, model)
+        reply = _apply_preferences(reply)
+        if engine_history and engine_history[-1].get("role") == "assistant":
+            engine_history[-1]["content"] = reply
 
     return reply, engine_history, MODE_BUILDER
 

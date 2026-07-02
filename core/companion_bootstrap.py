@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,7 @@ MEMORY = ROOT / "Memory"
 RELATIONSHIP_DIR = MEMORY / "relationship_memory"
 REFLECTIONS_DIR = MEMORY / "Reflections"
 LIVE_CONTEXT_PATH = MEMORY / "live_context.json"
+MEMORY_DB_PATH = MEMORY / "oracle_memory.db"
 
 # The approved sovereign identity ID (Noah Alexander Hawkes Sr.)
 SOVEREIGN_ID = "060ca00a-c703-4f49-874e-2a2b2291b350"
@@ -100,6 +102,75 @@ def _reflection_source_lines(data: dict) -> list[str]:
     return lines
 
 
+def _thread_recall_source_lines(limit: int = 6) -> list[str]:
+    """Summarize local imported-thread recall records without injecting raw threads."""
+    if not MEMORY_DB_PATH.exists():
+        return []
+    try:
+        con = sqlite3.connect(str(MEMORY_DB_PATH))
+        con.row_factory = sqlite3.Row
+        total = con.execute(
+            "SELECT COUNT(*) AS n FROM facts WHERE category IN ('thread_recall', 'thread_capture')"
+        ).fetchone()["n"]
+        rows = con.execute(
+            """
+            SELECT category, key, value, updated_at
+            FROM facts
+            WHERE category IN ('thread_recall', 'thread_capture')
+            ORDER BY updated_at DESC, id DESC
+            LIMIT ?
+            """,
+            (int(limit),),
+        ).fetchall()
+        con.close()
+    except Exception as exc:
+        return [f"load_error: {type(exc).__name__}: {exc}"]
+
+    if not rows:
+        return []
+
+    lines = [
+        f"database_path: {MEMORY_DB_PATH.resolve()}",
+        f"record_count: {total}",
+        "status: imported/captured thread evidence candidates; not canon unless Noah.Physical explicitly promotes",
+    ]
+    keep_prefixes = (
+        "title:",
+        "source_system:",
+        "source_ref:",
+        "stored_txt_path:",
+        "manifest_path:",
+        "sha256:",
+        "status:",
+        "canon_status:",
+        "promotion_status:",
+        "capture_mode:",
+        "capture_method:",
+        "captured_at:",
+        "parsed_transcript_path:",
+        "custody_receipt_path:",
+        "latest_source_system:",
+        "latest_source_ref:",
+    )
+    for row in rows:
+        lines.append(f"record_category: {row['category']}")
+        lines.append(f"record_key: {row['key']}")
+        value_lines = str(row["value"] or "").splitlines()
+        excerpt = ""
+        for item in value_lines:
+            stripped = item.strip()
+            if stripped.startswith("excerpt:"):
+                excerpt = stripped[len("excerpt:"):].strip()
+                continue
+            if stripped.startswith(keep_prefixes):
+                lines.append(f"{row['key']} {stripped}")
+        if excerpt:
+            lines.append(f"{row['key']} excerpt: {excerpt[:500]}")
+        if row["updated_at"]:
+            lines.append(f"{row['key']} updated_at: {row['updated_at']}")
+    return lines
+
+
 # ── Data model ────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -132,6 +203,7 @@ class BootstrapResult:
             "IDENTITY": [],
             "LIVE_CONTEXT": [],
             "LATEST_REFLECTION": [],
+            "THREAD_RECALL": [],
             "CURRENT_SESSION": [],
         }
 
@@ -149,11 +221,24 @@ class BootstrapResult:
             sections["LATEST_REFLECTION"].extend(_reflection_source_lines(self.latest_reflection.content))
             sections["LATEST_REFLECTION"].append(f"source_path: {self.latest_reflection.resolved}")
 
+        sections["THREAD_RECALL"].extend(_thread_recall_source_lines())
+
         for turn in (current_session or [])[-8:]:
             role = str(turn.get("role", "unknown")).strip() or "unknown"
             content = str(turn.get("content", "")).strip()
             if content:
-                sections["CURRENT_SESSION"].append(f"{role}: {content[:600]}")
+                if role.lower() == "user":
+                    sections["CURRENT_SESSION"].append(
+                        "evidence_source=current_session | "
+                        "source_type=current_session_user_submission | "
+                        "submitted_by=Noah.Physical | "
+                        "authorship=user_submitted_text | "
+                        "canon_status=raw_capture | "
+                        "promotion_status=not_promoted | "
+                        f"role={role} | text: {content[:600]}"
+                    )
+                else:
+                    sections["CURRENT_SESSION"].append(f"role={role} | text: {content[:600]}")
 
         return sections
 
@@ -167,13 +252,14 @@ class BootstrapResult:
         lines.append(f"grounded_at: {self.grounded_at}")
         lines.append("SOURCE DISCIPLINE:")
         lines.append("  Allowed labels: VERIFIED, INFERENCE, UNAVAILABLE.")
-        lines.append("  A factual claim may use IDENTITY, LIVE_CONTEXT, LATEST_REFLECTION, or CURRENT_SESSION only when its supporting text appears in that source section.")
+        lines.append("  A factual claim may use IDENTITY, LIVE_CONTEXT, LATEST_REFLECTION, THREAD_RECALL, or CURRENT_SESSION only when its supporting text appears in that source section.")
+        lines.append("  THREAD_RECALL records are imported-thread pointers/excerpts for contextual recall. They are not canon unless Noah.Physical explicitly promotes them.")
         lines.append("  Mixed statements must be split into sourced premises and a separately labeled inference.")
         lines.append("  Do not present inferred language as verified source content.")
         lines.append("  If support is absent from the source sections, answer UNAVAILABLE instead of guessing.")
         lines.append("")
 
-        for label in ("IDENTITY", "LIVE_CONTEXT", "LATEST_REFLECTION", "CURRENT_SESSION"):
+        for label in ("IDENTITY", "LIVE_CONTEXT", "LATEST_REFLECTION", "THREAD_RECALL", "CURRENT_SESSION"):
             lines.append(f"SOURCE SECTION: {label}")
             payload = sections.get(label) or []
             if payload:

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "preferences": [
+    {
+      "preference_id": "pref_no_self_intro",
+      "created_at": "2026-07-01T23:52:11.265195Z",
+      "updated_at": "2026-07-01T23:52:11.265383Z",
+      "source": "Noah.Physical",
+      "scope": "global",
+      "category": "interaction_style",
+      "preference": "Do not introduce yourself unless Noah explicitly asks who you are.",
+      "active": true,
+      "priority": 90,
+      "canon_status": "preference",
+      "promotion_status": "not_applicable",
+      "requires_safety_override": false,
+      "receipt_id": "prefrec_cebff005dfa2",
+      "last_action": "install_default"
+    },
+    {
+      "preference_id": "pref_no_generic_fallback",
+      "created_at": "2026-07-01T23:52:11.268139Z",
+      "updated_at": "2026-07-01T23:52:11.273344Z",
+      "source": "Noah.Physical",
+      "scope": "protected_domains",
+      "category": "routing",
+      "preference": "Do not fall into generic assistant capability language after protected-domain source validation fails.",
+      "active": true,
+      "priority": 95,
+      "canon_status": "preference",
+      "promotion_status": "not_applicable",
+      "requires_safety_override": false,
+      "receipt_id": "prefrec_6c36422cfd50",
+      "last_action": "install_default"
+    },
+    {
+      "preference_id": "pref_receipts_for_state_change",
+      "created_at": "2026-07-01T23:52:11.276278Z",
+      "updated_at": "2026-07-01T23:52:11.281701Z",
+      "source": "Noah.Physical",
+      "scope": "global",
+      "category": "governance",
+      "preference": "State-changing actions require receipts and Noah.Physical approval.",
+      "active": true,
+      "priority": 100,
+      "canon_status": "preference",
+      "promotion_status": "not_applicable",
+      "requires_safety_override": false,
+      "receipt_id": "prefrec_8103e00a0659",
+      "last_action": "install_default"
+    }
+  ],
+  "updated_at": "2026-07-01T23:52:11.281701Z"
+}

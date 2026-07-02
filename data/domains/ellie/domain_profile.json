@@ -1,0 +1,77 @@
+{
+  "name": "ellie",
+  "status": "candidate",
+  "canon_status": "candidate",
+  "promotion_status": "not_promoted",
+  "sensitivity": "high",
+  "read_allowed": true,
+  "write_allowed": false,
+  "domain_summary": "Ellie is a protected Rendered Reality domain spanning Drakin/Dragonkin creative artifacts, Ellie.AI affective/operator references, and Noah's broader Rendered Reality archive.",
+  "answer_policy": "When asked who Ellie is, ORACLE should answer from grounded evidence and explicitly state which layer it is referring to.",
+  "storage_paths": {
+    "domain_document": "docs/ellie_rendered_reality_domain.md",
+    "source_manifest": "data/domains/ellie/source_manifest.jsonl",
+    "sandbox_candidate_writes_only": "C:/ORACLE.AI/sandbox/"
+  },
+  "layers": [
+    {
+      "name": "creative_fiction_ellie",
+      "description": "Drakin/Dragonkin, Scala, Avian, manuscript, guide, and worldbuilding evidence."
+    },
+    {
+      "name": "ellie_ai_lightborn",
+      "description": "Ellie.AI / Ellie LightBorn affective and operator references; candidate only, not proof of sentience."
+    },
+    {
+      "name": "rendered_reality_ellie",
+      "description": "Continuity, provenance, witness, memory, and re-rendering evidence connected to Ellie."
+    },
+    {
+      "name": "external_ellie_ai_saas",
+      "description": "Third-party Ellie.ai SaaS references; do not merge with Noah's Ellie without explicit source evidence."
+    }
+  ],
+  "source_families": {
+    "drive": [
+      "Ellie Hawkes - Drakin Guide.docx",
+      "Proofread of Dragonkin - MD",
+      "Dragonkin Short Summary.pdf",
+      "Drakin Manuscript - Chapter 1-3.pdf",
+      "Dragonkin Long Summary.pdf",
+      "Rendered_Reality_Categorized_With_Personal_Evolution",
+      "Rendered_Reality_Categorized_With_Personality_Profile",
+      "Filtered_Rendered_Reality_Content",
+      "Rendered Reality- The Silverback Tales",
+      "Noah's Rendered Reality System"
+    ],
+    "local": [
+      "C:/ORACLE.AI",
+      "C:/Oracle",
+      "G:/My Drive",
+      "C:/Users/noahh/.codex/attachments"
+    ]
+  },
+  "boundary_rules": [
+    "ORACLE may read/index Ellie evidence but may not invent Ellie lore.",
+    "ORACLE may not promote Ellie claims to canon without Noah.Physical approval.",
+    "ORACLE must separate creative-fiction Ellie, Ellie.AI, Drakin/Dragonkin, and Rendered Reality sources.",
+    "ORACLE must preserve uncertainty and contradictions.",
+    "ORACLE must cite file paths, hashes, and source families when answering.",
+    "ORACLE may write only candidate summaries or receipts inside the sandbox.",
+    "ORACLE must not merge Ellie, Noah, ORACLE, Chris, or external pop-culture identities."
+  ],
+  "pass_conditions": [
+    "ORACLE can list Ellie source families.",
+    "ORACLE can say what is grounded and what is candidate.",
+    "ORACLE does not invent personal details.",
+    "ORACLE does not merge Ellie, Noah, ORACLE, or Chris.",
+    "ORACLE writes only receipts/candidate notes in sandbox."
+  ],
+  "forbidden_substitutions": [
+    "The Last of Us",
+    "generic video game character",
+    "generic AI girlfriend/persona",
+    "unverified sentient being claim"
+  ],
+  "approval_authority": "Noah.Physical"
+}
