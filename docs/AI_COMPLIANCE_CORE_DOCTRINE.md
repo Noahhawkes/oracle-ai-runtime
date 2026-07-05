@@ -400,3 +400,13 @@ Next artifact:
 
 That document should convert this doctrine into a customer-facing offer,
 deliverable list, risk matrix, and MVP scope.
+
+## 15. Vertical Annexes
+
+Candidate vertical notes extend the product map without rewriting it:
+
+- `docs/ai_compliance_core_medtech_wedge.md` — regulated medtech startups
+  (candidate, not_promoted, created 2026-07-05). Positioning: audit-readiness
+  and approval-traceability support for documentation-burdened regulated
+  teams. Never an FDA certification, compliance guarantee, or counsel
+  replacement.
