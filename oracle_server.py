@@ -291,6 +291,22 @@ def _approval_receipt_status_response(text: str) -> str:
 
 def _diagnostic_status_response(route: dict[str, Any]) -> str:
     route_path = route.get("route_path") or "not_written"
+    # Live runtime facts, read from code — never model-generated. A status
+    # answer that cannot be read from real state is reported UNKNOWN, not
+    # synthesized (CLAIM != SOURCE).
+    from pathlib import Path as _P
+    _root = str(_P(__file__).resolve().parent)
+    try:
+        from runtime_config import runtime_port as _rt_port
+        _port = str(_rt_port())
+    except Exception:
+        _port = "UNKNOWN"
+    try:
+        from llm import get_model as _get_model
+        _model = _get_model(vision=False)
+    except Exception:
+        _model = "UNKNOWN"
+    _session = str(_session_id) if _session_id is not None else "UNKNOWN"
     return "\n".join(
         [
             "route_type: diagnostic_status",
@@ -299,6 +315,11 @@ def _diagnostic_status_response(route: dict[str, Any]) -> str:
             f"approval_required: {bool(route.get('requires_approval'))}",
             f"route_reason: {route.get('reason', 'diagnostic status request')}",
             f"route_path: {route_path}",
+            f"server_root: {_root}",
+            f"ui_port: {_port}",
+            f"active_model: {_model}",
+            f"session_id: {_session}",
+            "status_source: live_code_read_not_model_generated",
             "server_restarted_by_this_request: false",
             "actions_executed: 0",
             "files_mutated: 0",

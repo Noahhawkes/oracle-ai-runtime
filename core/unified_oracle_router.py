@@ -291,20 +291,43 @@ def _contains_unnegated_diagnostic_action(lower: str) -> bool:
     return any(pattern.search(surface) for pattern in DIAGNOSTIC_ACTION_PATTERNS)
 
 
+# Runtime fields whose presence marks a prompt as a live-state status ask.
+# A prompt naming two or more of these must be answered by code reading real
+# runtime state — never by the model (which confabulates stale memory).
+RUNTIME_STATUS_FIELDS = (
+    "server root", "ui port", "active model", "conversation model",
+    "self prompt enabled", "background loop status", "last route type",
+    "last operation type", "autonomous task", "safest next step",
+    "session id", "runtime root", "cognition mode", "network boundary",
+)
+
+
 def is_diagnostic_status_request(user_message: str) -> bool:
-    """Detect read-only report/status prompts before risky-word Guard matching."""
+    """Detect read-only report/status prompts before risky-word Guard matching.
+
+    Matching is underscore/hyphen-blind: REPORT_ONLY_STATUS == "report only
+    status". A prompt naming >=2 runtime status fields (server_root, ui_port,
+    active_model, ...) is a status request even without an explicit marker.
+    """
     lower = str(user_message or "").strip().lower()
     if not lower:
         return False
     if _contains_unnegated_diagnostic_action(lower):
         return False
-    has_marker = _contains_any(lower, DIAGNOSTIC_STATUS_MARKERS)
-    asks_status = _contains_any(lower, DIAGNOSTIC_STATUS_TERMS)
+    # normalize snake_case / kebab-case tokens so markers match verbatim pastes
+    norm = lower.replace("_", " ").replace("-", " ")
+    has_marker = _contains_any(norm, DIAGNOSTIC_STATUS_MARKERS)
+    asks_status = _contains_any(norm, DIAGNOSTIC_STATUS_TERMS)
+    field_hits = sum(1 for f in RUNTIME_STATUS_FIELDS if f in norm)
     read_only_restart_report = (
-        "report whether" in lower
-        and ("server was restarted" in lower or "was restarted" in lower)
+        "report whether" in norm
+        and ("server was restarted" in norm or "was restarted" in norm)
     )
-    return bool((has_marker and asks_status) or read_only_restart_report)
+    return bool(
+        (has_marker and asks_status)
+        or field_hits >= 2
+        or read_only_restart_report
+    )
 
 
 def _question_or_talk_request(user_message: str) -> bool:
