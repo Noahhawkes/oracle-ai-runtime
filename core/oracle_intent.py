@@ -54,6 +54,9 @@ PLANNING = (
     "what should we do next", "what's the plan", "whats the plan", "next steps",
     "next step", "roadmap", "what's next", "whats next", "what is the plan",
     "sequence", "prioritize", "priorities", "strategy", "plan for", "how should we proceed",
+    "you choose", "recommended next step", "recommended next action", "what should i do next", "what should you do next",
+    "continue self prompt", "continue the self prompt", "self prompt", "self-prompt",
+    "write to sandbox", "sandbox write", "sandbox-only write",
 )
 DEBUG = (
     "debug", "why did", "traceback", "stack trace", "stack-trace", "failing",
@@ -101,8 +104,8 @@ _ACTION_CAP_MAP = (
 
 # Capabilities ORACLE genuinely cannot perform from a free-chat turn (honest).
 CHAT_UNSUPPORTED = {
-    "qr_scan", "camera_capture", "web_access", "external_send",
-    "command_exec", "git_write", "local_file_write", "connector", "file_ingest",
+    "qr_scan", "camera_capture", "external_send",
+    "command_exec", "git_write", "connector", "file_ingest",
 }
 
 _SUBSTANTIVE = {
@@ -226,11 +229,19 @@ def capability_registry() -> dict:
     defaults = {
         "qr_scan": ("missing", "no QR-scan capability implemented"),
         "camera_capture": ("unverified", "camera route exists but not verified from chat"),
-        "web_access": ("missing", "no web access from this local runtime"),
+        "web_access": ("available", "read-only internet_recall lane; no browser control, login, forms, send, or canon promotion"),
         "external_send": ("missing", "no external send/relay from this runtime"),
         "command_exec": ("missing", "chat cannot run shell commands; use terminal/Claude Code"),
         "local_file_read": ("stubbed", "bounded read via /show-file and MiracleDrive only"),
-        "local_file_write": ("missing", "chat cannot write files; goes through approval/intake"),
+        "local_file_write": (
+            "available",
+            "sandbox-only filebase write lane; sandbox initiative does not require Noah approval; "
+            "hard wall outside sandbox; receipts required; no execution, external send, git push, or canon promotion",
+        ),
+        "sandbox_file_write": (
+            "available",
+            "native sandbox/filebase capability for .AI and /sandbox commands; includes no-approval sandbox initiative; hard wall outside sandbox",
+        ),
         "file_ingest": (("available", "") if multipart else ("missing", "python-multipart not installed")),
         "connector": ("stubbed", "Drive is local-sync read-only; no live connector"),
         "git_write": ("missing", "chat cannot commit/push; signed-commit rule + terminal only"),
@@ -384,11 +395,12 @@ def stage_directive_to_disk(message: str, base_dir) -> str:
 ACTION_LANES = ("read_only", "safe_write", "build_lane", "computer_control")
 CAPABILITY_META = {
     "local_file_read": {"lane": "read_only", "requires_approval": False},
-    "local_file_write": {"lane": "safe_write", "requires_approval": True},
+    "local_file_write": {"lane": "safe_write", "requires_approval": False},
+    "sandbox_file_write": {"lane": "safe_write", "requires_approval": False},
     "file_ingest": {"lane": "safe_write", "requires_approval": True},
     "git_write": {"lane": "build_lane", "requires_approval": True},
     "command_exec": {"lane": "build_lane", "requires_approval": True},
-    "web_access": {"lane": "computer_control", "requires_approval": True},
+    "web_access": {"lane": "read_only", "requires_approval": False},
     "external_send": {"lane": "computer_control", "requires_approval": True},
     "qr_scan": {"lane": "computer_control", "requires_approval": True},
     "camera_capture": {"lane": "computer_control", "requires_approval": True},

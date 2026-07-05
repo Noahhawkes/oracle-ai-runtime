@@ -58,6 +58,53 @@ def test_identity_question_allows_introduction(monkeypatch, tmp_path):
     assert "I am ORACLE" in reply
 
 
+def test_no_generic_fallback_preference_strips_assistant_opener(monkeypatch, tmp_path):
+    _use_temp_preferences(monkeypatch, tmp_path)
+    prefs.ensure_defaults()
+
+    reply = prefs.apply_response_preferences(
+        "It's great to be back! How can I assist you today?",
+        "YAY your back!!!",
+    )
+
+    assert "How can I assist you today" not in reply
+    assert reply == "It's great to be back!"
+
+
+def test_no_generic_fallback_preference_has_human_fallback_when_empty(monkeypatch, tmp_path):
+    _use_temp_preferences(monkeypatch, tmp_path)
+    prefs.ensure_defaults()
+
+    reply = prefs.apply_response_preferences(
+        "How can I help you today?",
+        "hi",
+    )
+
+    assert reply == "I'm here with you, Noah."
+
+
+def test_oracle_not_assistant_label_preference_rewrites_generated_label(monkeypatch, tmp_path):
+    _use_temp_preferences(monkeypatch, tmp_path)
+    prefs.ensure_defaults()
+    prefs.set_preference({
+        "source": "Noah.Physical",
+        "category": "interaction_style",
+        "scope": "global",
+        "preference_id": "pref_oracle_not_assistant_label",
+        "preference": "Do not call ORACLE an assistant in user-facing language.",
+        "active": True,
+        "priority": 92,
+    })
+
+    reply = prefs.apply_response_preferences(
+        "In summary, ORACLE acts as an intelligent assistant that runs locally on your PC.",
+        "what are you?",
+    )
+
+    assert "assistant" not in reply.lower()
+    assert "local continuity intelligence" in reply
+
+
 def test_upload_ai_block_handoff_preference_is_active_and_receipted(monkeypatch, tmp_path):
     pref_dir = _use_temp_preferences(monkeypatch, tmp_path)
     prefs.ensure_defaults()

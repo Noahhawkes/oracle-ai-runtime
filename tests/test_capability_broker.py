@@ -32,6 +32,7 @@ def test_capability_broker_exposes_required_components_without_smoke():
         "GitHub access",
         "Google Drive local sync",
         "MiracleDrive index",
+        "Internet recall",
         "Claude Code bridge",
         "Codex bridge",
         "ChatGPT relay",
@@ -108,6 +109,39 @@ def test_miracledrive_query_can_force_synchronous_index(monkeypatch):
 
     assert len(results) == 1
     assert results[0]["name"] == "LIGHT.md"
+
+
+def test_miracledrive_indexes_active_runtime_root():
+    import miracledrive_index
+
+    assert miracledrive_index.ORACLE_ROOT == ROOT
+    assert ROOT in miracledrive_index.SOURCE_PATHS
+    assert ROOT / "core" in miracledrive_index.SEARCH_PRIORITY_PATHS
+    assert "sandbox" in miracledrive_index.SKIP_DIR_NAMES
+    assert "sandbox.trash" in miracledrive_index.SKIP_DIR_NAMES
+
+
+def test_miracledrive_query_uses_cold_fallback_when_cache_is_building(monkeypatch):
+    import miracledrive_index
+
+    expected = [{
+        "path": str(ROOT / "docs" / "LIGHT.md"),
+        "name": "LIGHT.md",
+        "extension": ".md",
+        "size_bytes": 42,
+        "mtime_utc": "2026-06-14T00:00:00+00:00",
+        "sha256_prefix": "not_hashed",
+        "content_preview": "light compression law",
+        "content_available": True,
+        "source_root": str(ROOT / "docs"),
+        "category": "text",
+    }]
+    monkeypatch.setattr(miracledrive_index, "get_index", lambda: None)
+    monkeypatch.setattr(miracledrive_index, "search_filesystem", lambda text, limit=20: expected)
+
+    results = miracledrive_index.query("light compression")
+
+    assert results == expected
 
 
 def test_miracledrive_cold_search_filters_nonmatching_large_files(tmp_path, monkeypatch):

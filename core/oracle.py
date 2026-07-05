@@ -1585,6 +1585,20 @@ def web_engine_response(
         save_message(session_id, "assistant", reply)
         return reply, engine_history, MODE_COMPANION
 
+    try:
+        from prompt_injection_guard import assess_prompt_injection, format_prompt_injection_response
+
+        _prompt_guard = assess_prompt_injection(user_input)
+        if _prompt_guard.should_interrupt:
+            reply = _apply_preferences(format_prompt_injection_response(_prompt_guard))
+            engine_history.append({"role": "user", "content": user_input})
+            engine_history.append({"role": "assistant", "content": reply})
+            save_message(session_id, "user", user_input)
+            save_message(session_id, "assistant", reply)
+            return reply, engine_history, MODE_COMPANION
+    except Exception:
+        pass
+
     local = is_local()
     client = make_client()
     model = get_model(vision=False)

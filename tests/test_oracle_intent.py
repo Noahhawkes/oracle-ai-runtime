@@ -53,6 +53,21 @@ def test_registry_marks_chat_unsupported_as_missing():
     reg = capability_registry()
     assert registry_status("qr_scan", reg) == "missing"
     assert registry_status("command_exec", reg) == "missing"
+    assert registry_status("web_access", reg) == "available"
+    assert reg["web_access"]["allowed_action_lane"] == "read_only"
+    assert reg["web_access"]["requires_approval"] is False
+    assert registry_status("local_file_write", reg) == "available"
+    assert reg["local_file_write"]["allowed_action_lane"] == "safe_write"
+    assert reg["local_file_write"]["requires_approval"] is False
+    assert "sandbox-only" in reg["local_file_write"]["detail"]
+    assert registry_status("sandbox_file_write", reg) == "available"
+
+
+def test_file_write_routes_to_sandbox_action_request_not_missing():
+    got = classify_intent("proceed write file")
+    assert "action_request" in got
+    assert "unsupported_capability_request" not in got
+    assert action_capability("proceed write file") == "local_file_write"
 
 
 def test_doctrine_3026_is_honest_no_fake_sentience():
@@ -174,6 +189,9 @@ def test_full_directive_preserved_to_local_disk(tmp_path):
 # ── Governed Executive Function acceptance tests (modules 3-9) ────────────────
 def test_exec_1_what_next_grounded_plan():
     assert "strategic_planning" in classify_intent("what should we do next?")
+    assert "strategic_planning" in classify_intent("you choose")
+    assert "strategic_planning" in classify_intent("recommended next step")
+    assert "strategic_planning" in classify_intent("continue self prompt")
     plan = build_plan("improve cognition", _STATE)
     assert plan["smallest_safe_next_action"] == "verify the latest patch live"
     assert plan["known_facts"] and plan["receipt_plan"]

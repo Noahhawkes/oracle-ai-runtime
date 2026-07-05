@@ -36,6 +36,10 @@ storage/token.json
 storage/credentials.json
 storage/*.json
 
+# OBS Studio capture profiles/configs — runtime junk, and profile .ini files
+# can embed live OAuth tokens. Never commit.
+data/obs_captures/
+
 # User identity and personal documents (privacy — reviewed separately)
 Users/
 
@@ -67,10 +71,21 @@ oracle_content_scan.txt
 *.bak_*
 *_hits.txt
 *_brief.txt
+*_inspection.txt
+*_diff.txt
+*_uncommitted.patch
 observation_boss_lair.txt
 vision_bridge_inventory.txt
 approval-continuation.patch
 patch_approval_continuation*.py
+fallback_prompt_inspection.txt
+stream_reply_inspection.txt
+oracle_server_diff.txt
+oracle_ingest_test/.pytest_cache/
+.claude/
+_preservation_checkpoints/
+sandbox/
+sandbox.trash/
 
 # Intake runtime staging (large, regenerable) + local backups
 intake/staging/

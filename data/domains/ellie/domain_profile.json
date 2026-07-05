@@ -11,7 +11,7 @@
   "storage_paths": {
     "domain_document": "docs/ellie_rendered_reality_domain.md",
     "source_manifest": "data/domains/ellie/source_manifest.jsonl",
-    "sandbox_candidate_writes_only": "C:/ORACLE.AI/sandbox/"
+    "sandbox_candidate_writes_only": "C:/Oracle/ORACLE.AI-runtime/sandbox/"
   },
   "layers": [
     {

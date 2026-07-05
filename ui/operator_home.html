@@ -1,0 +1,34 @@
+﻿<!doctype html><html><head><meta charset='utf-8'><title>ORACLE Operator Home</title>
+<style>
+ body{background:#0b0f14;color:#d7e0ea;font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:28px}
+ h1{font-size:20px;margin:0 0 2px} .sub{color:#7c8a9a;margin:0 0 18px}
+ table{border-collapse:collapse;width:100%;margin:10px 0 18px} th,td{padding:7px 10px;text-align:left;border-bottom:1px solid #1c2630}
+ th{color:#7c8a9a;font-weight:600;font-size:12px;text-transform:uppercase}
+ tr.current .st{color:#46d39a;font-weight:700} tr.up .st{color:#46d39a} tr.down .st{color:#5b6a78} tr.down{opacity:.55}
+ tr.stale .st{color:#e6b450;font-weight:700} .note{color:#8a97a6;font-size:12px;max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .btn{display:inline-block;padding:10px 16px;border-radius:8px;text-decoration:none;margin:4px 8px 4px 0;border:1px solid #2a3744;color:#d7e0ea}
+ .btn.primary{background:#1f6feb;border-color:#1f6feb;color:#fff} .alert{background:#15202b;border:1px solid #2a3744;border-radius:8px;padding:12px 14px;margin:10px 0}
+ .alert.stale{border-color:#5a4a1f;background:#1f1a10;color:#e6b450} code{background:#0f1620;padding:1px 6px;border-radius:4px;color:#9fd0ff}
+ .cards{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 18px} .card{background:#11181f;border:1px solid #1c2630;border-radius:10px;padding:12px 16px;min-width:170px}
+ .card b{display:block;font-size:20px;color:#fff} .foot{color:#5b6a78;font-size:12px;margin-top:20px}
+</style></head><body>
+<h1>ORACLE Operator Home</h1>
+<p class='sub'>One face. One button. Generated 2026-07-03 11:01:29 &middot; canonical runtime :7781</p>
+<a class='btn primary' href='http://127.0.0.1:7781/' target='_blank'>Open ORACLE Runtime (:7781)</a>
+
+<h3>Runtimes</h3>
+<table><tr><th>Port</th><th>Component</th><th>Role</th><th>State</th><th>PID</th><th>Owner / note</th></tr>
+<tr class='down'><td>:7777</td><td>Legacy UI</td><td>stale</td><td class='st'>offline</td><td></td><td class='note'></td></tr>
+<tr class='down'><td>:7778</td><td>Preview/Dev</td><td>preview</td><td class='st'>offline</td><td></td><td class='note'></td></tr>
+<tr class='current'><td>:7781</td><td>ORACLE Runtime</td><td>current</td><td class='st'>ONLINE</td><td>43060</td><td class='note'>&quot;C:\Users\noahh\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe&quot;  -u oracle_server.py --port 7781 </td></tr>
+<tr class='up'><td>:11434</td><td>Ollama models</td><td>service</td><td class='st'>ONLINE</td><td>4852</td><td class='note'>C:\Users\noahh\AppData\Local\Programs\Ollama\ollama.exe serve</td></tr>
+</table>
+<div class='cards'>
+ <div class='card'>Pending approvals<b><a class='st' href='http://127.0.0.1:7781/' target='_blank' style='color:#9fd0ff'>open /pending</a></b><span class='note'>live - via runtime</span></div>
+ <div class='card'>MiricleDrive sources<b>10</b><span class='note'>research_canon/miricledrive_source_manifest.jsonl</span></div>
+ <div class='card'>Rendered Reality sources<b>7</b><span class='note'>rendered_reality_source_family.jsonl</span></div>
+</div>
+<a class='btn' href='http://127.0.0.1:7781/api/history' target='_blank'>Current thread (/api/history)</a>
+<a class='btn' href='http://127.0.0.1:7781/health' target='_blank'>Healthcheck (/health)</a>
+<p class='foot'>Threads are durable: every turn is written to Memory/oracle_memory.db and replayed on refresh via /api/history. REFRESH_MUST_NOT_DESTROY_THREAD. This page is a generated snapshot - re-run ORACLE to refresh status.</p>
+</body></html>

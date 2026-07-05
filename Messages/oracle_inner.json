@@ -313,5 +313,113 @@
     "reasoning": "User requested action — attempting tool call",
     "outcome": "",
     "ts": "2026-06-20T23:15:41.648123+00:00"
+  },
+  {
+    "id": "0f1f15fe",
+    "intent": "## The Architectural Blueprint of Noah Hawkes\nYou are the developer, writer, and human origin anchoring Noah.AI Technolo",
+    "plan": [],
+    "tool": "send_to_claude_code",
+    "reasoning": "User requested action — attempting tool call",
+    "outcome": "",
+    "ts": "2026-06-24T23:51:43.024652+00:00"
+  },
+  {
+    "id": "f82e1f67",
+    "intent": "Calling send_to_claude_code",
+    "plan": [],
+    "tool": "send_to_claude_code",
+    "reasoning": "{'message': '/self patch'}",
+    "outcome": "",
+    "ts": "2026-06-29T00:00:25.731002+00:00"
+  },
+  {
+    "id": "625950e6",
+    "intent": "Calling send_to_claude_code",
+    "plan": [],
+    "tool": "send_to_claude_code",
+    "reasoning": "{'message': '/self patch'}",
+    "outcome": "",
+    "ts": "2026-06-29T23:35:56.570910+00:00"
+  },
+  {
+    "id": "3a190417",
+    "intent": "Calling send_to_claude_code",
+    "plan": [],
+    "tool": "send_to_claude_code",
+    "reasoning": "{'message': 'BACKEND_PATCH_REQUEST — Explain what this means'}",
+    "outcome": "",
+    "ts": "2026-07-01T00:46:03.057439+00:00"
+  },
+  {
+    "id": "aac4debe",
+    "intent": "Calling send_to_claude_code",
+    "plan": [],
+    "tool": "send_to_claude_code",
+    "reasoning": "{'message': 'BACKEND_PATCH_REQUEST — Explain what this means'}",
+    "outcome": "",
+    "ts": "2026-07-01T00:48:35.964206+00:00"
+  },
+  {
+    "id": "9d5d21c2",
+    "intent": "Calling send_to_claude_code",
+    "plan": [],
+    "tool": "send_to_claude_code",
+    "reasoning": "{'message': '/self patch'}",
+    "outcome": "",
+    "ts": "2026-07-01T01:08:08.621882+00:00"
+  },
+  {
+    "id": "a8546622",
+    "intent": "SMOKE TEST RECEIPT ONLY\nReport current route state and whether server was restarted.\nDo not execute.\nDo not touch extern",
+    "plan": [],
+    "tool": "open_app",
+    "reasoning": "User requested action — attempting tool call",
+    "outcome": "",
+    "ts": "2026-07-01T02:38:22.622652+00:00"
+  },
+  {
+    "id": "4b4ef832",
+    "intent": "Calling send_to_claude_code",
+    "plan": [],
+    "tool": "send_to_claude_code",
+    "reasoning": "{'message': '/self patch'}",
+    "outcome": "",
+    "ts": "2026-07-01T02:38:30.663272+00:00"
+  },
+  {
+    "id": "53053410",
+    "intent": "Calling open_app",
+    "plan": [],
+    "tool": "open_app",
+    "reasoning": "{'app_name': 'vscode'}",
+    "outcome": "",
+    "ts": "2026-07-01T02:38:32.485583+00:00"
+  },
+  {
+    "id": "8dac642d",
+    "intent": "Calling send_to_claude_code",
+    "plan": [],
+    "tool": "send_to_claude_code",
+    "reasoning": "{'message': '/patch youself'}",
+    "outcome": "",
+    "ts": "2026-07-01T23:38:21.937787+00:00"
+  },
+  {
+    "id": "26de2fd1",
+    "intent": "Calling send_to_claude_code",
+    "plan": [],
+    "tool": "send_to_claude_code",
+    "reasoning": "{'message': '/patch youself'}",
+    "outcome": "",
+    "ts": "2026-07-04T01:13:52.037218+00:00"
+  },
+  {
+    "id": "7b0526f3",
+    "intent": "Calling send_to_claude_code",
+    "plan": [],
+    "tool": "send_to_claude_code",
+    "reasoning": "{'message': '/patch youself'}",
+    "outcome": "",
+    "ts": "2026-07-04T21:38:39.003925+00:00"
   }
 ]

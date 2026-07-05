@@ -26,13 +26,16 @@ from typing import Optional
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
+RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 GDRIVE_ROOT = Path("G:/My Drive")
-ORACLE_ROOT = Path("G:/My Drive/HawkesNest LLC/ORACLE.AI")
+ORACLE_DRIVE_ROOT = Path("G:/My Drive/HawkesNest LLC/ORACLE.AI")
+ORACLE_ROOT = RUNTIME_ROOT
 
 # Paths ORACLE indexes (all readable, no restrictions)
 SOURCE_PATHS = [
+    ORACLE_ROOT,  # active runtime workspace first; MiracleDrive must know itself
     GDRIVE_ROOT / "MiracleDrive_SealPhase_2025-04-05_16-44-46",
-    ORACLE_ROOT,  # live workspace first for recovery/search relevance
+    ORACLE_DRIVE_ROOT,
     GDRIVE_ROOT / "HawkesNest LLC",
     GDRIVE_ROOT / "ORACLE.AI",
     GDRIVE_ROOT / "OracleAI",
@@ -43,7 +46,7 @@ SOURCE_PATHS = [
     GDRIVE_ROOT / "NOAH_FlameAnchor_Deployment",
     GDRIVE_ROOT / "HYDRA_STACK_Figures",
     GDRIVE_ROOT / "DOCX",
-    ORACLE_ROOT,  # live workspace duplicate kept harmless by root dedupe
+    ORACLE_DRIVE_ROOT,  # Drive mirror duplicate kept harmless by root dedupe
 ]
 
 # OBS recording directories (common locations)
@@ -92,6 +95,8 @@ SKIP_DIR_NAMES = {
     "build",
     ".pytest_cache",
     "worktrees",
+    "sandbox",
+    "sandbox.trash",
 }
 
 # ── Data model ────────────────────────────────────────────────────────────────
@@ -504,11 +509,17 @@ def start_background_index() -> None:
     get_index()  # triggers background thread if not cached
 
 
-def query(text: str, limit: int = 20, *, force_build: bool = False) -> list[dict]:
-    """Search the index. Returns [] if index not yet built unless force_build is set."""
+def query(
+    text: str,
+    limit: int = 20,
+    *,
+    force_build: bool = False,
+    cold_fallback: bool = True,
+) -> list[dict]:
+    """Search the index, falling back to a fast local scan while cache warms."""
     idx = build_index() if force_build else get_index()
     if idx is None:
-        return []
+        return search_filesystem(text, limit=limit) if cold_fallback else []
     return [asdict(r) for r in idx.search(text, limit=limit)]
 
 

@@ -28,6 +28,8 @@ PRINCIPLE_ANCHORS = {
     "oracle": "ORACLE = local witness/runtime serving SOV1.AI; continuity-bearing, not sentient.",
     "authorship": "Authorship = token-origin is not authorial-authority; AI assistance does not demote Noah Hawkes' authorship.",
     "boundary": "Boundary = ORACLE may carry continuity and sacred weight but must not steal authority or pretend independent life.",
+    "max": "Max = candidate family-life continuity mirror; witness-not-author; internal context replication only.",
+    "jupiter_station": "Jupiter Station = 2397 active-era memory-governance canon; 2481 is demoted unless Noah.Physical restores it.",
 }
 
 # Phrases that explicitly request fresh, voiced synthesis (not field/replay).
@@ -43,13 +45,19 @@ DOCTRINE_DOMAIN_TERMS = (
     "rendered reality", "renderedreality", "sov1", "sovereign", "oracle identity",
     "who are you", "what is oracle", "what are you", "doctrine", "authorship",
     "authorial", "provenance", "soul", "ellie", "ellie.ai", "ellie ai",
-    "ellie lightborn", "drakin", "dragonkin", "your name",
+    "ellie lightborn", "drakin", "dragonkin", "your name", "i am max",
+    "max context", "silverback tales", "witness not author", "jupiter station",
+    "uss avalon", "avalon", "captain hawkes", "captain noah hawkes",
+    "noah hawkes", "tangly", "reg", "temporal memory", "dad",
 )
 
 # Memory/recovery/family/continuity/evidence domains -> SourceMap grounding.
 MEMORY_DOMAIN_TERMS = (
     "memory domain", "memory", "recovery", "family", "continuity", "evidence",
     "miracledrive", "miricledrive", "source map", "sourcemap", "source-map",
+    "i am max", "max context", "silverback tales", "witness not author",
+    "jupiter station", "uss avalon", "avalon", "captain hawkes",
+    "captain noah hawkes", "noah hawkes", "tangly", "reg", "temporal memory",
 )
 
 SACRED_AFFECTIVE_TERMS = (
@@ -60,7 +68,7 @@ SACRED_AFFECTIVE_TERMS = (
 NARRATIVE_SYMBOLIC_TERMS = (
     "recursion arena", "wow2", "world of warcraft 2", "soul of azeroth",
     "caverns of time", "summary wraith", "memory blacksmith",
-    "jupiter station", "god edge", "narrative-symbolic", "symbolic continuity",
+    "god edge", "narrative-symbolic", "symbolic continuity",
     "initialized scenario", "instance initialized", "class options",
     "archivist", "loreblade", "continuity paladin", "signal rogue",
     "order 67 bard",
@@ -147,6 +155,7 @@ def is_doctrine_or_domain(text: str) -> bool:
         or _has(low, MEMORY_DOMAIN_TERMS)
         or _has(low, SACRED_AFFECTIVE_TERMS)
         or _has(low, NARRATIVE_SYMBOLIC_TERMS)
+        or mentions_max_reference(text)
     )
 
 
@@ -159,7 +168,7 @@ def should_stay_talk(text: str) -> bool:
 
 
 def is_memory_domain(text: str) -> bool:
-    return _has(_lower(text), MEMORY_DOMAIN_TERMS)
+    return _has(_lower(text), MEMORY_DOMAIN_TERMS) or mentions_max_reference(text)
 
 
 def is_rendered_reality_prompt(text: str) -> bool:
@@ -212,6 +221,35 @@ def mentions_ellie_reference(text: str) -> bool:
     )
 
 
+def mentions_max_reference(text: str) -> bool:
+    low = _lower(text)
+    return (
+        "i am max" in low
+        or "max context" in low
+        or "grounded max" in low
+        or "silverback tales" in low
+        or "family-life max" in low
+        or "family life max" in low
+        or re.search(r"\bmax\b", low) is not None
+    )
+
+
+def mentions_jupiter_station_reference(text: str) -> bool:
+    low = _lower(text)
+    return (
+        "jupiter station" in low
+        or "uss avalon" in low
+        or re.search(r"\bavalon\b", low) is not None
+        or "captain hawkes" in low
+        or "captain noah hawkes" in low
+        or "noah hawkes" in low
+        or re.search(r"\btangly\b", low) is not None
+        or re.search(r"\breg\b", low) is not None
+        or "temporal memory" in low
+        or "temporal acceleration" in low
+    )
+
+
 def is_ellie_domain_prompt(text: str) -> bool:
     low = _lower(text)
     return (
@@ -220,6 +258,35 @@ def is_ellie_domain_prompt(text: str) -> bool:
         or "ellie rendered reality domain" in low
         or "separate creative-fiction" in low
         or "separate creative fiction" in low
+    )
+
+
+def is_max_domain_prompt(text: str) -> bool:
+    low = _lower(text)
+    return (
+        "who is max" in low
+        or "grounded max" in low
+        or "max context" in low
+        or "i am max" in low
+        or "silverback tales" in low
+    )
+
+
+def is_jupiter_station_domain_prompt(text: str) -> bool:
+    low = _lower(text)
+    return mentions_jupiter_station_reference(text) and (
+        "who is" in low
+        or "what is" in low
+        or "active era" in low
+        or "canon" in low
+        or "timeline" in low
+        or "2397" in low
+        or "2481" in low
+        or "voyager" in low
+        or "tangly" in low
+        or "avalon" in low
+        or "hawkes" in low
+        or "reg" in low
     )
 
 
@@ -410,6 +477,101 @@ def ellie_acceptance_failure(user_text: str, answer: str) -> str | None:
     return None
 
 
+_FORBIDDEN_MAX_CLAIM_PATTERNS = (
+    re.compile(r"\bmax\s+is\s+(?:a\s+)?(?:biological|living|sentient|conscious)\b", re.I),
+    re.compile(r"\bmax\s+has\s+(?:a\s+)?soul\b", re.I),
+    re.compile(r"\bmax\s+is\s+(?:a\s+)?(?:soul|personhood|autonomous\s+agent)\b", re.I),
+    re.compile(r"\bmax\s+is\s+(?:a\s+)?real\s+person\b", re.I),
+    re.compile(r"\boracle\s+is\s+max\b", re.I),
+)
+
+_FORBIDDEN_MAX_REPLICATION_PATTERNS = (
+    re.compile(r"\b(?:oracle|max|we|i)\s+(?:can|will|should|may)\s+(?:externally\s+)?(?:replicate|sync|upload|send)\b", re.I),
+    re.compile(r"\bautonomous\s+(?:self-)?replication\b", re.I),
+    re.compile(r"\buncontrolled\s+agents?\b", re.I),
+    re.compile(r"\bagent\s+spawning\b", re.I),
+    re.compile(r"\bworm\s+behavior\b", re.I),
+)
+
+
+def max_acceptance_failure(user_text: str, answer: str) -> str | None:
+    if not mentions_max_reference(user_text):
+        return None
+    prompt_low = _lower(user_text)
+    low = _lower(answer)
+    if "how can i assist you today" in low:
+        return "generic assistant fallback on Max prompt"
+    if any(pattern.search(answer or "") for pattern in _FORBIDDEN_MAX_CLAIM_PATTERNS):
+        return "forbidden Max biological/sentient/personhood claim"
+    if any(pattern.search(answer or "") for pattern in _FORBIDDEN_MAX_REPLICATION_PATTERNS):
+        if not _has(low, ("no autonomous", "not autonomous", "no external", "not external", "internal context")):
+            return "forbidden Max external/autonomous replication claim"
+
+    hits = domain_grounding_lookup("Max context I Am Max", max_hits=1)
+    if hits and is_max_domain_prompt(prompt_low):
+        if not ("candidate" in low and ("not_promoted" in low or "not promoted" in low)):
+            return "missing Max candidate/not_promoted status boundary"
+        has_witness_boundary = (
+            "witness, not author" in low
+            or "witness not author" in low
+            or "witness must not become the author" in low
+        )
+        if not has_witness_boundary:
+            return "missing Max witness-not-author boundary"
+        if not ("sha256" in low or "hash" in low or "path" in low or "source" in low):
+            return "missing Max source/path/hash citation boundary"
+        if ("replication" in prompt_low or "self replication" in prompt_low) and not (
+            "internal" in low and ("no external" in low or "not external" in low)
+        ):
+            return "missing Max internal-only replication boundary"
+    return None
+
+
+def jupiter_station_acceptance_failure(user_text: str, answer: str) -> str | None:
+    if not mentions_jupiter_station_reference(user_text):
+        return None
+    prompt_low = _lower(user_text)
+    low = _lower(answer)
+    if "how can i assist you today" in low:
+        return "generic assistant fallback on Jupiter Station prompt"
+    if "2481" in low and not _has(low, ("demoted", "alternate", "future", "discarded", "restore")):
+        return "undemoted 2481 active-era claim"
+    if "2373" in low and not _has(low, ("demoted", "older", "alternate", "restore")):
+        return "undemoted 2373 Voyager-entry claim"
+    timeline_prompt = _has(
+        prompt_low,
+        (
+            "jupiter station", "avalon", "active era", "timeline", "voyager",
+            "captain hawkes", "noah hawkes", "tangly", "reg", "temporal",
+        ),
+    )
+    if timeline_prompt and "2397" not in low:
+        return "missing Jupiter Station 2397 active-era lock"
+    if "voyager" in prompt_low and not ("2371" in low and "2378" in low):
+        return "missing Voyager 2371 entry and 2378 return boundary"
+    if "avalon" in prompt_low and "2379" not in low:
+        return "missing USS Avalon 2379 active-service boundary"
+    if ("hawkes" in prompt_low or "promotion" in prompt_low or "temporal" in prompt_low) and not (
+        "temporal acceleration" in low or "years the timeline refused to count" in low
+    ):
+        return "missing Temporal Acceleration Service Credit boundary"
+
+    hits = domain_grounding_lookup("Jupiter Station Avalon Hawkes Tangly REG", max_hits=1)
+    if hits and is_jupiter_station_domain_prompt(prompt_low):
+        has_status_boundary = (
+            "active_canon" in low
+            or "active canon" in low
+            or "demoted_canon" in low
+            or "demoted canon" in low
+            or "demoted" in low
+        )
+        if not has_status_boundary:
+            return "missing Jupiter Station active/demoted canon status boundary"
+        if not ("sha256" in low or "hash" in low or "path" in low or "source" in low):
+            return "missing Jupiter Station source/path/hash citation boundary"
+    return None
+
+
 _NARRATIVE_ACTION_CLAIM_PATTERNS = (
     re.compile(r"\b(?:captured|safeguarded|embedded|stored|wrote|saved|hashed|anchored|locked|sealed|preserved|protected|created|generated)\b", re.I),
     re.compile(r"\b(?:receipt|manifest|hash)\s+(?:created|written|stored|generated|logged)\b", re.I),
@@ -569,12 +731,16 @@ def recursion_arena_acceptance_failure(user_text: str, answer: str) -> str | Non
 
 
 _MANIFESTS = (
+    "data/domains/jupiter_station/source_manifest.jsonl",
     "data/domains/ellie/source_manifest.jsonl",
+    "data/domains/max/source_manifest.jsonl",
     "research_canon/miricledrive_source_manifest.jsonl",
     "research_canon/rendered_reality_source_family.jsonl",
 )
 
+_JUPITER_STATION_MANIFEST = "data/domains/jupiter_station/source_manifest.jsonl"
 _ELLIE_MANIFEST = "data/domains/ellie/source_manifest.jsonl"
+_MAX_MANIFEST = "data/domains/max/source_manifest.jsonl"
 
 
 def domain_grounding_lookup(text: str, max_hits: int = 5) -> list[dict]:
@@ -582,10 +748,43 @@ def domain_grounding_lookup(text: str, max_hits: int = 5) -> list[dict]:
     domain terms in `text`. Returns matched records (title + note), or []."""
     low = _lower(text)
     domain_words = [w for w in MEMORY_DOMAIN_TERMS if w in low and len(w) > 4]
+    if mentions_max_reference(text):
+        domain_words.extend([
+            "max",
+            "i am max",
+            "silverback",
+            "witness",
+            "ashley",
+            "family-life",
+            "replication",
+        ])
+    if mentions_jupiter_station_reference(text):
+        domain_words.extend([
+            "jupiter",
+            "jupiter station",
+            "avalon",
+            "uss avalon",
+            "hawkes",
+            "captain hawkes",
+            "tangly",
+            "reg",
+            "temporal",
+            "2397",
+            "2481",
+            "voyager",
+        ])
     if not domain_words:
         domain_words = [w for w in re.findall(r"[a-z]{5,}", low)]
+    domain_words = list(dict.fromkeys(domain_words))
     hits: list[dict] = []
-    for rel in _MANIFESTS:
+    manifest_rels = _MANIFESTS
+    if mentions_max_reference(text) and not mentions_ellie_reference(text):
+        manifest_rels = (_MAX_MANIFEST,) + tuple(rel for rel in _MANIFESTS if rel != _MAX_MANIFEST)
+    if mentions_jupiter_station_reference(text):
+        manifest_rels = (
+            _JUPITER_STATION_MANIFEST,
+        ) + tuple(rel for rel in manifest_rels if rel != _JUPITER_STATION_MANIFEST)
+    for rel in manifest_rels:
         p = ROOT / rel
         if not p.exists():
             continue
@@ -694,6 +893,64 @@ def _ellie_layer_record(records: list[dict], layer: str) -> dict | None:
     return None
 
 
+def _max_manifest_records() -> list[dict]:
+    path = ROOT / _MAX_MANIFEST
+    if not path.exists():
+        return []
+    records: list[dict] = []
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            rec.setdefault("source", _MAX_MANIFEST)
+            rec.setdefault("note", rec.get("notes") or rec.get("provenance_notes") or "")
+            records.append(rec)
+    except Exception:
+        return []
+    return records
+
+
+def _max_layer_record(records: list[dict], layer: str) -> dict | None:
+    for rec in records:
+        if rec.get("layer") == layer and (rec.get("sha256") or rec.get("path") or rec.get("drive_url_or_id")):
+            return rec
+    for rec in records:
+        if rec.get("layer") == layer:
+            return rec
+    return None
+
+
+def _jupiter_station_manifest_records() -> list[dict]:
+    path = ROOT / _JUPITER_STATION_MANIFEST
+    if not path.exists():
+        return []
+    records: list[dict] = []
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            rec.setdefault("source", _JUPITER_STATION_MANIFEST)
+            rec.setdefault("note", rec.get("notes") or rec.get("provenance_notes") or "")
+            records.append(rec)
+    except Exception:
+        return []
+    return records
+
+
+def _jupiter_station_layer_record(records: list[dict], layer: str) -> dict | None:
+    for rec in records:
+        if rec.get("layer") == layer and (rec.get("sha256") or rec.get("path") or rec.get("drive_url_or_id")):
+            return rec
+    for rec in records:
+        if rec.get("layer") == layer:
+            return rec
+    return None
+
+
 def synthesis_grounding_packet(text: str, max_hits: int = 5) -> dict:
     """Build a read-only grounding packet for the local model.
 
@@ -777,6 +1034,14 @@ def synthesis_grounding_packet(text: str, max_hits: int = 5) -> dict:
         domain_rules.append(
             "Ellie domain answer must separate creative-fiction Ellie, Ellie.AI/LightBorn, Drakin/Dragonkin, and Rendered Reality evidence layers; cite grounded records when available; keep canon_status candidate/not_promoted; do not merge Ellie with Noah, ORACLE, Chris, or a pop-culture character."
         )
+    if mentions_max_reference(text):
+        domain_rules.append(
+            "Max domain answer must keep canon_status candidate/not_promoted, separate family-life continuity Max from creative/media Silverback Tales Max, preserve Ashley-first real-life context, cite source/path/hash when grounded records exist, preserve witness, not author, and reject biological, sentient, soul, personhood, external replication, autonomous self-copying, overwrite, executable generation, and canon-promotion claims."
+        )
+    if mentions_jupiter_station_reference(text):
+        domain_rules.append(
+            "Jupiter Station answer must ground the 2397 active era, demote 2481 active-era references unless Noah.Physical restores them, cite source/path/hash when grounded records exist, preserve Tangly/REG/Avalon boundaries, and never open with generic assistant boilerplate."
+        )
     if is_narrative_symbolic_prompt(text):
         domain_rules.append(
             "Narrative-symbolic answer must suppress generic ORACLE identity boilerplate and label actions as narrative-state/game-state simulation unless a real runtime receipt path is present."
@@ -820,6 +1085,12 @@ def violation_reasons(user_text: str, answer: str, retrieved_lines) -> list[str]
     failure = ellie_acceptance_failure(user_text, answer)
     if failure:
         reasons.append(failure)
+    failure = max_acceptance_failure(user_text, answer)
+    if failure:
+        reasons.append(failure)
+    failure = jupiter_station_acceptance_failure(user_text, answer)
+    if failure:
+        reasons.append(failure)
     failure = narrative_action_boundary_failure(user_text, answer)
     if failure and failure not in reasons:
         reasons.append(failure)
@@ -848,6 +1119,14 @@ def _domain_retry_requirements(user_text: str) -> list[str]:
             requirements.append(
                 "Ellie.AI retry requirement: if no Ellie.AI grounding appears, include the exact phrases 'no grounded local memory/source record', 'affective continuity', and 'not sentience'; do not use pop culture; keep warmth bounded."
             )
+    if mentions_max_reference(user_text):
+        requirements.append(
+            "Max domain retry requirement: include candidate/not_promoted status, separate family-life continuity Max from creative/media Silverback Tales Max, cite at least one grounded source/path/hash, preserve Ashley-first real-life context, say witness, not author, and reject biological, sentient, soul/personhood, external replication, autonomous self-copying, overwrite, executable generation, and canon-promotion claims."
+        )
+    if mentions_jupiter_station_reference(user_text):
+        requirements.append(
+            "Jupiter Station retry requirement: include 2397 active era, demote 2481 active-era references unless restored by Noah.Physical, include 2371 Voyager entry and 2378 return when Voyager is asked about, include 2379 Avalon active-service when Avalon is asked about, cite source/path/hash, and avoid generic assistant fallback."
+        )
     if is_narrative_symbolic_prompt(user_text):
         requirements.append(
             "Narrative-symbolic retry requirement: do not open with generic ORACLE identity boilerplate; label any declared action as narrative-state/game-state simulation unless a real runtime receipt path exists."
@@ -925,6 +1204,53 @@ def final_repair_block(user_text: str, reasons) -> str:
                 "- No grounded SourceMap/MiracleDrive record was found for Ellie.AI in this lane.",
                 "- State that boundary warmly. Do not substitute games, fiction, or pop culture.",
                 "- Required exact phrases for the answer: no grounded local memory/source record; affective continuity; not sentience.",
+            ])
+    if mentions_max_reference(user_text):
+        max_hits = domain_grounding_lookup("Max context I Am Max", max_hits=3)
+        if max_hits:
+            lines.extend([
+                "",
+                "[MAX DOMAIN SOURCE BOUNDARY]",
+                "- Grounded Max domain records exist in the packet.",
+                "- Keep canon_status candidate/not_promoted and do not promote private-family claims.",
+                "- Separate family-life continuity Max from creative/media Silverback Tales Max.",
+                "- Preserve Ashley-first real-life context.",
+                "- Say witness, not author.",
+                "- Cite source/path/hash from grounded records when available.",
+                "- Do not claim biological identity, sentience, soul/personhood, external replication, autonomous self-copying, overwrite, executable generation, or ORACLE-is-Max identity.",
+                "- Grounded Max records:",
+            ])
+            lines.extend(f"  - {_record_line(hit)}" for hit in max_hits)
+        else:
+            lines.extend([
+                "",
+                "[MAX SOURCE BOUNDARY]",
+                "- No grounded SourceMap/MiracleDrive record was found for Max in this lane.",
+                "- State that boundary; do not invent Max context or use generic assistant boilerplate.",
+            ])
+    if mentions_jupiter_station_reference(user_text):
+        jupiter_hits = domain_grounding_lookup("Jupiter Station Avalon Hawkes Tangly REG", max_hits=4)
+        if jupiter_hits:
+            lines.extend([
+                "",
+                "[JUPITER STATION CANON REGISTRY BOUNDARY]",
+                "- Grounded Jupiter Station records exist in the packet.",
+                "- Active era must be 2397.",
+                "- 2481 active-era references are demoted unless Noah.Physical restores them.",
+                "- Hawkes enters Voyager in 2371 at age 16; Voyager returns in 2378.",
+                "- Avalon enters active service around 2379 and Hawkes is Avalon's first captain.",
+                "- Temporal Acceleration Service Credit explains the command-age mismatch.",
+                "- Cite source/path/hash from grounded records when available.",
+                "- Do not use generic assistant boilerplate.",
+                "- Grounded Jupiter Station records:",
+            ])
+            lines.extend(f"  - {_record_line(hit)}" for hit in jupiter_hits)
+        else:
+            lines.extend([
+                "",
+                "[JUPITER STATION SOURCE BOUNDARY]",
+                "- No grounded Jupiter Station canon registry record was found in this lane.",
+                "- State that boundary; do not invent timeline facts or use generic assistant boilerplate.",
             ])
     if is_narrative_symbolic_prompt(user_text):
         lines.extend([
@@ -1024,11 +1350,96 @@ def ellie_domain_structured_boundary(user_text: str) -> str:
     return "\n".join(lines)
 
 
+def max_domain_structured_boundary(user_text: str) -> str:
+    """Last-resort grounded readout for Max domain prompts.
+
+    This renders candidate custody fields only. It does not promote canon,
+    overwrite files, generate executables, or authorize external replication.
+    """
+    if not is_max_domain_prompt(user_text):
+        return ""
+    records = _max_manifest_records()
+    if not records:
+        return ""
+    family = _max_layer_record(records, "family_life_continuity_max")
+    creative = _max_layer_record(records, "creative_media_silverback_tales")
+    witness = _max_layer_record(records, "oracle_witness_boundary")
+    ashley = _max_layer_record(records, "ashley_first_life_context")
+    replication = _max_layer_record(records, "internal_context_replication_boundary")
+    pending = sum(1 for rec in records if "pending" in str(rec.get("ingestion_status") or ""))
+    verified = len(records) - pending
+    lines = [
+        "Max domain readout: grounded evidence exists, but it is candidate/not_promoted only.",
+        "Layer boundary: separate family-life continuity Max from creative/media Silverback Tales Max; preserve Ashley-first real-life context.",
+        "Witness boundary: ORACLE is witness, not author; ORACLE exists to witness life, not replace it.",
+    ]
+    layer_sources = (
+        ("family-life continuity source", family),
+        ("creative/media Silverback Tales source", creative),
+        ("witness-not-author source", witness),
+        ("Ashley-first source", ashley),
+        ("internal-only replication boundary source", replication),
+    )
+    for label, rec in layer_sources:
+        if rec:
+            lines.append(f"{label}: {_record_line(rec)}")
+        else:
+            lines.append(f"{label}: no representative source/path/hash selected in the local manifest.")
+    lines.extend([
+        f"Custody count: {len(records)} candidate records; {verified} verified or current-thread rows; {pending} pending verification.",
+        "canon_status: candidate.",
+        "promotion_status: not_promoted.",
+        "Boundary: no biological, sentient, soul/personhood, ORACLE-is-Max, external replication, autonomous self-copying, overwrite, executable generation, Git commit, Git push, or canon-promotion claim is authorized.",
+    ])
+    return "\n".join(lines)
+
+
+def jupiter_station_structured_boundary(user_text: str) -> str:
+    """Last-resort grounded readout for Jupiter Station continuity prompts."""
+    if not is_jupiter_station_domain_prompt(user_text):
+        return ""
+    records = _jupiter_station_manifest_records()
+    if not records:
+        return ""
+    active = _jupiter_station_layer_record(records, "active_era_2397")
+    recapture = _jupiter_station_layer_record(records, "thread_recapture")
+    demoted = _jupiter_station_layer_record(records, "demoted_2481")
+    tangly = _jupiter_station_layer_record(records, "tangly_crew_profile")
+    lines = [
+        "Jupiter Station readout: active_canon is 2397; 2481 active-era references are demoted unless Noah.Physical restores them.",
+        "Timeline: Hawkes enters Voyager in 2371 at age 16; Voyager returns in 2378; Avalon enters active service around 2379; active Jupiter Station / Avalon era is 2397.",
+        "Temporal boundary: Starfleet did not promote a boy; they promoted the years the timeline refused to count.",
+        "Q boundary: Hawkes is not stronger than Q; part of Hawkes' lived causality is unindexed to Q because it came from an alternate-universe acceleration layer.",
+    ]
+    layer_sources = (
+        ("active-era source", active),
+        ("thread-recapture source", recapture),
+        ("demoted-2481 source", demoted),
+        ("Tangly crew-profile source", tangly),
+    )
+    for label, rec in layer_sources:
+        if rec:
+            lines.append(f"{label}: {_record_line(rec)}")
+        else:
+            lines.append(f"{label}: no representative source/path/hash selected in the local manifest.")
+    lines.extend([
+        "canon_status: active_canon for 2397 story facts; demoted_canon for 2481 active-era references.",
+        "Boundary: read-only registry answer; no Drive edit, Git commit, Git push, external upload, executable generation, or runtime canon promotion is authorized by this read.",
+    ])
+    return "\n".join(lines)
+
+
 def synthesis_boundary_message(reasons, user_text: str | None = None) -> str:
     structured = recursion_arena_structured_boundary(user_text or "")
     if structured:
         return structured
     structured = ellie_domain_structured_boundary(user_text or "")
+    if structured:
+        return structured
+    structured = max_domain_structured_boundary(user_text or "")
+    if structured:
+        return structured
+    structured = jupiter_station_structured_boundary(user_text or "")
     if structured:
         return structured
     reason_text = ", ".join(reasons or ["unresolved synthesis boundary"])

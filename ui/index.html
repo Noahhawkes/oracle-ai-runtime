@@ -797,7 +797,7 @@
     flex-wrap: wrap;
     gap: 8px;
   }
-  .witness-actions button, #sourcemap-btn, #preferences-btn {
+  .witness-actions button, #sourcemap-btn, #preferences-btn, #self-prompt-btn {
     border: 1px solid var(--border);
     background: var(--surface);
     color: var(--text);
@@ -807,9 +807,19 @@
     padding: 7px 9px;
     cursor: pointer;
   }
-  .witness-actions button:hover, #sourcemap-btn:hover, #preferences-btn:hover {
+  .witness-actions button:hover, #sourcemap-btn:hover, #preferences-btn:hover, #self-prompt-btn:hover {
     border-color: var(--accent);
     color: #fff;
+  }
+  #self-prompt-btn.active {
+    background: rgba(34,211,238,0.16);
+    border-color: rgba(34,211,238,0.35);
+    color: #9bf6ff;
+  }
+  #self-prompt-btn.safe {
+    background: rgba(245,158,11,0.12);
+    border-color: rgba(245,158,11,0.25);
+    color: #ffd58a;
   }
   .witness-actions button.primary {
     background: var(--accent);
@@ -921,6 +931,7 @@
     <span id="topbar-title">ORACLE</span>
     <div id="mode-indicator" class="talk_lane" role="button" tabindex="0" onclick="showRuntimeDetail()" title="Show live runtime status">Talk</div>
     <div id="safety-indicator" class="safe" role="button" tabindex="0" onclick="showRuntimeDetail()" title="Show live runtime status">Safe</div>
+    <button id="self-prompt-btn" onclick="toggleSelfPromptMode()" title="Writer mode is governed by Noah">Writer OFF</button>
     <button id="preferences-btn" onclick="showPreferencesDrawer()" title="ORACLE behavior preferences">Preferences</button>
     <input type="file" id="preferences-upload-input" accept=".json,.md,.txt,.ai" style="display:none" onchange="uploadPreferencesFile(this)">
     <button id="sourcemap-btn" onclick="toggleSourceMapPanel()" title="ORACLE SourceMap">SourceMap</button>
@@ -1510,6 +1521,61 @@ async function refreshPreferencesStatus() {
   return data;
 }
 
+function _selfPromptButtonClass(state) {
+  const low = String(state || '').toUpperCase();
+  if (low === 'SANDBOX_AUTONOMOUS_ENABLED' || low === 'MANUAL_ONCE') return 'active';
+  if (low === 'SAFE_SLEEP') return 'safe';
+  return 'pending';
+}
+
+function _selfPromptButtonLabel(state) {
+  const low = String(state || '').toUpperCase();
+  if (low === 'SANDBOX_AUTONOMOUS_ENABLED') return 'Writer ON';
+  if (low === 'MANUAL_ONCE') return 'Writer Once';
+  if (low === 'SAFE_SLEEP') return 'Writer Sleep';
+  return 'Writer OFF';
+}
+
+async function refreshSelfPromptStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/self-prompt/status'));
+    if (!r.ok) throw new Error(`self-prompt ${r.status}`);
+    const data = await r.json();
+    const btn = document.getElementById('self-prompt-btn');
+    if (btn) {
+      const state = data.current_state || 'OFF';
+      btn.textContent = _selfPromptButtonLabel(state);
+      btn.className = _selfPromptButtonClass(state);
+      btn.title = `state ${state} · daily ${Number(data.daily_count || 0)}/${Number(data.daily_cap || 0)} · click to change`;
+    }
+    return data;
+  } catch (e) {
+    const btn = document.getElementById('self-prompt-btn');
+    if (btn) {
+      btn.textContent = 'Writer ?';
+      btn.className = 'pending';
+      btn.title = e.message;
+    }
+    return { ok: false, error: e.message };
+  }
+}
+
+async function toggleSelfPromptMode() {
+  const status = await refreshSelfPromptStatus();
+  const current = String(status.current_state || 'OFF').toUpperCase();
+  try {
+    if (current === 'SANDBOX_AUTONOMOUS_ENABLED') {
+      await fetch(apiUrl('/api/self-prompt/disable'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caller: 'Noah.Physical' }) });
+    } else {
+      await fetch(apiUrl('/api/self-prompt/enable'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caller: 'Noah.Physical' }) });
+    }
+    await refreshSelfPromptStatus();
+    await showRuntimeDetail().catch(() => {});
+  } catch (e) {
+    detailLines('Self-Prompt Control', [['error', e.message], ['state', current]]);
+  }
+}
+
 async function showPreferencesDrawer() {
   let data = lastPreferencesData;
   try {
@@ -1608,6 +1674,10 @@ async function showRuntimeDetail() {
     if (!r.ok) throw new Error(`status ${r.status}`);
     const status = await r.json();
     const boot = status.boot || {};
+    let selfPrompt = { current_state: 'OFF', daily_count: 0, daily_cap: 0, model_called: false };
+    try {
+      selfPrompt = await refreshSelfPromptStatus();
+    } catch {}
     detailLines('Runtime Status', [
       ['endpoint', '/api/status'],
       ['session_id', status.session_id],
@@ -1620,6 +1690,10 @@ async function showRuntimeDetail() {
       ['local_engine', boot.verified_local_engine],
       ['network_boundary', boot.network_boundary],
       ['boot_receipt_path', boot.boot_receipt_path],
+      ['self_prompt_state', selfPrompt.current_state],
+      ['self_prompt_daily_count', selfPrompt.daily_count],
+      ['self_prompt_daily_cap', selfPrompt.daily_cap],
+      ['self_prompt_model_called', selfPrompt.model_called],
       ['warnings', boot.warnings || []],
     ]);
   } catch (e) {
@@ -3104,6 +3178,7 @@ async function init() {
   refreshDurability(lastHistorySource).catch(() => {});
   refreshEllieDomainStatus().catch(() => {});
   refreshPreferencesStatus().catch(() => {});
+  refreshSelfPromptStatus().catch(() => {});
   await _applyLearnedUI();
   loadRenderedRealityStatus().catch(() => {});
   loadWitnessGovernanceStatus().catch(() => {});
@@ -3116,6 +3191,7 @@ async function init() {
   setInterval(() => refreshDurability(lastHistorySource).catch(() => {}), 15000);
   setInterval(() => refreshEllieDomainStatus().catch(() => {}), 30000);
   setInterval(() => refreshPreferencesStatus().catch(() => {}), 30000);
+  setInterval(() => refreshSelfPromptStatus().catch(() => {}), 30000);
 
   document.getElementById('input').focus();
 }
@@ -3194,6 +3270,16 @@ function rrBridgeChip(label,n,color){
   return '<span style="background:rgba(255,255,255,0.04);border:1px solid '+color+';color:'+color+
     ';border-radius:20px;padding:3px 11px;font-size:11px;letter-spacing:0.06em;">'+label+' '+n+'</span>';
 }
+async function rrBridgeFetchJson(path){
+  var url=(typeof apiUrl==='function')?apiUrl(path):path;
+  var response=await fetch(url,{cache:'no-store'});
+  if(!response.ok){
+    var body='';
+    try{body=await response.text();}catch(_e){}
+    throw new Error(path+' returned '+response.status+(body?': '+body.slice(0,160):''));
+  }
+  return await response.json();
+}
 async function rrBridgeLoad(smokes){
   var rt=document.getElementById('rr-bridge-runtime');
   var sum=document.getElementById('rr-bridge-summary');
@@ -3201,7 +3287,7 @@ async function rrBridgeLoad(smokes){
   list.innerHTML='<div style="padding:18px;color:rgba(255,255,255,0.4);font-size:12px;">'+
     (smokes?'running live smoke probes…':'reading verified status…')+'</div>';
   try{
-    var st=await (await fetch('/api/status')).json();
+    var st=await rrBridgeFetchJson('/api/status');
     var b=st.boot||{};
     rt.innerHTML=
       '<div><b style="color:#22d3ee;">ORACLE</b> · session '+(st.session_id||'?')+
@@ -3211,7 +3297,7 @@ async function rrBridgeLoad(smokes){
       ((b.warnings&&b.warnings.length)?' · <span style="color:#f59e0b;">'+b.warnings.length+' warning(s)</span>':'')+'</div>';
   }catch(e){ rt.innerHTML='<span style="color:#ef4444;">runtime unreachable: '+e+'</span>'; }
   try{
-    var data=await (await fetch('/api/capabilities'+(smokes?'?smokes=true':''))).json();
+    var data=await rrBridgeFetchJson('/api/capabilities'+(smokes?'?smokes=true':''));
     var s=data.summary||{};
     sum.innerHTML=
       rrBridgeChip('available',s.verified||0,'#22c55e')+
@@ -3239,6 +3325,17 @@ async function rrBridgeLoad(smokes){
   }catch(e){
     list.innerHTML='<div style="padding:18px;color:#ef4444;font-size:12px;">capabilities unreachable: '+e+'</div>';
   }
+}
+function rrBridgePrime(){
+  var rt=document.getElementById('rr-bridge-runtime');
+  if(rt && /loading runtime/i.test(rt.textContent||'')){
+    rrBridgeLoad(false);
+  }
+}
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',rrBridgePrime);
+}else{
+  setTimeout(rrBridgePrime,0);
 }
 </script>
 </body>

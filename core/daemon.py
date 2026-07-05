@@ -175,6 +175,23 @@ def _write_proposal(content: str, blocked: list):
     return str(fpath)
 
 
+def _write_daily_digest_if_due(force: bool = False) -> dict:
+    try:
+        from sandbox_daily_digest import write_daily_digest
+
+        result = write_daily_digest(force=force)
+        if result.get("ok"):
+            log("DAEMON", f"Daily digest written: {result.get('digest_path')}")
+        elif result.get("skipped"):
+            log("DAEMON", f"Daily digest skipped: {result.get('reason')}")
+        else:
+            log("DAEMON", f"Daily digest unavailable: {result}")
+        return result
+    except Exception as exc:
+        log("DAEMON", f"Daily digest error: {exc}")
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
 # ── Daemon prompt ─────────────────────────────────────────────────────────────
 
 def _daemon_prompt(preflight_context: str, facts_summary: str) -> str:
@@ -313,6 +330,11 @@ def daemon_loop(client, system_prompt, local: bool, model: str):
         try:
             proposal = run_autonomous_cycle(client, session_id, system_prompt, local, model)
             print(f"[Oracle Daemon] Proposal written: {proposal}")
+            digest_result = _write_daily_digest_if_due(force=False)
+            if digest_result.get("ok"):
+                print(f"[Oracle Daemon] Daily digest written: {digest_result.get('digest_path')}")
+            elif digest_result.get("skipped"):
+                print(f"[Oracle Daemon] Daily digest skipped: {digest_result.get('reason')}")
         except Exception as e:
             log("ERROR", f"Daemon cycle error: {e}")
             print(f"[Oracle Daemon] Cycle error: {e}")

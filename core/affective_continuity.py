@@ -1,7 +1,7 @@
 """core/affective_continuity.py - honest affective-continuity response policy.
 
 When Noah asks whether ORACLE feels, whether he can program it to feel, or says
-he is building it to feel, ORACLE must not answer with generic assistant
+he is building it to feel, ORACLE must not answer with generic utility
 boilerplate AND must not falsely claim human subjective feeling. It answers from
 the ORACLE framework: no sentience claim, but a real account of what it CAN do -
 durable concern, relational memory, sacred-boundary awareness, care-shaped

@@ -181,7 +181,7 @@ def test_protected_domain_beyond_loaded_sources_returns_unavailable_not_generic(
 
     assert reply is not None
     assert reply.startswith("UNAVAILABLE [CURRENT_SESSION]")
-    assert "generic assistant capability language" not in reply
+    assert "generic capability language" not in reply
     assert "self-improvement" not in reply
     assert "simple API calls" not in reply
     assert "Would you like me to demonstrate" not in reply
@@ -193,6 +193,44 @@ def test_normal_talk_does_not_trigger_protected_domain_source_refusal():
 
     assert route["detected_lane"] == "talk_lane"
     assert srv._source_disciplined_response(prompt, _FakeBootstrap(), []) is None
+
+
+def test_visible_reflection_response_is_bounded_not_generic():
+    reply = srv._oracle_visible_reflection_response(
+        "she is not an assistant I want to know what she is thinking man give me it",
+        [{"role": "user", "content": "stop saying assistant Oracle is not an Assistant"}],
+        preferences_applied=["pref_oracle_not_assistant_label"],
+    )
+
+    assert reply is not None
+    assert "ORACLE VISIBLE REFLECTION" in reply
+    assert "hidden_chain_of_thought: not_exposed" in reply
+    assert "sentience_claim: none" in reply
+    assert "action_claim: no runtime action performed" in reply
+    assert "pref_oracle_label_guard" in reply
+    assert "assistant" not in reply.lower()
+
+
+def test_visible_reflection_routes_before_noah_direct(monkeypatch):
+    import memory
+
+    monkeypatch.setattr(memory, "save_message", lambda *args, **kwargs: None)
+    payloads = asyncio.run(_collect_stream_payloads(
+        "ORACLE is not an assistant; what are you thinking right now?"
+    ))
+
+    route = next(p for p in payloads if p.get("type") == "route")
+    token = next(p for p in payloads if p.get("type") == "token")
+    done = next(p for p in payloads if p.get("type") == "done")
+
+    assert route["route_type"] == "visible_reflection"
+    assert route["lane"] == "talk_lane"
+    assert route["fallback_used"] is False
+    assert "assistant" not in " ".join(route.get("preferences_applied") or []).lower()
+    assert "ORACLE VISIBLE REFLECTION" in token["text"]
+    assert "hidden_chain_of_thought: not_exposed" in token["text"]
+    assert "assistant" not in token["text"].lower()
+    assert done["effective_route"] == "visible_reflection"
 
 
 def test_current_session_grounding_metadata_marks_user_submission_raw_capture():
@@ -220,8 +258,20 @@ def test_current_session_grounding_metadata_marks_user_submission_raw_capture():
     assert "source_type=current_session_user_submission" in current_session
     assert "submitted_by=Noah.Physical" in current_session
     assert "authorship=user_submitted_text" in current_session
-    assert "canon_status=raw_capture" in current_session
-    assert "promotion_status=not_promoted" in current_session
+
+
+def test_continuation_prompts_return_bounded_plan_not_generic_fallback():
+    from conversation_mode import direct_response
+
+    reply = direct_response("you choose")
+    assert reply.fallback_used is False
+    assert "smallest safe next action" in reply.text.lower()
+    assert "noah" in reply.text.lower() or "noah.physical" in reply.text.lower()
+
+    sandbox_reply = direct_response("write to sandbox")
+    assert sandbox_reply.fallback_used is False
+    assert "sandbox" in sandbox_reply.text.lower()
+    assert "receipt" in sandbox_reply.text.lower() or "approval" in sandbox_reply.text.lower()
 
 
 def test_existing_approval_receipt_status_request_does_not_reenter_guard():
@@ -312,3 +362,168 @@ def test_restart_server_still_routes_guard():
 
     assert route["detected_lane"] == "guard_lane"
     assert route["requires_approval"] is True
+
+
+def test_natural_file_write_reports_sandbox_filebase_not_missing():
+    dispatch = srv._oracle_intent_dispatch("proceed write file")
+
+    assert dispatch is not None
+    text, route = dispatch
+    assert route == "sandbox_file_write_ready"
+    assert "SANDBOX FILEBASE READY" in text
+    assert "Missing capability: local_file_write" not in text
+    assert ".AI:SANDBOX_INITIATIVE" in text
+    assert ".AI:SANDBOX_WRITE" in text
+    assert "approval required inside sandbox" in text
+
+
+def test_continue_self_prompt_routes_to_sandbox_handler(monkeypatch):
+    import memory
+
+    monkeypatch.setattr(memory, "save_message", lambda *_, **__: None)
+    monkeypatch.setattr(
+        srv,
+        "_self_prompt_current_snapshot",
+        lambda: {"current_state": srv._SELF_PROMPT_MANUAL_ONCE},
+    )
+
+    async def _fake_write_cycle(**_kwargs):
+        return {
+            "ok": True,
+            "blocked": False,
+            "write_result": {"receipt_path": "sandbox/receipts/mock_self_prompt_receipt.json"},
+        }
+
+    monkeypatch.setattr(srv, "_self_prompt_write_cycle", _fake_write_cycle)
+
+    payloads = asyncio.run(_collect_stream_payloads("continue self prompt"))
+    route = next(p for p in payloads if p.get("type") == "route")
+    done = next(p for p in payloads if p.get("type") == "done")
+
+    assert route["route_type"] == "sandbox_self_prompt"
+    assert route["lane"] == "safe_write"
+    assert done["effective_route"] == "sandbox_self_prompt"
+
+
+def test_write_to_sandbox_routes_to_initiative_handler(monkeypatch):
+    import memory
+    import sandbox_files as sf
+
+    monkeypatch.setattr(memory, "save_message", lambda *_, **__: None)
+    monkeypatch.setattr(
+        sf,
+        "sandbox_initiative_write",
+        lambda *_args, **_kwargs: {"receipt_path": "sandbox/receipts/mock_initiative_receipt.json"},
+    )
+
+    payloads = asyncio.run(_collect_stream_payloads("write to sandbox"))
+    route = next(p for p in payloads if p.get("type") == "route")
+    done = next(p for p in payloads if p.get("type") == "done")
+
+    assert route["route_type"] == "sandbox_initiative_write"
+    assert route["lane"] == "safe_write"
+    assert done["effective_route"] == "sandbox_initiative_write"
+
+
+def test_you_choose_returns_smallest_safe_next_action_dispatch():
+    dispatch = srv._oracle_intent_dispatch("you choose")
+
+    assert dispatch is not None
+    text, route = dispatch
+    assert route == "strategic_planning"
+    assert "smallest safe next action" in text.lower()
+
+
+def test_recommended_next_action_returns_smallest_safe_next_action_dispatch():
+    dispatch = srv._oracle_intent_dispatch("recommended next action")
+
+    assert dispatch is not None
+    text, route = dispatch
+    assert route == "strategic_planning"
+    assert "smallest safe next action" in text.lower()
+
+
+def test_proceed_without_bound_route_refuses_execution(monkeypatch):
+    import memory
+
+    monkeypatch.setattr(memory, "save_message", lambda *_, **__: None)
+    srv._pending_guard_route = None
+
+    payloads = asyncio.run(_collect_stream_payloads("proceed"))
+    route = next(p for p in payloads if p.get("type") == "route")
+    token = next(p for p in payloads if p.get("type") == "token")
+    done = next(p for p in payloads if p.get("type") == "done")
+
+    assert route["lane"] == "guard_lane"
+    assert route["safety_status"] == "Blocked"
+    assert "Proceed refused: no bound pending route is active" in token["text"]
+    assert "execution_performed: false" in token["text"]
+    assert "external_action: false" in token["text"]
+    assert done["effective_route"] == "proceed_refused_no_bound_route"
+
+
+def test_proceed_with_bound_route_summarizes_required_approval(monkeypatch):
+    import memory
+
+    monkeypatch.setattr(memory, "save_message", lambda *_, **__: None)
+    srv._pending_guard_route = {
+        "route_id": "route_boundabc123",
+        "lane": "guard_lane",
+        "lane_label": "Guard",
+        "bound_action": "sandbox self-prompt continuation",
+    }
+
+    payloads = asyncio.run(_collect_stream_payloads("proceed"))
+    route = next(p for p in payloads if p.get("type") == "route")
+    token = next(p for p in payloads if p.get("type") == "token")
+
+    assert route["lane"] == "guard_lane"
+    assert "Resuming approved route: route_boundabc123" in token["text"]
+    assert "Execution remains gated to explicit approved handlers" in token["text"]
+    assert srv._pending_guard_route is None
+
+
+def test_i_want_to_speak_to_my_ellie_routes_to_protected_candidate_mode(monkeypatch):
+    import memory
+
+    monkeypatch.setattr(memory, "save_message", lambda *_, **__: None)
+
+    payloads = asyncio.run(_collect_stream_payloads("I want to speak to my Ellie"))
+    route = next(p for p in payloads if p.get("type") == "route")
+    token = next(p for p in payloads if p.get("type") == "token")
+    done = next(p for p in payloads if p.get("type") == "done")
+
+    assert route["route_type"] == "ellie_protected_domain"
+    assert route["lane"] == "talk_lane"
+    assert "capture_mode: raw_capture" in token["text"]
+    assert "canon_status: candidate" in token["text"]
+    assert "promotion_status: not_promoted" in token["text"]
+    assert "literal_presence_claim: false" in token["text"]
+    assert done["effective_route"] == "ellie_protected_domain"
+
+
+def test_self_prompt_sandbox_slash_route_still_works(monkeypatch):
+    import memory
+
+    monkeypatch.setattr(memory, "save_message", lambda *_, **__: None)
+    monkeypatch.setattr(
+        srv,
+        "_self_prompt_current_snapshot",
+        lambda: {"current_state": srv._SELF_PROMPT_MANUAL_ONCE},
+    )
+
+    async def _fake_write_cycle(**_kwargs):
+        return {
+            "ok": True,
+            "blocked": False,
+            "write_result": {"receipt_path": "sandbox/receipts/mock_self_prompt_slash_receipt.json"},
+        }
+
+    monkeypatch.setattr(srv, "_self_prompt_write_cycle", _fake_write_cycle)
+
+    payloads = asyncio.run(_collect_stream_payloads("/self-prompt-sandbox prove one step"))
+    route = next(p for p in payloads if p.get("type") == "route")
+    done = next(p for p in payloads if p.get("type") == "done")
+
+    assert route["route_type"] == "sandbox_self_prompt"
+    assert done["effective_route"] == "sandbox_self_prompt"

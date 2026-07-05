@@ -458,6 +458,13 @@ def _smoke_miracledrive_index() -> SmokeOutcome:
     return SmokeOutcome("degraded", evidence, "MiracleDrive index returned no scanned source paths")
 
 
+def _smoke_internet_recall() -> SmokeOutcome:
+    import internet_recall
+
+    state = internet_recall.self_check()
+    return SmokeOutcome("success", state)
+
+
 def _patch_file_channel(module: Any, names: tuple[str, ...], send_name: str, reply_name: str, wait_name: str, pending_name: str) -> SmokeOutcome:
     originals = {name: getattr(module, name) for name in names}
     with tempfile.TemporaryDirectory(prefix="oracle_cap_channel_") as td:
@@ -695,6 +702,7 @@ COMPONENTS: list[CapabilityDef] = [
     CapabilityDef("github_access", "GitHub access", files=(".git",), available=_available_files(".git"), smoke=_smoke_github_access, auth="unknown", permitted="read_only"),
     CapabilityDef("google_drive_local_sync", "Google Drive local sync", modules=("drive_scope",), available=_available_module("drive_scope"), smoke=_smoke_google_drive_access, auth="local_sync_only", permitted="read_only"),
     CapabilityDef("miracledrive_index", "MiracleDrive index", modules=("miracledrive_index",), files=("ui/miracledrive.html",), available=_available_module("miracledrive_index"), smoke=_smoke_miracledrive_index, auth="local_sync_only", permitted="read_search_readonly"),
+    CapabilityDef("internet_recall", "Internet recall", modules=("internet_recall",), available=_available_module("internet_recall"), smoke=_smoke_internet_recall, auth="not_required", permitted="public_http_get_readonly_no_login"),
     CapabilityDef("claude_code_bridge", "Claude Code bridge", modules=("oracle_claude_channel",), available=_available_module("oracle_claude_channel"), smoke=_smoke_claude_bridge, auth="unknown", permitted="staging_only"),
     CapabilityDef("codex_bridge", "Codex bridge", modules=("oracle_codex_channel",), available=_available_module("oracle_codex_channel"), smoke=_smoke_codex_bridge, auth="not_required", permitted="staging_only"),
     CapabilityDef("chatgpt_relay", "ChatGPT relay", modules=("desktop_ai_bridge",), available=_available_module("desktop_ai_bridge"), smoke=_smoke_chatgpt_relay, auth="unknown", permitted="staging_only"),

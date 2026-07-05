@@ -63,6 +63,29 @@ def test_improved_fallback_lists_actions():
     assert "No durable memory or external action" in fb
 
 
+def test_operator_bridge_uses_api_helper_and_auto_primes():
+    html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+
+    assert "function rrBridgeFetchJson(path)" in html
+    assert "apiUrl(path)" in html
+    assert "fetch(url,{cache:'no-store'})" in html
+    assert "rrBridgeFetchJson('/api/status')" in html
+    assert "rrBridgeFetchJson('/api/capabilities'" in html
+    assert "function rrBridgePrime()" in html
+    assert "addEventListener('DOMContentLoaded',rrBridgePrime)" in html
+
+
+def test_ui_exposes_self_prompt_writer_controls():
+    html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+
+    assert 'id="self-prompt-btn"' in html
+    assert "function refreshSelfPromptStatus()" in html
+    assert "function toggleSelfPromptMode()" in html
+    assert "api/self-prompt/status" in html
+    assert "api/self-prompt/enable" in html
+    assert "api/self-prompt/disable" in html
+
+
 def test_cards_are_pure_reads(tmp_path):
     _isolate(tmp_path)
     # project_states.json must be unchanged by reading cards.

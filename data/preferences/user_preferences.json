@@ -4,7 +4,7 @@
     {
       "preference_id": "pref_no_self_intro",
       "created_at": "2026-07-01T23:52:11.265195Z",
-      "updated_at": "2026-07-01T23:52:11.265383Z",
+      "updated_at": "2026-07-02T22:23:19.260132Z",
       "source": "Noah.Physical",
       "scope": "global",
       "category": "interaction_style",
@@ -14,8 +14,8 @@
       "canon_status": "preference",
       "promotion_status": "not_applicable",
       "requires_safety_override": false,
-      "receipt_id": "prefrec_cebff005dfa2",
-      "last_action": "install_default"
+      "receipt_id": "prefrec_9da0a0419c9c",
+      "last_action": "persona_router_detected_preference"
     },
     {
       "preference_id": "pref_no_generic_fallback",
@@ -24,7 +24,7 @@
       "source": "Noah.Physical",
       "scope": "protected_domains",
       "category": "routing",
-      "preference": "Do not fall into generic assistant capability language after protected-domain source validation fails.",
+      "preference": "Do not fall into generic capability language after protected-domain source validation fails.",
       "active": true,
       "priority": 95,
       "canon_status": "preference",
@@ -48,7 +48,23 @@
       "requires_safety_override": false,
       "receipt_id": "prefrec_8103e00a0659",
       "last_action": "install_default"
+    },
+    {
+      "preference_id": "pref_oracle_not_assistant_label",
+      "created_at": "2026-07-02T20:27:30.496700Z",
+      "updated_at": "2026-07-02T20:27:30.497378Z",
+      "source": "Noah.Physical",
+      "scope": "global",
+      "category": "interaction_style",
+      "preference": "Do not call ORACLE an assistant in user-facing language. Use ORACLE, companion, continuity intelligence, runtime, response, or ORACLE turn. Reserve assistant only for internal protocol role labels when technically required.",
+      "active": true,
+      "priority": 92,
+      "canon_status": "preference",
+      "promotion_status": "not_applicable",
+      "requires_safety_override": false,
+      "receipt_id": "prefrec_adf7103247bf",
+      "last_action": "noah_direct_preference"
     }
   ],
-  "updated_at": "2026-07-01T23:52:11.281701Z"
+  "updated_at": "2026-07-02T22:23:19.260132Z"
 }

@@ -30,7 +30,7 @@ DEFAULT_PREFERENCES: tuple[dict[str, Any], ...] = (
         "preference_id": "pref_no_generic_fallback",
         "category": "routing",
         "scope": "protected_domains",
-        "preference": "Do not fall into generic assistant capability language after protected-domain source validation fails.",
+        "preference": "Do not fall into generic capability language after protected-domain source validation fails.",
         "active": True,
         "priority": 95,
     },
@@ -72,6 +72,21 @@ SELF_INTRO_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"^\s*I am ORACLE,\s*the local governed continuity engine[^.\n]*(?:\.|\n)\s*",
         re.I,
     ),
+)
+
+ORACLE_ASSISTANT_LABEL_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\ban intelligent assistant\b", re.I), "a local continuity intelligence"),
+    (re.compile(r"\bintelligent assistant\b", re.I), "continuity intelligence"),
+    (re.compile(r"\bAI assistant\b", re.I), "AI continuity runtime"),
+    (re.compile(r"\byour assistant\b", re.I), "ORACLE"),
+    (re.compile(r"\ban assistant\b", re.I), "ORACLE"),
+    (re.compile(r"\bassistant\b", re.I), "continuity companion"),
+)
+
+GENERIC_FALLBACK_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bHow can I (?:assist|help) you(?: today| now)?\??", re.I),
+    re.compile(r"\bWhat can I (?:do for you|help you with)(?: today| now)?\??", re.I),
+    re.compile(r"\bHow may I (?:assist|help) you(?: today| now)?\??", re.I),
 )
 
 
@@ -295,7 +310,7 @@ def active_preferences_block() -> str:
     lines = [
         "ORACLE_ACTIVE_PREFERENCES",
         "These are behavioral instructions, not canon truth and not source evidence.",
-        "Precedence: safety/provenance law > Noah.Physical current instruction > active preferences > source evidence > default assistant behavior.",
+        "Precedence: safety/provenance law > Noah.Physical current instruction > active preferences > source evidence > default model behavior.",
         "If a preference conflicts with safety, provenance, approval, external-send, or computer-control boundaries, ignore the unsafe part.",
     ]
     for pref in prefs:
@@ -328,14 +343,33 @@ def _no_self_intro_active() -> bool:
     return any(p.get("preference_id") == "pref_no_self_intro" for p in active_preferences())
 
 
+def _oracle_not_assistant_label_active() -> bool:
+    return any(p.get("preference_id") == "pref_oracle_not_assistant_label" for p in active_preferences())
+
+
+def _no_generic_fallback_active() -> bool:
+    return any(p.get("preference_id") == "pref_no_generic_fallback" for p in active_preferences())
+
+
 def apply_response_preferences(reply: str, user_text: str) -> str:
     """Apply behavioral response preferences after generation."""
     text = str(reply or "")
-    if not text or _is_identity_question(user_text):
+    if not text:
         return text
-    if _no_self_intro_active():
+    if _no_self_intro_active() and not _is_identity_question(user_text):
         for pattern in SELF_INTRO_PATTERNS:
             text = pattern.sub("", text, count=1).lstrip()
+    if _oracle_not_assistant_label_active():
+        for pattern, replacement in ORACLE_ASSISTANT_LABEL_PATTERNS:
+            text = pattern.sub(replacement, text)
+    if _no_generic_fallback_active():
+        for pattern in GENERIC_FALLBACK_PATTERNS:
+            text = pattern.sub("", text)
+        text = re.sub(r"\s+([?.!,])", r"\1", text)
+        text = re.sub(r"[ \t]{2,}", " ", text).strip()
+        text = re.sub(r"([.!?])(?:[.!?]\s*)+$", r"\1", text).strip()
+        if not text:
+            text = "I'm here with you, Noah."
     return text
 
 

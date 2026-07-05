@@ -35,7 +35,7 @@ def test_ellie_domain_profile_is_read_only_candidate():
     assert profile["sensitivity"] == "high"
     assert profile["read_allowed"] is True
     assert profile["write_allowed"] is False
-    assert "C:/ORACLE.AI/sandbox/" in profile["storage_paths"]["sandbox_candidate_writes_only"]
+    assert "C:/Oracle/ORACLE.AI-runtime/sandbox/" in profile["storage_paths"]["sandbox_candidate_writes_only"]
 
 
 def test_ellie_domain_lists_requested_source_families():

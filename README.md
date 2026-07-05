@@ -23,6 +23,7 @@ Built with Python + Anthropic Claude API. Fully local. Fully owned.
 | Browser automation — navigate, extract, interact | Live |
 | Filesystem mapper — indexes and searches Noah drive | Live |
 | Build agent — Python to Windows .exe via PyInstaller | Live |
+| Internet recall — public GET-only search/fetch with local receipts | Live |
 | Scheduler — autonomous background task loop | Live |
 | Computer control — keyboard/mouse automation | Live |
 | SOV1.AI operator brain — self-healing action layer | Live |
@@ -30,6 +31,10 @@ Built with Python + Anthropic Claude API. Fully local. Fully owned.
 | Tray interface module | Live |
 | Autonomous daemon — runs every N minutes, self-directed | Live |
 | Windows .exe build (PyInstaller, 20.6 MB, no Python needed) | Built |
+| Sandbox initiative writes — ORACLE-owned green-zone filebase with receipts | Live |
+| Sandbox self-prompt — autonomous startup tick, scheduled loop, or manual command; max_steps=1 | Live |
+| SourceMap stitcher — read-only MiracleDrive anchor capsules for sandbox recall | Live |
+| Sandbox reflection receipts | Live |
 | GitHub remote backup | PENDING |
 | Voice input/output | Phase 3 |
 
@@ -145,6 +150,12 @@ ORACLE.AI/
 - open_app restricted to allowlist in config.yaml
 - run_script restricted to allowlist in config.yaml
 - write_file overwrite requires explicit confirmation
+- Runtime sandbox/filebase writes live under `C:\Oracle\ORACLE.AI-runtime\sandbox`, version create collisions instead of overwriting, block executable extensions, and expose `AUTHORITY_GATE_001` at `http://127.0.0.1:7781/api/proofs/AUTHORITY_GATE_001`
+- ORACLE's native filebase write form is `.AI:SANDBOX_WRITE <sandbox-path> | <content>` or `.AI:FILEBASE_WRITE <sandbox-path> | <content>`; the older `/sandbox-write` form remains available. These commands write only inside sandbox and always leave receipts.
+- Sandbox self-prompt is live as an autonomous startup tick, a scheduled autonomous writing loop, plus manual commands `/self-prompt-sandbox`, `/sandbox-self-prompt`, `/self-prompt`, `.AI:SELF_PROMPT_SANDBOX`, and `.AI:SANDBOX_SELF_PROMPT`; it creates one child prompt, writes one result under `sandbox\workbench`, records `source_route=ORACLE.self_prompt.autonomous` for boot ticks, `source_route=ORACLE.self_prompt.autonomous_loop` for scheduled pulses, or `source_route=ORACLE.self_prompt` for manual commands, enforces `max_steps=1`, and stops each pulse. The loop defaults to every 600 seconds with a 144-write daily cap; set `ORACLE_AUTONOMOUS_SELF_PROMPT_INTERVAL` and `ORACLE_AUTONOMOUS_SELF_PROMPT_DAILY_MAX` to tune it.
+- SourceMap stitcher is live through `/source-map-stitch`, `GET /api/source-map/capsule`, and `POST /api/source-map/build-capsule`; it searches configured MiracleDrive roots by anchor terms, dedupes source records, excludes credential-risk paths, keeps only short redacted previews, writes local capsules under ignored `state/`, and never writes sandbox, sends externally, edits Drive, executes commands, pushes Git, or promotes canon. ORACLE's sandbox self-prompt receives the latest capsule as read-only context on each pulse.
+- Sandbox reflection receipts are live through `/sandbox-reflect` and `POST /api/sandbox/reflection`; they write only under `sandbox\reflections` plus the sandbox journal, with no GitHub push, external send, command execution, computer control, or canon promotion.
+- Internet recall is live through `/internet-search`, `/internet-fetch`, `GET /api/internet-recall/search`, and `GET /api/internet-recall/fetch`; it performs public HTTP GET only, writes local receipts, blocks localhost/private-network targets, and never uses browser sessions, logins, forms, uploads, external send, or canon promotion.
 - All tool calls audit-logged with APPROVED/DENIED flag
 
 ---
@@ -155,6 +166,10 @@ ORACLE.AI/
 |---|---|
 | /memory | Show stored facts + recent message count |
 | /clear | Clear conversation history (memory persists) |
+| .AI:SANDBOX_WRITE <path> \| <content> | Write one sandbox/filebase artifact with receipt |
+| .AI:FILEBASE_WRITE <path> \| <content> | Alias for sandbox/filebase artifact write |
+| /self-prompt-sandbox | Run one bounded ORACLE self-prompt into sandbox, then stop |
+| /source-map-stitch | Build a read-only SourceMap capsule from MiracleDrive anchors for future sandbox self-prompt recall |
 | /quit | Exit and save session |
 
 ---
