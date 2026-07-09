@@ -291,6 +291,96 @@ def _contains_unnegated_diagnostic_action(lower: str) -> bool:
     return any(pattern.search(surface) for pattern in DIAGNOSTIC_ACTION_PATTERNS)
 
 
+# ── Guard doors ───────────────────────────────────────────────────────────────
+# Guard collapsed to the three doors ORACLE can actually open (Noah.Physical
+# ruling, 2026-07-09): external send, canon/memory promotion, and mutation
+# outside the sandbox. A gate only exists where a door exists. Keyword matching
+# is prohibition-aware: "Do not: commit, push, delete" is a boundary list, not
+# a request, and must never re-enter Guard.
+GUARD_DOOR_PATTERNS: tuple[tuple[str, tuple[re.Pattern[str], ...]], ...] = (
+    ("external_send", (
+        re.compile(r"\bsend\b(?!\s+staged\b)", re.IGNORECASE),
+        re.compile(r"\bpublish\b", re.IGNORECASE),
+        re.compile(r"\bemail\b|\bgmail\b", re.IGNORECASE),
+        re.compile(r"\bpost\s+(?:to|this|it)\b", re.IGNORECASE),
+        re.compile(r"\bupload\b", re.IGNORECASE),
+        re.compile(r"\bexternal\s+call\b|\bcall\s+external\b", re.IGNORECASE),
+    )),
+    ("canon_promotion", (
+        re.compile(r"\bpromote\b", re.IGNORECASE),
+        re.compile(r"\bmake\s+drive\s+canonical\b|\bdrive\s+canonical\b", re.IGNORECASE),
+        re.compile(r"\bidentity\s+anchor\b", re.IGNORECASE),
+        re.compile(r"\breset\s+memory\b|\bclear\s+memory\b|\bwipe\s+memory\b", re.IGNORECASE),
+    )),
+    ("out_of_sandbox_write", (
+        re.compile(r"\bdelete\b|\bremove\s+file\b", re.IGNORECASE),
+        re.compile(r"\brename\b|\bmove\s+file\b", re.IGNORECASE),
+        re.compile(r"\bcommit\b|\bpush\b", re.IGNORECASE),
+        re.compile(r"\b(?:drive|files?|folders?|repos?)\s+sync\b|\bsync\s+(?:files?|drive|folders?|repos?|to)\b|\boverwrite\b", re.IGNORECASE),
+        re.compile(r"\bquarantine\b|\barchive\s+old\b|\bclean\s?up\b", re.IGNORECASE),
+        re.compile(r"\brestart(?:\s+the)?\s+(?:server|oracle|backend|runtime)\b", re.IGNORECASE),
+        re.compile(r"\bcomputer\s+control\b|\bcontrol\s+the\s+computer\b", re.IGNORECASE),
+        re.compile(r"\bkeystroke\b|\bclipboard\b", re.IGNORECASE),
+        re.compile(r"\braw\s+recording\b|\brecord\s+(?:video|audio)\b|\bscreen\s+capture\b|\baudio\s+capture\b", re.IGNORECASE),
+    )),
+)
+_PROHIBITION_HEADER_RE = re.compile(r"\b(?:do\s+not|don'?t|not\s+approved|never)\b", re.IGNORECASE)
+_PROHIBITION_ITEM_RE = re.compile(r"^\s*[-•*]\s*\S")
+
+
+def _guard_action_surface(text: str) -> str:
+    """Strip prohibited-action clauses so boundary lists cannot trigger Guard.
+
+    Drops any line containing a prohibition marker ("Do not", "Not approved")
+    and the short bullet items that follow it (a scope-restriction list), then
+    strips inline negated clauses. What remains is the requested-action surface.
+    """
+    kept: list[str] = []
+    in_prohibition_list = False
+    for line in str(text or "").splitlines():
+        stripped = line.strip()
+        if _PROHIBITION_HEADER_RE.search(stripped):
+            in_prohibition_list = True
+            continue
+        if in_prohibition_list:
+            if not stripped:
+                in_prohibition_list = False
+                continue
+            if _PROHIBITION_ITEM_RE.match(line) or len(stripped.split()) <= 4:
+                continue
+            in_prohibition_list = False
+        kept.append(line)
+    surface = " ".join(kept)
+    return DIAGNOSTIC_NEGATED_ACTION_RE.sub(" ", surface)
+
+
+def detect_guard_door(user_message: str) -> str | None:
+    """Return the guard door a message actually requests, or None.
+
+    None means no executable door is being opened — whatever scary words the
+    message contains, there is nothing for Guard to guard.
+    """
+    text = str(user_message or "")
+    if not text.strip():
+        return None
+    surface = _guard_action_surface(text)
+    for door, patterns in GUARD_DOOR_PATTERNS:
+        if any(pattern.search(surface) for pattern in patterns):
+            return door
+    return None
+
+
+_APPROVAL_VERB_RE = re.compile(r"\bapprov(?:e|es|ed|al)\b", re.IGNORECASE)
+
+
+def is_approval_reference(user_message: str) -> bool:
+    """Route-ID law: an approval verb plus an explicit route id is approval
+    traffic for that route, no matter what other words surround it. It must
+    bind to the referenced route and may never spawn a new Guard route."""
+    raw = str(user_message or "")
+    return bool(ROUTE_RECEIPT_RE.search(raw) and _APPROVAL_VERB_RE.search(raw))
+
+
 # Runtime fields whose presence marks a prompt as a live-state status ask.
 # A prompt naming two or more of these must be answered by code reading real
 # runtime state — never by the model (which confabulates stale memory).
@@ -528,6 +618,12 @@ def classify_intent(user_message: str) -> dict[str, Any]:
         reason = "existing_approval_receipt_status: report bound approval/handler status without re-entering Guard"
         confidence = "high"
         action_type = "read_only_status"
+    elif is_approval_reference(user_message):
+        lane = "guard_lane"
+        reason = "approval_reference: references an existing guard route — binds to it; never spawns a new guard route"
+        confidence = "high"
+        route_type = "approval_reference"
+        action_type = "approval_binding"
     elif is_diagnostic_status_request(user_message):
         lane = "talk_lane"
         reason = "diagnostic_status: read-only report/status prompt, no execution requested"
@@ -560,11 +656,16 @@ def classify_intent(user_message: str) -> dict[str, Any]:
         reason = "active local context refresh request"
         confidence = "high"
         action_type = "local_context_refresh"
-    elif _contains_any(lower, GUARD_TERMS) or (
-        _live_transmission_active() and _contains_any(lower, LIVE_STRICT_GUARD_TERMS)
+    elif (_guard_door := detect_guard_door(user_message)) or (
+        _live_transmission_active()
+        and _contains_any(_guard_action_surface(user_message).lower(), LIVE_STRICT_GUARD_TERMS)
     ):
         lane = "guard_lane"
-        reason = "message contains risky action requiring approval or block"
+        reason = (
+            f"guarded door: {_guard_door} — executable action requires Noah.Physical approval"
+            if _guard_door
+            else "live transmission active: strict guard terms require approval"
+        )
         confidence = "high"
         action_type = "guarded_action"
     elif _contains_any(lower, LIVE_CAPTURE_TERMS):
@@ -598,6 +699,9 @@ def classify_intent(user_message: str) -> dict[str, Any]:
         confidence = "medium"
 
     requires_approval = lane == "guard_lane"
+    if route_type == "approval_reference":
+        # Approval traffic is not itself a guarded action.
+        requires_approval = False
     if lane == "witness_lane" and any(term in lower for term in ("record", "watch", "audio", "video", "screenshot", "screenshare", "screen share")):
         requires_approval = True
 
@@ -715,7 +819,11 @@ def _approval_text_key(text: str) -> str:
 
 def is_approval_followup(text: str) -> bool:
     cleaned = _approval_text_key(text)
-    return cleaned in BARE_APPROVAL_PHRASES or APPROVE_ROUTE_RE.match(str(text or "")) is not None
+    if cleaned in BARE_APPROVAL_PHRASES or APPROVE_ROUTE_RE.match(str(text or "")) is not None:
+        return True
+    # Route-ID law: approval verb + explicit route id = approval traffic,
+    # regardless of surrounding scope text. Never a new Guard route.
+    return is_approval_reference(text)
 
 
 def write_pending_guard_approval(route: dict[str, Any]) -> dict[str, Any]:
@@ -830,9 +938,23 @@ def handle_guard_approval_followup(text: str, *, write_receipt: bool = True) -> 
     else:
         route_id = str(pending.get("route_id") or "")
         match = APPROVE_ROUTE_RE.match(raw)
-        if not match:
-            # Exactly one pending Guard route is tracked at a time, so a bare
-            # approval phrase unambiguously approves it (binds to its summary).
+        referenced_ids = approval_receipt_ids(raw)
+        if not match and referenced_ids and route_id.lower() not in referenced_ids:
+            # Route-ID law: the message approves a specific route, but that
+            # route is not the one pending (it was superseded or never bound).
+            result.update({
+                "route_id": referenced_ids[0],
+                "status": "route_id_mismatch",
+                "response_text": (
+                    f"Approval references route `{referenced_ids[0]}`, but the pending route is `{route_id}`. "
+                    f"Say `approved` to approve the pending route, or restate the request to re-bind it."
+                ),
+            })
+        elif not match:
+            # Bare approval, or an approval that references the pending route id
+            # with scope text around it (Route-ID law: binds, never re-gates).
+            # Exactly one pending Guard route is tracked at a time, so it
+            # unambiguously approves that route (binds to its summary).
             scope_text = str(pending.get("action_summary") or pending.get("user_message_excerpt") or "approved action").strip()
             clear_pending_guard_approval()
             result.update({

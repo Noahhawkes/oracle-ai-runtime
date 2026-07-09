@@ -4638,7 +4638,11 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "capture_lane"})
         return
 
-    if (_unified_route or {}).get("detected_lane") == "guard_lane" and not lower.startswith("/"):
+    if (
+        (_unified_route or {}).get("detected_lane") == "guard_lane"
+        and (_unified_route or {}).get("route_type") != "approval_reference"
+        and not lower.startswith("/")
+    ):
         _pending_guard_route = dict(_unified_route)
         try:
             from unified_oracle_router import write_pending_guard_approval

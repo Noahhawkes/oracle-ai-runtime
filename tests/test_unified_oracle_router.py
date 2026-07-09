@@ -383,3 +383,98 @@ def test_capability_scope_response_reports_unknown_when_broker_unavailable(monke
 
     assert "UNKNOWN" in text
     assert "do not trust a model guess" in text
+
+
+def test_guard_collapsed_to_three_real_doors(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(router, "_live_transmission_active", lambda: False)
+
+    doors = {
+        "send this to chatgpt live": "external_send",
+        "publish the post": "external_send",
+        "promote candidate 3 to canon": "canon_promotion",
+        "clear memory and start over": "canon_promotion",
+        "delete duplicate ORACLE folders": "out_of_sandbox_write",
+        "commit changes": "out_of_sandbox_write",
+        "push to GitHub": "out_of_sandbox_write",
+        "Restart the server.": "out_of_sandbox_write",
+    }
+    for prompt, door in doors.items():
+        route = router.classify_intent(prompt)
+        assert route["detected_lane"] == "guard_lane", prompt
+        assert door in route["reason"], prompt
+
+    # Words that used to be keyword traps no longer gate on their own.
+    for prompt in [
+        "my gmail password keeps locking me out, thoughts?",
+        "the cloud sync design felt wrong, talk me through it",
+    ]:
+        route = router.classify_intent(prompt)
+        assert route["detected_lane"] != "guard_lane", prompt
+
+
+def test_prohibition_lists_never_reenter_guard(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(router, "_live_transmission_active", lambda: False)
+
+    # The exact shape that trapped Noah on 2026-07-09: an implementation task
+    # whose scope-restriction list contains commit/push/delete/promote.
+    prompt = """PATCH ROUTING BEFORE DOCTRINE POLISH
+Goal: Fix ORACLE routing so implementation requests do not get trapped as chat-only agenda notes.
+Required behavior:
+1. Detect implementation-task intent.
+2. Route to build_lane staging.
+Do not:
+- commit
+- push
+- edit canon
+- promote candidates
+- instantiate NPC runtime
+- touch Gmail
+- touch Google Drive
+- publish
+- delete external files
+Return receipts only."""
+    route = router.classify_intent(prompt)
+    assert route["detected_lane"] != "guard_lane", route["reason"]
+    assert router.detect_guard_door(prompt) is None
+
+
+def test_approval_with_route_id_binds_never_respawns_guard(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    guarded = router.classify_intent("commit changes")
+    pending = router.write_pending_guard_approval(guarded)
+    route_id = pending["route_id"]
+
+    # Noah's actual phrasings from the 2026-07-09 transcript.
+    for phrasing in [
+        f"APPROVE ROUTE {route_id} Scope: patch routing only. Do not: commit push delete.",
+        f"NOAH.PHYSICAL APPROVES ROUTE {route_id} Execute exact approved scope only. Return receipts only.",
+    ]:
+        assert router.is_approval_followup(phrasing) is True, phrasing
+        route = router.classify_intent(phrasing)
+        assert route["route_type"] == "approval_reference", phrasing
+        assert route["requires_approval"] is False, phrasing
+
+    result = router.handle_guard_approval_followup(
+        f"NOAH.PHYSICAL APPROVES ROUTE {route_id} Execute exact approved scope only.",
+        write_receipt=False,
+    )
+    assert result["approved"] is True
+    assert result["route_id"] == route_id
+
+
+def test_approval_for_stale_route_id_reports_mismatch(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    guarded = router.classify_intent("push to GitHub")
+    pending = router.write_pending_guard_approval(guarded)
+
+    result = router.handle_guard_approval_followup(
+        "NOAH.PHYSICAL APPROVES ROUTE route_000000000000 do it now",
+        write_receipt=False,
+    )
+    assert result["approved"] is False
+    assert result["status"] == "route_id_mismatch"
+    assert pending["route_id"] in result["response_text"]
