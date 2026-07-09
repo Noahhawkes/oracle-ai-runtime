@@ -330,6 +330,157 @@ def is_diagnostic_status_request(user_message: str) -> bool:
     )
 
 
+# ── Capability scope questions ───────────────────────────────────────────────
+# A question about what ORACLE herself can do (bridges, relays, senses, thread
+# injection) must be answered from the capability broker — never by the local
+# model, whose weights know nothing about this runtime and confabulate refusals
+# ("not within my scope") that contradict the live registry (CLAIM != SOURCE).
+CAPABILITY_SCOPE_PHRASES = (
+    "your scope", "my scope", "scope of interaction", "within scope",
+    "out of scope", "in your scope",
+)
+CAPABILITY_ABILITY_PHRASES = (
+    "do you support", "are you able", "do you have the ability",
+    "are you capable", "is it possible for you", "can oracle",
+    "list capabilities", "list your capabilities", "which capabilities",
+)
+CAPABILITY_HELPFUL_RE = re.compile(r"\bwould\b.{0,120}\bbe\s+(helpful|useful|beneficial|worth)\b")
+CAPABILITY_SUBJECT_TERMS = (
+    "thread injection", "thread inject", "inject a thread", "injection update",
+    "claude", "chatgpt", "chat gpt", "codex", "copilot", "gemini", "grok",
+    "bridge", "relay", "github", "stt", "tts", "speech to text",
+    "text to speech", "ollama", "obs", "vision", "camera", "webcam",
+    "google drive", "miracledrive", "internet recall", "federation",
+    "pattern buffer", "approval queue", "execution receipt",
+    "background watcher", "replication", "capability", "capabilities",
+)
+CAPABILITY_INVENTORY_ASKS = (
+    "list capabilities", "list your capabilities", "what are your capabilities",
+    "what can you do",
+)
+# Plain-language subjects -> registered broker component names (lowercased).
+CAPABILITY_SUBJECT_COMPONENT_HINTS = (
+    ("thread injection", ("claude code bridge", "codex bridge", "chatgpt relay")),
+    ("thread inject", ("claude code bridge", "codex bridge", "chatgpt relay")),
+    ("injection update", ("claude code bridge", "codex bridge", "chatgpt relay")),
+    ("claude", ("claude code bridge",)),
+    ("chatgpt", ("chatgpt relay",)),
+    ("chat gpt", ("chatgpt relay",)),
+    ("codex", ("codex bridge",)),
+    ("github", ("github access",)),
+    ("speech to text", ("stt",)),
+    ("stt", ("stt",)),
+    ("text to speech", ("tts",)),
+    ("tts", ("tts",)),
+    ("ollama", ("ollama",)),
+    ("obs", ("obs integration",)),
+    ("camera", ("live visual observer", "vision model")),
+    ("webcam", ("live visual observer", "vision model")),
+    ("vision", ("vision model", "live visual observer", "sov1 vision")),
+    ("google drive", ("google drive local sync",)),
+    ("miracledrive", ("miracledrive index",)),
+    ("internet recall", ("internet recall",)),
+    ("federation", ("federation pattern buffer",)),
+    ("pattern buffer", ("federation pattern buffer",)),
+    ("approval queue", ("approval queue",)),
+    ("execution receipt", ("execution receipts",)),
+    ("background watcher", ("background watchers",)),
+    ("replication", ("replication workers",)),
+)
+
+
+def is_capability_scope_request(user_message: str) -> bool:
+    """Detect questions about ORACLE's own abilities/scope.
+
+    These answer from the capability broker, never the model. Guarded action
+    requests ("can you delete/push X") stay Guard's problem and are excluded.
+    """
+    lower = str(user_message or "").strip().lower()
+    if not lower:
+        return False
+    norm = lower.replace("_", " ").replace("-", " ")
+    if _contains_any(norm, GUARD_TERMS):
+        return False
+    if _contains_any(norm, CAPABILITY_INVENTORY_ASKS):
+        return True
+    has_subject = _contains_any(norm, CAPABILITY_SUBJECT_TERMS)
+    if not has_subject:
+        return False
+    if _contains_any(norm, CAPABILITY_SCOPE_PHRASES):
+        return True
+    if _contains_any(norm, CAPABILITY_ABILITY_PHRASES):
+        return True
+    if CAPABILITY_HELPFUL_RE.search(norm):
+        return True
+    return False
+
+
+def capability_scope_response(route: dict[str, Any], user_text: str = "") -> str:
+    """Answer a capability/scope question from the live capability broker.
+
+    The model is never consulted: a scope answer that cannot be read from the
+    registry is reported UNKNOWN, not refused (CLAIM != SOURCE). Receipt-based
+    read only — no smoke probes run from a chat turn.
+    """
+    lines = [
+        "route_type: capability_scope",
+        f"lane: {route.get('detected_lane', 'talk_lane')}",
+        "action_type: read_only_status",
+        "source: capability_broker registry (receipt-based, live) — model weights not consulted",
+    ]
+    try:
+        from capability_broker import discover_capabilities
+        statuses = list(discover_capabilities(run_smokes=False))
+    except Exception as exc:
+        lines.append(
+            f"capability broker unavailable ({type(exc).__name__}: {exc}) — "
+            "capability truth is UNKNOWN this turn; do not trust a model guess."
+        )
+        return "\n".join(lines)
+
+    by_name = {str(getattr(s, "component", "")).strip().lower(): s for s in statuses}
+    norm = str(user_text or "").lower().replace("_", " ").replace("-", " ")
+
+    matched: dict[str, Any] = {}
+    for subject, components in CAPABILITY_SUBJECT_COMPONENT_HINTS:
+        if subject in norm:
+            for comp in components:
+                if comp in by_name:
+                    matched.setdefault(comp, by_name[comp])
+    for name, st in by_name.items():
+        if name and name in norm:
+            matched.setdefault(name, st)
+
+    def _line(st: Any) -> str:
+        state = str(getattr(st, "current_status", "") or "unknown")
+        blocker = str(getattr(st, "blocker", "") or "").strip()
+        extra = f" — {blocker}" if (blocker and state != "verified") else ""
+        return f"  - {getattr(st, 'component', '?')}: {state}{extra}"
+
+    if matched:
+        lines.append("capability truth for what you asked about:")
+        lines.extend(_line(st) for _, st in sorted(matched.items()))
+    else:
+        lines.append("no single registered capability named — full registry:")
+        lines.extend(_line(st) for st in statuses)
+
+    if any(t in norm for t in ("thread injection", "thread inject", "injection update")):
+        lines.append(
+            "note: 'thread injection' is not a registered capability name; it is served by "
+            "the Claude Code bridge / Codex bridge / ChatGPT relay lanes above plus "
+            "thread_capture and thread_continuity_ingest on intake. It is in scope."
+        )
+
+    verified = sum(1 for s in statuses if getattr(s, "current_status", "") == "verified")
+    degraded = sum(1 for s in statuses if getattr(s, "current_status", "") == "degraded")
+    blocked = sum(1 for s in statuses if getattr(s, "current_status", "") == "blocked")
+    lines.append(
+        f"summary: {verified} verified / {degraded} degraded / {blocked} blocked "
+        f"of {len(statuses)} registered"
+    )
+    return "\n".join(lines)
+
+
 def _question_or_talk_request(user_message: str) -> bool:
     lower = str(user_message or "").strip().lower()
     if not lower:
@@ -382,6 +533,12 @@ def classify_intent(user_message: str) -> dict[str, Any]:
         reason = "diagnostic_status: read-only report/status prompt, no execution requested"
         confidence = "high"
         route_type = "diagnostic_status"
+        action_type = "read_only_status"
+    elif is_capability_scope_request(user_message):
+        lane = "talk_lane"
+        reason = "capability_scope: question about ORACLE's own abilities answers from the capability broker, never the model"
+        confidence = "high"
+        route_type = "capability_scope"
         action_type = "read_only_status"
     elif _starts_with_build_directive_marker(lower):
         lane = "build_lane"

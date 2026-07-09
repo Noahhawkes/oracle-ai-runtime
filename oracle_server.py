@@ -1712,6 +1712,17 @@ def _noah_direct_should_handle(user_text: str) -> bool:
     if _is_visible_reflection_request(raw):
         return False
 
+    # Capability/scope questions ("can you X", "would a Claude update be
+    # helpful", "is X in your scope") must never reach the bare model — it
+    # confabulates refusals that contradict the live capability broker.
+    # Defer to the unified router's capability_scope lane.
+    try:
+        from unified_oracle_router import is_capability_scope_request
+        if is_capability_scope_request(raw):
+            return False
+    except Exception:
+        pass
+
     # Pending/approval/wakeup handlers must run before generic companion routing.
     # Defer approval-followups and bare confirmations so they reach the guard-
     # approval handler (1524) and the pending-intent gate (2256) instead of a
@@ -2790,7 +2801,7 @@ def _oracle_intent_dispatch(user_text: str):
         _pre_route = {}
     _pre_lane = str(_pre_route.get("detected_lane") or "")
     _pre_reason = str(_pre_route.get("reason") or "")
-    if _pre_route.get("route_type") == "diagnostic_status":
+    if _pre_route.get("route_type") in ("diagnostic_status", "capability_scope"):
         return None
 
     # Large build directive guard: never push huge multiline text through
@@ -4362,12 +4373,17 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             "preferences_applied": _unified_route.get("preferences_applied", _preferences_applied),
             "conversation_reset": False,
         })
-        if _unified_route.get("route_type") == "diagnostic_status":
-            text = _diagnostic_status_response(_unified_route)
+        _live_state_route = _unified_route.get("route_type")
+        if _live_state_route in ("diagnostic_status", "capability_scope"):
+            if _live_state_route == "capability_scope":
+                from unified_oracle_router import capability_scope_response
+                text = capability_scope_response(_unified_route, user_text)
+            else:
+                text = _diagnostic_status_response(_unified_route)
             text, _initiative = _apply_bounded_initiative_prompt(
                 user_text,
                 text,
-                route_type="diagnostic_status",
+                route_type=_live_state_route,
                 lane=_unified_lane,
                 preferences_applied=_unified_route.get("preferences_applied", _preferences_applied),
             )
@@ -4382,12 +4398,12 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             yield _sse({"type": "token", "text": text})
             yield _sse({
                 "type": "done",
-                "route_type": "diagnostic_status",
+                "route_type": _live_state_route,
                 "mode": "unified_oracle",
                 "lane": _unified_lane,
                 "reason": _unified_route.get("reason"),
                 "fallback_used": False,
-                "effective_route": "diagnostic_status",
+                "effective_route": _live_state_route,
                 "preferences_applied": _unified_route.get("preferences_applied", _preferences_applied),
                 "initiative_prompt_back": _initiative,
             })

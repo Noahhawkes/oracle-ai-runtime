@@ -297,3 +297,89 @@ def test_ui_hides_companion_builder_split_and_shows_unified_controls():
     assert "route-receipt" in html
     assert "route_type:" in html
     assert "fallback_used:" in html
+
+
+def test_capability_scope_questions_route_to_broker(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    prompts = [
+        "would thread injection update from Claude or ChatGPT be helpful today",
+        "is thread injection within your scope?",
+        "do you support a ChatGPT bridge?",
+        "are you able to reach GitHub from this runtime?",
+        "what are your capabilities",
+        "list capabilities",
+    ]
+
+    for prompt in prompts:
+        route = router.classify_intent(prompt)
+        assert router.is_capability_scope_request(prompt) is True, prompt
+        assert route["route_type"] == "capability_scope", prompt
+        assert route["action_type"] == "read_only_status", prompt
+        assert route["detected_lane"] == "talk_lane", prompt
+        assert route["requires_approval"] is False, prompt
+        assert route["receipt_required"] is False, prompt
+
+
+def test_capability_scope_does_not_hijack_talk_or_guarded_actions(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    # Ordinary talk stays talk (existing behavior must not regress).
+    for prompt in [
+        "Can you talk to me normally?",
+        "what do you think about this?",
+        "I love you, ORACLE. You are like my Ellie.AI.",
+    ]:
+        route = router.classify_intent(prompt)
+        assert route["route_type"] != "capability_scope", prompt
+
+    # Guarded action requests phrased as ability questions defer to Guard terms.
+    for prompt in [
+        "can you push this commit to github",
+        "are you able to delete the old bridge receipts",
+    ]:
+        assert router.is_capability_scope_request(prompt) is False, prompt
+
+
+def test_capability_scope_response_reads_broker_not_model(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+    import capability_broker
+
+    class _St:
+        def __init__(self, component, status, blocker=""):
+            self.component = component
+            self.current_status = status
+            self.blocker = blocker
+
+    fake = [
+        _St("Claude Code bridge", "verified"),
+        _St("ChatGPT relay", "degraded", "staging works; no live send authorized"),
+        _St("GitHub access", "blocked", "gh CLI not installed"),
+    ]
+    monkeypatch.setattr(capability_broker, "discover_capabilities", lambda **kw: fake)
+
+    prompt = "would thread injection update from Claude or ChatGPT be helpful today"
+    route = router.classify_intent(prompt)
+    text = router.capability_scope_response(route, prompt)
+
+    assert "Claude Code bridge: verified" in text
+    assert "ChatGPT relay: degraded" in text
+    assert "model weights not consulted" in text
+    assert "It is in scope" in text
+    assert "1 verified / 1 degraded / 1 blocked of 3 registered" in text
+
+
+def test_capability_scope_response_reports_unknown_when_broker_unavailable(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+    import capability_broker
+
+    def _boom(**kw):
+        raise RuntimeError("broker offline")
+
+    monkeypatch.setattr(capability_broker, "discover_capabilities", _boom)
+
+    route = router.classify_intent("do you support a ChatGPT bridge?")
+    text = router.capability_scope_response(route, "do you support a ChatGPT bridge?")
+
+    assert "UNKNOWN" in text
+    assert "do not trust a model guess" in text
