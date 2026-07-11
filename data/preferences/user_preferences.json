@@ -4,7 +4,7 @@
     {
       "preference_id": "pref_no_self_intro",
       "created_at": "2026-07-01T23:52:11.265195Z",
-      "updated_at": "2026-07-02T22:23:19.260132Z",
+      "updated_at": "2026-07-10T01:56:12.382885Z",
       "source": "Noah.Physical",
       "scope": "global",
       "category": "interaction_style",
@@ -14,7 +14,7 @@
       "canon_status": "preference",
       "promotion_status": "not_applicable",
       "requires_safety_override": false,
-      "receipt_id": "prefrec_9da0a0419c9c",
+      "receipt_id": "prefrec_311f920689e5",
       "last_action": "persona_router_detected_preference"
     },
     {
@@ -66,5 +66,5 @@
       "last_action": "noah_direct_preference"
     }
   ],
-  "updated_at": "2026-07-02T22:23:19.260132Z"
+  "updated_at": "2026-07-10T01:56:12.382885Z"
 }
