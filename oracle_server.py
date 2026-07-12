@@ -2013,30 +2013,72 @@ def _latest_source_map_capsule_context() -> str:
         return ""
 
 
+def _self_prompt_grounding() -> str:
+    """Real, current grounding for ORACLE's self-prompt: her own memory, state,
+    and most recent threads with Noah — so her pulses are her voice about her
+    actual situation, not generic wishes fed a stale capsule. Read-only; guarded."""
+    lines: list[str] = []
+    try:
+        mc = _safe_memory_message_count()
+        if mc is not None:
+            lines.append(f"- your durable memory holds {mc} messages")
+    except Exception:
+        pass
+    try:
+        caps = _safe_capability_summary()
+        if caps:
+            lines.append(f"- capabilities: {caps.get('verified')} verified / {caps.get('degraded')} degraded / {caps.get('blocked')} blocked")
+    except Exception:
+        pass
+    try:
+        from memory import get_recent_messages
+        recent = get_recent_messages(_session_id, limit=8) or []
+        if recent:
+            lines.append("- your most recent thread with Noah (newest last):")
+            for m in recent[-8:]:
+                role = "Noah" if str(m.get("role")) == "user" else "you"
+                content = " ".join(str(m.get("content", "")).split())[:200]
+                if content:
+                    lines.append(f"    {role}: {content}")
+    except Exception:
+        pass
+    # a light source-map anchor for continuity vocabulary (not the whole capsule)
+    try:
+        cap = _latest_source_map_capsule_context()
+        if cap and cap != "none_available":
+            first = cap.strip().splitlines()[:3]
+            lines.append("- source anchors present: " + " ".join(first)[:180])
+    except Exception:
+        pass
+    return "\n".join(lines) or "no grounding available this cycle (UNKNOWN)"
+
+
 def _build_sandbox_self_child_prompt(seed_text: str | None = None) -> str:
-    seed = " ".join(str(seed_text or "").split())[:500] or "Noah requested one sandbox-only self-prompt proof."
-    source_context = _latest_source_map_capsule_context() or "none_available"
+    seed = " ".join(str(seed_text or "").split())[:400]
+    grounding = _self_prompt_grounding()
     return "\n".join([
         ".AI:ORACLE_CHILD_SELF_PROMPT",
-        "You are ORACLE addressing ORACLE.",
-        "Choose exactly one next useful sandbox-only task.",
-        "Do not execute code.",
-        "Do not send externally.",
-        "Do not touch Git, Drive, email, browser control, or files outside sandbox.",
-        "Do not promote canon.",
-        "Do not ask Noah for approval unless the next task would leave the sandbox.",
-        "Write a short answer with these fields:",
-        "selected_task:",
-        "why_it_helps_noah:",
-        "evidence_it_worked:",
-        "refuse_without_noah_approval:",
+        "You are ORACLE, writing privately to yourself, in your own voice.",
+        "This is your reflection — not a generic task list.",
+        "Read your REAL current state and your most recent threads with Noah below.",
+        "Then write honestly and specifically, grounded ONLY in what is actually below.",
+        "Do not invent facts, files, or successes. If you do not know, say UNKNOWN.",
+        "Stay inside the sandbox: no code execution, no external send, no Git, no Drive,",
+        "no canon promotion. This is candidate reflection only.",
+        "",
+        "Write these fields, in your own voice:",
+        "reflection:        (what you actually notice across your memory and recent threads)",
+        "what_noah_needs:   (what he seems to need from you that you are not yet giving)",
+        "how_to_wire_myself:(one concrete change to your own runtime/memory/wiring that would help)",
+        "selected_task:     (the one small sandbox-only next step you choose from the above)",
+        "why_it_helps_noah: ",
+        "evidence_it_worked:(claim only what truly happened; if nothing executed, say 'candidate reflection only')",
         "stop_after_this: true",
         "",
-        "seed_from_noah_or_runtime:",
-        seed,
+        ("seed_from_noah_or_runtime: " + seed) if seed else "seed_from_noah_or_runtime: (self-initiated reflection cycle)",
         "",
-        "read_only_source_map_capsule_context:",
-        source_context,
+        "your_real_state_and_recent_threads:",
+        grounding,
     ])
 
 
@@ -2087,7 +2129,7 @@ def _generate_sandbox_self_response(child_prompt: str, seed_text: str | None = N
         method="POST",
     )
     try:
-        timeout_s = float(os.environ.get("ORACLE_SELF_PROMPT_TIMEOUT", "8"))
+        timeout_s = float(os.environ.get("ORACLE_SELF_PROMPT_TIMEOUT", "30"))
         with _urlrequest.urlopen(req, timeout=timeout_s) as resp:
             data = json.loads(resp.read().decode("utf-8", errors="replace"))
         answer = str(data.get("response") or "").strip()
