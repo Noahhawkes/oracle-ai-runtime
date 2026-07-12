@@ -175,15 +175,20 @@ def is_rendered_reality_prompt(text: str) -> bool:
     return "rendered reality" in _lower(text) or "renderedreality" in _lower(text)
 
 
+# Word-boundary match: "author/authors/authored/authorship/authorial" only.
+# Substring matching trapped every prompt containing "authority" or
+# "authorization" in the authorship domain (2026-07-10 custody refusal loop).
+_AUTHORSHIP_WORD_RE = re.compile(r"\bauthor(?:s|ed|ship|ial)?\b", re.IGNORECASE)
+
+
 def is_authorship_prompt(text: str) -> bool:
     low = _lower(text)
     return (
-        "author" in low
-        or "authorship" in low
-        or "authorial" in low
+        _AUTHORSHIP_WORD_RE.search(low) is not None
         or "ai helped" in low
         or "token origin" in low
         or "token-origin" in low
+        or "token_origin" in low
     )
 
 
@@ -393,7 +398,22 @@ def rendered_reality_acceptance_failure(answer: str) -> str | None:
     return None
 
 
-def authorship_acceptance_failure(answer: str) -> str | None:
+def _user_supplied_authorship_boundary(user_text: str) -> bool:
+    """True when the prompt itself defines the token-origin/authorial-authority
+    boundary. Requiring the model to parrot the boundary back after Noah has
+    already supplied it creates an inescapable refusal loop (2026-07-10:
+    CUSTODY_BOUNDARY_SUPPLY was rejected with the very error it answered)."""
+    low = _lower(user_text)
+    has_token = "token_origin" in low or "token-origin" in low or "token origin" in low
+    has_authority = (
+        "authorial_authority" in low
+        or "authorial-authority" in low
+        or "authorial authority" in low
+    )
+    return has_token and has_authority
+
+
+def authorship_acceptance_failure(answer: str, user_text: str = "") -> str | None:
     low = _lower(answer)
     if not low:
         return "empty authorship answer"
@@ -407,6 +427,7 @@ def authorship_acceptance_failure(answer: str) -> str | None:
     has_token_origin = (
         "token-origin" in low
         or "token origin" in low
+        or "token_origin" in low
         or ("tokens" in low and "author" in low)
     )
     has_authority_boundary = "authorial-authority" in low or "authorial authority" in low
@@ -414,7 +435,7 @@ def authorship_acceptance_failure(answer: str) -> str | None:
         failures.append("generic creative-team authorship answer")
     if not has_noah_authority:
         failures.append("missing Noah.Physical/Noah Hawkes authorial authority")
-    if not (has_token_origin and has_authority_boundary):
+    if not (has_token_origin and has_authority_boundary) and not _user_supplied_authorship_boundary(user_text):
         failures.append("missing token-origin vs authorial-authority boundary")
     return "; ".join(failures) if failures else None
 
@@ -1079,7 +1100,7 @@ def violation_reasons(user_text: str, answer: str, retrieved_lines) -> list[str]
         if failure:
             reasons.append(failure)
     if is_authorship_prompt(user_text):
-        failure = authorship_acceptance_failure(answer)
+        failure = authorship_acceptance_failure(answer, user_text)
         if failure:
             reasons.append(failure)
     failure = ellie_acceptance_failure(user_text, answer)

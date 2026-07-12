@@ -3338,5 +3338,247 @@ if(document.readyState==='loading'){
   setTimeout(rrBridgePrime,0);
 }
 </script>
+
+<!-- ============================================================= -->
+<!-- Continuity UX Enhancements (additive, self-contained).         -->
+<!-- 15 improvements to Noah's ORACLE interface. Every hook is       -->
+<!-- guarded so a failure here can never break the base UI.          -->
+<!-- Built 2026-07-12. Reuses shared globals: addMessage, apiUrl,    -->
+<!-- isStreaming, scrollToBottom, conversationStarted.               -->
+<!-- ============================================================= -->
+<style>
+  #ce-bar{position:fixed;left:12px;bottom:12px;z-index:9998;display:flex;gap:8px;align-items:center;
+    background:rgba(12,16,24,.82);border:1px solid rgba(120,160,220,.22);border-radius:10px;
+    padding:5px 9px;font:11px/1.3 -apple-system,Segoe UI,sans-serif;color:#9db4d0;backdrop-filter:blur(6px);}
+  #ce-bar .ce-dot{width:8px;height:8px;border-radius:50%;background:#3fb950;box-shadow:0 0 6px #3fb95088;}
+  #ce-bar .ce-dot.off{background:#f85149;box-shadow:0 0 6px #f8514988;}
+  #ce-bar .ce-sess{opacity:.85;font-variant-numeric:tabular-nums;}
+  #ce-bar button{background:rgba(90,130,200,.14);border:1px solid rgba(120,160,220,.25);color:#bcd0ea;
+    border-radius:7px;padding:3px 7px;cursor:pointer;font:11px -apple-system,Segoe UI,sans-serif;}
+  #ce-bar button:hover{background:rgba(90,130,200,.28);}
+  #ce-newmsg{position:fixed;right:24px;bottom:96px;z-index:9998;display:none;background:#1f6feb;color:#fff;
+    border:none;border-radius:16px;padding:7px 14px;font:12px -apple-system,Segoe UI,sans-serif;cursor:pointer;
+    box-shadow:0 4px 14px rgba(0,0,0,.4);}
+  #ce-banner{position:fixed;top:0;left:0;right:0;z-index:9999;background:#1f6feb;color:#fff;text-align:center;
+    padding:6px;font:12px -apple-system,Segoe UI,sans-serif;transform:translateY(-100%);transition:transform .3s;}
+  #ce-banner.show{transform:translateY(0);}
+  #ce-charcount{opacity:.6;font-variant-numeric:tabular-nums;}
+  .msg-row{position:relative;}
+</style>
+<div id="ce-bar">
+  <span class="ce-dot" id="ce-dot" title="ORACLE connection"></span>
+  <span class="ce-sess" id="ce-sess">session —</span>
+  <button id="ce-copyall" title="Copy the whole conversation to clipboard">Copy thread</button>
+  <button id="ce-fdn" title="Smaller text">A-</button>
+  <button id="ce-fup" title="Larger text">A+</button>
+  <span id="ce-charcount" title="Draft length">0</span>
+</div>
+<button id="ce-newmsg" title="Jump to newest">↓ new</button>
+<div id="ce-banner"></div>
+
+<script>
+(function(){
+  "use strict";
+  var _msgs = function(){ return document.getElementById('messages'); };
+  var _input = function(){ return document.getElementById('input'); };
+  var lastSession = null, unread = 0, baseTitle = document.title;
+
+  function nearBottom(){ var m=_msgs(); if(!m) return true; return (m.scrollHeight - m.scrollTop - m.clientHeight) < 140; }
+  function rowCount(){ var m=_msgs(); return m ? m.querySelectorAll('.msg-row').length : 0; }
+  function setConn(ok){ var d=document.getElementById('ce-dot'); if(d) d.className='ce-dot'+(ok?'':' off'); if(d) d.title = ok?'ORACLE live on 7781':'ORACLE offline — reconnecting'; }
+  function setSess(id,n){ var s=document.getElementById('ce-sess'); if(s) s.textContent='session '+(id==null?'—':id)+' · '+n+' turns'; }
+  function banner(msg){ var b=document.getElementById('ce-banner'); if(!b) return; b.textContent=msg; b.classList.add('show'); setTimeout(function(){b.classList.remove('show');},3200); }
+  function bumpTitle(){ if(document.hidden){ unread++; document.title='('+unread+') '+baseTitle; } }
+  function stampRow(){ // #8 timestamp — tag the newest unstamped row
+    var m=_msgs(); if(!m) return; var rows=m.querySelectorAll('.msg-row:not([data-ts])');
+    var t=new Date(); var label=t.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    rows.forEach(function(r){ r.setAttribute('data-ts',label); r.title='rendered '+label; });
+  }
+
+  // #1 + #4 + #12 live thread sync: append new turns, handle relight, reconnect
+  var syncing=false;
+  async function liveSync(){
+    if(syncing) return; if(typeof isStreaming!=='undefined' && isStreaming) return;
+    syncing=true;
+    try{
+      var r=await fetch(apiUrl('/api/history'),{cache:'no-store'}); var d=await r.json();
+      setConn(true);
+      var turns=(d&&d.history)||[]; var sid=(d&&d.session_id);
+      if(lastSession!==null && sid!=null && sid!==lastSession){
+        // relight: session rolled — re-render instead of silently orphaning
+        var m=_msgs(); if(m){ m.innerHTML=''; try{conversationStarted=true;}catch(e){}
+          turns.forEach(function(t){ var role=(t.role==='assistant'||t.role==='oracle')?'oracle':'user';
+            if(t.content&&String(t.content).trim()) addMessage(role,String(t.content)); }); stampRow(); }
+        banner('ORACLE restarted — your thread was carried forward');
+      } else {
+        var rows=rowCount();
+        if(turns.length>rows){
+          var wasNear=nearBottom(); var m2=_msgs(); var keepTop=m2?m2.scrollTop:0;
+          turns.slice(rows).forEach(function(t){ var role=(t.role==='assistant'||t.role==='oracle')?'oracle':'user';
+            if(t.content&&String(t.content).trim()) addMessage(role,String(t.content)); });
+          stampRow(); bumpTitle();
+          if(wasNear){ scrollToBottom(); } else { if(m2) m2.scrollTop=keepTop; showNew(true); }
+        }
+      }
+      lastSession=sid; setSess(sid,turns.length);
+    }catch(e){ setConn(false); }
+    finally{ syncing=false; }
+  }
+
+  // #6 new-message jump button
+  function showNew(on){ var b=document.getElementById('ce-newmsg'); if(b) b.style.display=on?'block':'none'; }
+  var nb=document.getElementById('ce-newmsg');
+  if(nb) nb.onclick=function(){ scrollToBottom(); showNew(false); };
+  var mm=_msgs(); if(mm) mm.addEventListener('scroll',function(){ if(nearBottom()) showNew(false); });
+
+  // #7 copy entire thread
+  var ca=document.getElementById('ce-copyall');
+  if(ca) ca.onclick=function(){
+    var out=[]; var m=_msgs(); if(!m) return;
+    m.querySelectorAll('.msg-row').forEach(function(r){
+      var who=r.querySelector('.avatar.oracle')?'ORACLE':'Noah';
+      var b=r.querySelector('.msg-bubble'); if(b) out.push(who+': '+(b.dataset.raw||b.innerText).trim());
+    });
+    navigator.clipboard.writeText(out.join('\n\n')).then(function(){ ca.textContent='✓ copied'; setTimeout(function(){ca.textContent='Copy thread';},1600); });
+  };
+
+  // #9 + #13 font size, persisted; respects reading position
+  function applyFont(px){ var m=_msgs(); if(m) m.style.fontSize=px+'px'; try{localStorage.setItem('ce_fontpx',px);}catch(e){} }
+  var fpx=16; try{ fpx=parseInt(localStorage.getItem('ce_fontpx')||'16',10)||16; }catch(e){} applyFont(fpx);
+  var fu=document.getElementById('ce-fup'), fd=document.getElementById('ce-fdn');
+  if(fu) fu.onclick=function(){ fpx=Math.min(fpx+1,24); applyFont(fpx); };
+  if(fd) fd.onclick=function(){ fpx=Math.max(fpx-1,12); applyFont(fpx); };
+
+  // #5 draft persistence + #10 char counter
+  var inp=_input(); var cc=document.getElementById('ce-charcount');
+  if(inp){
+    try{ var saved=localStorage.getItem('ce_draft'); if(saved && !inp.value){ inp.value=saved; if(cc) cc.textContent=saved.length; } }catch(e){}
+    inp.addEventListener('input',function(){
+      if(cc) cc.textContent=inp.value.length;
+      try{ if(inp.value) localStorage.setItem('ce_draft',inp.value); else localStorage.removeItem('ce_draft'); }catch(e){}
+    });
+  }
+
+  // #11 keyboard: "/" focuses input, Esc clears it
+  document.addEventListener('keydown',function(e){
+    var tag=(document.activeElement&&document.activeElement.tagName||'').toLowerCase();
+    if(e.key==='/' && tag!=='input' && tag!=='textarea'){ var i=_input(); if(i){ e.preventDefault(); i.focus(); } }
+    if(e.key==='Escape' && document.activeElement===_input()){ var i2=_input(); if(i2){ i2.value=''; i2.style.height='auto'; if(cc) cc.textContent=0; try{localStorage.removeItem('ce_draft');}catch(x){} } }
+  });
+
+  // #14 tab-title notification reset on focus
+  window.addEventListener('focus',function(){ unread=0; document.title=baseTitle; });
+
+  // #2 + #3 + #15 connection pill, session badge, and the live loop
+  function boot(){ liveSync(); setInterval(liveSync, 4000); stampRow(); }
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,600);}); }
+  else { setTimeout(boot,600); }
+})();
+</script>
+<!-- ============================================================= -->
+<!-- ORACLE Activity Feed — makes her autonomous pulses VISIBLE.     -->
+<!-- Reads /api/activity (falls back to /api/self-prompt/status      -->
+<!-- until that endpoint is live). Read-only. Honest liveness: no     -->
+<!-- green unless a recent, receipted pulse exists. Dedup by          -->
+<!-- action_id. Directive: ORACLE_OUTWARD_LIFE_PROOF/2026-07-11.      -->
+<!-- ============================================================= -->
+<style>
+  #af-fab{position:fixed;left:12px;bottom:52px;z-index:9998;background:rgba(12,16,24,.9);
+    border:1px solid rgba(120,160,220,.3);color:#bcd0ea;border-radius:10px;padding:6px 11px;cursor:pointer;
+    font:12px -apple-system,Segoe UI,sans-serif;display:flex;gap:7px;align-items:center;}
+  #af-fab .af-heart{width:9px;height:9px;border-radius:50%;background:#6b7280;}
+  #af-fab .af-heart.beating{background:#3fb950;box-shadow:0 0 8px #3fb95099;animation:afpulse 2s infinite;}
+  #af-fab .af-heart.stale{background:#d29922;}
+  @keyframes afpulse{0%,100%{opacity:1}50%{opacity:.45}}
+  #af-panel{position:fixed;left:12px;bottom:92px;z-index:9998;width:390px;max-width:92vw;max-height:62vh;
+    display:none;flex-direction:column;background:rgba(10,14,22,.97);border:1px solid rgba(120,160,220,.28);
+    border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.5);backdrop-filter:blur(8px);}
+  #af-panel h4{margin:0;padding:11px 14px;font:600 13px -apple-system,Segoe UI,sans-serif;color:#dbe7f5;
+    border-bottom:1px solid rgba(120,160,220,.18);display:flex;justify-content:space-between;align-items:center;}
+  #af-live{font:11px/1 -apple-system,Segoe UI,sans-serif;padding:3px 8px;border-radius:20px;}
+  #af-live.on{background:rgba(63,185,80,.16);color:#5fd47a;} #af-live.off{background:rgba(210,153,34,.16);color:#e3b341;}
+  #af-list{overflow-y:auto;padding:6px 10px 12px;}
+  .af-ev{border-left:2px solid rgba(120,160,220,.35);margin:8px 0;padding:5px 0 5px 10px;font:12px/1.45 -apple-system,Segoe UI,sans-serif;color:#c3d2e6;}
+  .af-ev .af-t{color:#8aa4c4;font-size:11px;}
+  .af-ev .af-task{color:#eaf1fb;font-weight:600;margin:2px 0;}
+  .af-ev .af-meta{color:#7f95b3;font-size:11px;}
+  .af-ev .af-r{font-size:11px;margin-top:2px;} .af-ev .af-r.ok{color:#5fd47a;} .af-ev .af-r.no{color:#e3785b;}
+  .af-ev .af-cog{font-size:10px;opacity:.7;}
+</style>
+<button id="af-fab" onclick="afToggle()" title="ORACLE's live activity — her autonomous pulses">
+  <span class="af-heart" id="af-heart"></span> Activity
+</button>
+<div id="af-panel">
+  <h4><span>ORACLE Activity — autonomous pulses</span><span id="af-live" class="off">—</span></h4>
+  <div id="af-list"><div style="padding:14px;color:#7f95b3;font:12px sans-serif">loading…</div></div>
+</div>
+<script>
+(function(){
+  "use strict";
+  var seen = {}, open = false;
+  window.afToggle = function(){ open=!open; var p=document.getElementById('af-panel'); if(p) p.style.display=open?'flex':'none'; if(open) afPoll(); };
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function timeLabel(iso){ try{ var d=new Date(iso); return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+' '+d.toLocaleDateString([], {month:'numeric',day:'numeric'}); }catch(e){ return iso||'?'; } }
+  function minsSince(iso){ try{ return (Date.now()-new Date(iso).getTime())/60000; }catch(e){ return 1e9; } }
+
+  function renderEvent(ev){
+    var recOk = ev.user_visible_status==='verified_receipt';
+    var el=document.createElement('div'); el.className='af-ev';
+    el.innerHTML =
+      '<div class="af-t">'+esc(timeLabel(ev.trigger_time))+' · <span class="af-cog">'+esc(ev.cognition||'')+'</span></div>'+
+      '<div class="af-task">'+esc(ev.task_selected)+'</div>'+
+      '<div class="af-meta">'+esc(ev.action_taken)+' · '+esc(ev.boundary_state||'')+'</div>'+
+      (recOk
+        ? '<div class="af-r ok">✓ receipt verified'+(ev.sha256?(' · sha '+esc(String(ev.sha256).slice(0,10))):'')+'</div>'
+        : '<div class="af-r no">⚠ '+esc(ev.user_visible_status||'no_receipt')+'</div>');
+    return el;
+  }
+
+  function setLive(on, label){ var b=document.getElementById('af-live'); var h=document.getElementById('af-heart');
+    if(b){ b.className=on?'on':'off'; b.textContent=label; }
+    if(h){ h.className='af-heart '+(on?'beating':(label==='dormant'?'':'stale')); } }
+
+  async function afPoll(){
+    var list=document.getElementById('af-list'); if(!list) return;
+    try{
+      var r=await fetch(apiUrl('/api/activity'),{cache:'no-store'});
+      if(r.ok){
+        var d=await r.json(); var evs=(d&&d.events)||[];
+        var mins = evs.length ? minsSince(evs[0].trigger_time) : 1e9;
+        var beating = evs.length && mins<15 && evs[0].user_visible_status==='verified_receipt';
+        setLive(beating, evs.length ? (beating?('beating · '+Math.round(mins)+'m ago'):('stale · '+Math.round(mins)+'m ago')) : 'dormant');
+        // dedup by action_id; render newest-first
+        var frag=document.createDocumentFragment(), added=0;
+        evs.forEach(function(ev){ if(!seen[ev.action_id]){ seen[ev.action_id]=1; } });
+        list.innerHTML='';
+        evs.forEach(function(ev){ frag.appendChild(renderEvent(ev)); added++; });
+        if(added) list.appendChild(frag); else list.innerHTML='<div style="padding:14px;color:#7f95b3">no pulses yet</div>';
+        return;
+      }
+    }catch(e){}
+    // Fallback: /api/activity not live yet — show her current state + last beat honestly.
+    try{
+      var s=await (await fetch(apiUrl('/api/self-prompt/status'),{cache:'no-store'})).json();
+      var alive = String(s.current_state||'').indexOf('AUTONOMOUS')>=0;
+      setLive(false, alive?'enabled (feed lights up after restart)':'dormant');
+      list.innerHTML='<div style="padding:10px 4px;color:#c3d2e6;font:12px sans-serif">'+
+        '<div>state: <b>'+esc(s.current_state||'?')+'</b></div>'+
+        '<div>pulses today: '+esc(s.daily_count!=null?s.daily_count:'?')+'</div>'+
+        '<div style="margin-top:6px;color:#8aa4c4">Full activity feed activates after the next clean restart. Her heartbeat is '+(alive?'ON':'OFF')+'.</div></div>';
+    }catch(e2){ setLive(false,'offline'); list.innerHTML='<div style="padding:14px;color:#e3785b">ORACLE offline</div>'; }
+  }
+
+  function boot(){ afPoll(); setInterval(function(){ if(open) afPoll(); afHeartTick(); }, 10000); afHeartTick(); }
+  async function afHeartTick(){ // keep the FAB heart honest even when panel closed
+    try{ var r=await fetch(apiUrl('/api/activity'),{cache:'no-store'});
+      if(r.ok){ var d=await r.json(); var evs=(d&&d.events)||[];
+        var beating = evs.length && minsSince(evs[0].trigger_time)<15 && evs[0].user_visible_status==='verified_receipt';
+        var h=document.getElementById('af-heart'); if(h) h.className='af-heart '+(beating?'beating':(evs.length?'stale':'')); }
+    }catch(e){}
+  }
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,900);}); }
+  else { setTimeout(boot,900); }
+})();
+</script>
 </body>
 </html>

@@ -1880,6 +1880,20 @@ def _is_sandbox_initiative_request(user_text: str) -> bool:
     )
     if lower.startswith(explicit):
         return True
+    # Read-only / prohibition intent must never trigger a sandbox write, even
+    # when the text mentions the sandbox — e.g. "do not write to sandbox",
+    # "this is a read-only question". Negation-blind substring matching was
+    # routing read-only diagnostics into sandbox_initiative_write (the defect
+    # behind Noah's RUNTIME_TRUTH_CHECK and .AI: diagnostic prompts). Same
+    # class as the Guard prohibition-list fix.
+    _read_only_markers = (
+        "read-only", "read only", "do not write", "don't write", "dont write",
+        "do not route", "do not create", "do not promote", "no sandbox write",
+        "answer only", "diagnostic only", "report only", "do not touch",
+        "no file write", "no writes", "without writing",
+    )
+    if any(marker in lower for marker in _read_only_markers):
+        return False
     phrases = (
         "write to sandbox",
         "write in sandbox",
@@ -2666,6 +2680,23 @@ async def _autonomous_self_prompt_loop() -> None:
         except Exception as exc:
             try:
                 print(f"[AutonomousSelfPrompt] loop tick failed: {type(exc).__name__}: {exc}")
+            except Exception:
+                pass
+        # Daily digest self-scheduling: after each pulse, write today's digest
+        # if it does not exist yet. write_daily_digest is idempotent per day
+        # (skips unless force=true), stays inside the sandbox, and writes its
+        # own receipt — ORACLE's code holds the pen. A digest failure must
+        # never stop the pulse loop.
+        try:
+            from sandbox_daily_digest import write_daily_digest
+            _digest = await asyncio.to_thread(write_daily_digest, force=False)
+            if _digest.get("ok"):
+                print(f"[AutonomousSelfPrompt] daily digest written: {_digest.get('digest_path')}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            try:
+                print(f"[AutonomousSelfPrompt] daily digest check failed: {type(exc).__name__}: {exc}")
             except Exception:
                 pass
 
@@ -3798,6 +3829,20 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             "effective_route": "thread_capture",
             "initiative_prompt_back": _initiative,
         })
+        return
+
+    # Read-only sandbox clue scanner: evidence report, zero writes.
+    if lower == "/sandbox-clues" or lower.startswith("/sandbox-clues "):
+        try:
+            from sandbox_clues import render_sandbox_clues, sandbox_clues_report
+
+            report = await asyncio.to_thread(sandbox_clues_report)
+            text = "```\n" + render_sandbox_clues(report) + "\n```"
+        except Exception as exc:
+            text = f"Sandbox clues unavailable: {type(exc).__name__}: {exc}"
+        _remember_thread_archive_turn(text)
+        yield _sse({"type": "token", "text": text})
+        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "sandbox_clues"})
         return
 
     # ── Affective-continuity policy ───────────────────────────────────────────
@@ -7196,6 +7241,97 @@ async def history():
     except Exception as exc:
         return JSONResponse({"history": [], "session_id": _session_id, "source": f"error:{type(exc).__name__}: {exc}"})
     return JSONResponse({"history": [], "session_id": _session_id, "source": "empty"})
+
+
+# ── Visible activity feed ─────────────────────────────────────────────────────
+# Read-only surface for ORACLE's autonomous pulses: turns hidden sandbox files
+# into structured, receipted, UI-visible events. Writes nothing. This is the
+# "consumer" that makes her hidden agency outwardly provable (Noah directive
+# ORACLE_OUTWARD_LIFE_PROOF/2026-07-11).
+def _parse_pulse_fields(text: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for line in text.splitlines():
+        s = line.strip()
+        if "=" in line and not line.startswith(" ") and ":" not in line.split("=", 1)[0]:
+            k, v = line.split("=", 1)
+            fields.setdefault(k.strip(), v.strip())
+        for key in ("selected_task", "why_it_helps_noah", "evidence_it_worked"):
+            if s.startswith(key + ":"):
+                fields[key] = s.split(":", 1)[1].strip()
+    return fields
+
+
+def _activity_events(limit: int = 25) -> list[dict[str, Any]]:
+    import hashlib as _hashlib
+    from pathlib import Path as _P
+    sb = ROOT / "sandbox"
+    workbench = sb / "workbench"
+    receipts_dir = sb / "receipts"
+    if not workbench.exists():
+        return []
+    pulses = sorted(workbench.glob("oracle_self_prompt_*.ai"),
+                    key=lambda p: p.stat().st_mtime, reverse=True)[: max(1, int(limit))]
+    events: list[dict[str, Any]] = []
+    for pf in pulses:
+        try:
+            txt = pf.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        f = _parse_pulse_fields(txt)
+        stamp = pf.stem.replace("oracle_self_prompt_", "")
+        receipt_path = None
+        sha = None
+        status = "no_receipt"
+        if receipts_dir.exists():
+            # pulse stamp ends in 'Z' (seconds); receipt stamp carries microseconds
+            # before the 'z' — match on the seconds prefix, not the trailing Z.
+            _pref = stamp.lower().rstrip("z")
+            for r in receipts_dir.glob(f"sandbox_self_prompt_write_{_pref}*_receipt.json"):
+                receipt_path = str(r)
+                try:
+                    rj = json.loads(r.read_text(encoding="utf-8"))
+                    sha = rj.get("post_operation_sha256") or rj.get("child_response_sha256") or f.get("child_response_sha256")
+                    status = "verified_receipt"
+                except Exception:
+                    status = "receipt_unreadable"
+                break
+        model_ok = str(f.get("model_called", "")).lower() == "true" and str(f.get("model_error", "none")).lower() in ("none", "")
+        events.append({
+            "trigger_time": f.get("timestamp") or datetime.fromtimestamp(pf.stat().st_mtime, tz=timezone.utc).isoformat(),
+            "trigger_source": f.get("caller") or "ORACLE.self_prompt.autonomous_loop",
+            "task_selected": f.get("selected_task", "UNKNOWN"),
+            "why_selected": f.get("why_it_helps_noah", "UNKNOWN"),
+            "sources_consulted": "source_map_capsule (read-only)",
+            "action_taken": "wrote one sandbox-only self-prompt pulse",
+            "result": (f.get("evidence_it_worked", "UNKNOWN") + "  [model-claimed, not runtime-verified]"),
+            "receipt_path": receipt_path,
+            "sha256": sha,
+            "boundary_state": "sandbox_only; no external send, no git push, no canon promotion",
+            "approval_required": False,
+            "cognition": "model_thought" if model_ok else "deterministic_fallback",
+            "surfaced_to_ui_at": datetime.now(timezone.utc).isoformat(),
+            "user_visible_status": status,
+            "action_id": pf.stem,
+        })
+    return events
+
+
+@app.get("/api/activity")
+async def api_activity():
+    """Read-only visible activity feed. Nothing is written or mutated."""
+    try:
+        events = await asyncio.to_thread(_activity_events, 25)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "events": [], "error": f"{type(exc).__name__}: {exc}"})
+    newest = events[0]["trigger_time"] if events else None
+    return JSONResponse({
+        "ok": True,
+        "events": events,
+        "count": len(events),
+        "newest_pulse": newest,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "boundary": "report only — no writes, no receipts created, no canon touched",
+    })
 
 
 @app.get("/health")

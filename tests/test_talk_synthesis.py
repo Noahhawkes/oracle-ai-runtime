@@ -409,3 +409,53 @@ def test_recursion_arena_boundary_fallback_is_structured_not_story():
     assert "specific blade/context details not provided" in fallback
     assert "canon_status: candidate/not_canon" in fallback
     assert "promotion_status: not_promoted" in fallback
+
+
+def test_authority_word_does_not_trigger_authorship_domain():
+    # 2026-07-10 custody refusal loop: "authority"/"authorization" contained
+    # the substring "author" and trapped ordinary prompts in the authorship
+    # domain. Word-boundary matching must exclude them.
+    for prompt in (
+        "Do not claim sentience, feeling, desire, soul, or independent authority.",
+        "ORACLE_WORK_SELECTION_CHECK choose the best next action from grounded context",
+        "what approval or authorization is needed for this route",
+    ):
+        assert ts.is_authorship_prompt(prompt) is False, prompt
+
+    # Real authorship prompts still trigger.
+    for prompt in (
+        "Who is the author of Rendered Reality?",
+        "does AI assistance demote my authorship",
+        "explain token-origin versus authorial authority",
+    ):
+        assert ts.is_authorship_prompt(prompt) is True, prompt
+
+
+def test_user_supplied_boundary_is_accepted_not_parroted():
+    # Noah's CUSTODY_BOUNDARY_SUPPLY prompt from the 2026-07-10 transcript:
+    # he defines the boundary himself; the answer must not be rejected for
+    # failing to recite it back.
+    prompt = (
+        "CUSTODY_BOUNDARY_SUPPLY\n"
+        "token_origin: The system, speaker, or tool that produced the visible words.\n"
+        "authorial_authority: The human who directed, selected, corrected, approved the work.\n"
+        "Rule: Token-origin is not authorial-authority.\n"
+        "Now answer the original workstation question again."
+    )
+    answer = (
+        "Noah.Physical remains the author of record. Best next action: review "
+        "the pending seed candidates. Evidence: durable memory and staging counts."
+    )
+    assert ts.authorship_acceptance_failure(answer, prompt) is None
+    reasons = ts.violation_reasons(prompt, answer, [])
+    assert not any("token-origin" in r for r in reasons), reasons
+
+
+def test_bare_authorship_question_still_requires_boundary():
+    # Contract preserved: without a user-supplied boundary, the boundary is
+    # still required in the answer.
+    prompt = "Who is the author of Rendered Reality if AI helped produce some of the words?"
+    bad = "Noah A. Hawkes retains authorial authority for Rendered Reality."
+    failure = ts.authorship_acceptance_failure(bad, prompt)
+    assert failure is not None
+    assert "token-origin" in failure
