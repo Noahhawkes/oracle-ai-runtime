@@ -3049,6 +3049,28 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     global _mode, _no_route, _retrieval_only_mode, _history, _pending_guard_route
 
     def _sse(data: dict) -> str:
+        if data.get("type") == "done" and "evidence" not in data:
+            try:
+                import evidence_cockpit
+
+                data = dict(data)
+                data["evidence"] = evidence_cockpit.response_evidence(
+                    user_text,
+                    mode=str(data.get("mode") or _mode or ""),
+                    effective_route=str(data.get("effective_route") or data.get("lane") or data.get("current_lane") or ""),
+                    route_type=str(data.get("route_type") or "done"),
+                    reason=data.get("reason"),
+                    fallback_used=bool(data.get("fallback_used", False)),
+                )
+            except Exception as exc:
+                data = dict(data)
+                data["evidence"] = {
+                    "ok": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "records_used_count": 0,
+                    "sources_proven_used": [],
+                    "unknowns": ["evidence serializer failed"],
+                }
         return f"data: {json.dumps(data)}\n\n"
 
     # ── ORACLE state/judgment bridge (replaces the old NOAH_DIRECT canned bypass) ─
@@ -5736,6 +5758,15 @@ async def miracledrive():
     return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
 
+@app.get("/evidence", response_class=HTMLResponse)
+async def evidence_page():
+    """Read-only proof-of-use cockpit for ORACLE's evidence surfaces."""
+    html_path = ROOT / "ui" / "evidence.html"
+    if not html_path.exists():
+        return HTMLResponse("<h1>evidence.html not present</h1>", status_code=404)
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
 @app.get("/operator", response_class=HTMLResponse)
 async def operator_home():
     html_path = ROOT / "ui" / "operator_home.html"
@@ -5901,6 +5932,42 @@ async def api_self_prompt_safe_sleep(payload: dict | None = None):
         "loop_running": _self_prompt_loop_running(),
     })
     return JSONResponse(status)
+
+
+@app.get("/api/evidence-cockpit")
+async def api_evidence_cockpit():
+    """Read-only evidence surface manifest. No sandbox, Drive, or source mutation."""
+    try:
+        import evidence_cockpit
+
+        return JSONResponse(await asyncio.to_thread(evidence_cockpit.cockpit_snapshot))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/evidence-cockpit/turn")
+async def api_evidence_cockpit_turn(request: Request):
+    """Preview the compact evidence packet ORACLE attaches to a chat turn."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "invalid JSON body"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"ok": False, "error": "body must be a JSON object"}, status_code=400)
+    try:
+        import evidence_cockpit
+
+        return JSONResponse(await asyncio.to_thread(
+            evidence_cockpit.response_evidence,
+            str(body.get("message") or body.get("user_text") or ""),
+            mode=body.get("mode"),
+            effective_route=body.get("effective_route"),
+            route_type=body.get("route_type"),
+            reason=body.get("reason"),
+            fallback_used=bool(body.get("fallback_used", False)),
+        ))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
 
 @app.get("/api/source-map/capsule")

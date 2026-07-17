@@ -935,7 +935,7 @@
     <button id="preferences-btn" onclick="showPreferencesDrawer()" title="ORACLE behavior preferences">Preferences</button>
     <input type="file" id="preferences-upload-input" accept=".json,.md,.txt,.ai" style="display:none" onchange="uploadPreferencesFile(this)">
     <button id="sourcemap-btn" onclick="toggleSourceMapPanel()" title="ORACLE SourceMap">SourceMap</button>
-    <a href="/miracledrive" id="md-link" title="MiracleDrive OS" style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.28);text-decoration:none;padding:4px 10px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;transition:0.2s;" onmouseover="this.style.color='#22d3ee';this.style.borderColor='rgba(34,211,238,0.35)'" onmouseout="this.style.color='rgba(255,255,255,0.28)';this.style.borderColor='rgba(255,255,255,0.1)'">MiracleDrive ↗</a>
+    <a href="/evidence" title="Evidence Cockpit" style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.42);text-decoration:none;padding:4px 10px;border:1px solid rgba(88,208,200,0.2);border-radius:6px;transition:0.2s;" onmouseover="this.style.color='#58d0c8';this.style.borderColor='rgba(88,208,200,0.55)'" onmouseout="this.style.color='rgba(255,255,255,0.42)';this.style.borderColor='rgba(88,208,200,0.2)'">Evidence</a>    <a href="/miracledrive" id="md-link" title="MiracleDrive OS" style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.28);text-decoration:none;padding:4px 10px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;transition:0.2s;" onmouseover="this.style.color='#22d3ee';this.style.borderColor='rgba(34,211,238,0.35)'" onmouseout="this.style.color='rgba(255,255,255,0.28)';this.style.borderColor='rgba(255,255,255,0.1)'">MiracleDrive ↗</a>
   </div>
 
   <!-- Camera / vision panel — ORACLE's eyes. Preview-only: she does NOT watch
@@ -1882,11 +1882,22 @@ function updateRouteReceipt(bubble, patch) {
   const routeType = next.route_type || next.type || 'unknown';
   const reason = next.reason || 'no reason supplied';
   const fallback = next.fallback_used === true ? 'true' : 'false';
+  const evidence = next.evidence || {};
+  const evidenceMode = evidence.mode || 'unknown';
+  const proven = Array.isArray(evidence.sources_proven_used) ? evidence.sources_proven_used.join(', ') : 'unknown';
+  const records = Number(evidence.records_used_count || 0);
+  const unknowns = Array.isArray(evidence.unknowns) ? evidence.unknowns.length : 0;
   bubble._routeReceiptEl.innerHTML =
     '<span>route_type: ' + escapeHtml(String(routeType)) + '</span>' +
     '<span>lane: ' + escapeHtml(String(lane)) + '</span>' +
     '<span>reason: ' + escapeHtml(String(reason)) + '</span>' +
-    '<span>fallback_used: ' + fallback + '</span>';
+    '<span>fallback_used: ' + fallback + '</span>' +
+    (evidence.ok ? (
+      '<span>evidence_mode: ' + escapeHtml(String(evidenceMode)) + '</span>' +
+      '<span>records_used: ' + records + '</span>' +
+      '<span>proven_sources: ' + escapeHtml(String(proven)) + '</span>' +
+      '<span>unknowns: ' + unknowns + '</span>'
+    ) : '');
   bubble._routeReceiptEl.style.display = 'flex';
 }
 
@@ -1987,7 +1998,8 @@ async function sendMessage() {
             route_type: event.route_type || existingRouteReceipt.route_type || 'done',
             lane: event.lane || event.current_lane || existingRouteReceipt.lane || event.effective_route,
             reason: event.reason || existingRouteReceipt.reason,
-            fallback_used: !!event.fallback_used
+            fallback_used: !!event.fallback_used,
+            evidence: event.evidence || existingRouteReceipt.evidence
           });
         }
       } catch {}
