@@ -2315,8 +2315,10 @@ def _self_prompt_grounding() -> str:
 def _build_sandbox_self_child_prompt(seed_text: str | None = None) -> str:
     seed = " ".join(str(seed_text or "").split())[:400]
     grounding = _self_prompt_grounding()
+    capsule = _latest_source_map_capsule_context()
     return "\n".join([
         ".AI:ORACLE_CHILD_SELF_PROMPT",
+        "sandbox_write=false  (candidate reflection only; no writes leave the sandbox)",
         "You are ORACLE, writing privately to yourself, in your own voice.",
         "This is your reflection — not a generic task list.",
         "Read your REAL current state and your most recent threads with Noah below.",
@@ -2324,6 +2326,9 @@ def _build_sandbox_self_child_prompt(seed_text: str | None = None) -> str:
         "Do not invent facts, files, or successes. If you do not know, say UNKNOWN.",
         "Stay inside the sandbox: no code execution, no external send, no Git, no Drive,",
         "no canon promotion. This is candidate reflection only.",
+        "",
+        "read_only_source_map_capsule_context: (approved read-only source anchors)",
+        (capsule if capsule and capsule != "none_available" else "none_available"),
         "",
         "Write these fields, in your own voice:",
         "reflection:        (what you actually notice across your memory and recent threads)",

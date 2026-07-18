@@ -640,11 +640,15 @@ def test_sandbox_chat_commands_use_backend_ultrasound_lanes(monkeypatch, tmp_pat
     assert initiative_done["effective_route"] == "sandbox_initiative_write"
 
     monkeypatch.setenv("ORACLE_SELF_PROMPT_DISABLE_MODEL", "1")
+    # Self-prompting is governed: an explicit /self-prompt-sandbox is refused
+    # while state is OFF and must be enabled first (manual-once here). The
+    # governed route is recorded on the receipt.
+    monkeypatch.setenv("ORACLE_SELF_PROMPT_CONTROL_STATE", "MANUAL_ONCE")
     self_prompt_payloads = asyncio.run(collect("/self-prompt-sandbox prove one step"))
     self_prompt_text = "".join(item.get("text", "") for item in self_prompt_payloads if item.get("type") == "token")
     self_prompt_done = [item for item in self_prompt_payloads if item.get("type") == "done"][-1]
     assert "SANDBOX SELF-PROMPT RECEIPT" in self_prompt_text
-    assert '"source_route": "ORACLE.self_prompt"' in self_prompt_text
+    assert '"source_route": "ORACLE.self_prompt.manual_once"' in self_prompt_text
     assert '"max_steps": 1' in self_prompt_text
     assert self_prompt_done["effective_route"] == "sandbox_self_prompt"
 
