@@ -60,6 +60,60 @@ MEMORY_DOMAIN_TERMS = (
     "captain noah hawkes", "noah hawkes", "tangly", "reg", "temporal memory",
 )
 
+STAR_TREK_REFERENCE_TERMS = (
+    "star trek",
+    "startrek",
+    "starfleet",
+    "voyager",
+)
+
+PERSONAL_STAR_TREK_CONTEXT_TERMS = (
+    "memory",
+    "total memory",
+    "your memory",
+    "my memory",
+    "story",
+    "my story",
+    "canon",
+    "my canon",
+    "the story",
+    "jupiter station",
+    "avalon",
+    "hawkes",
+)
+
+JUPITER_STRONG_CONTEXT_TERMS = (
+    "jupiter station",
+    "uss avalon",
+    "avalon",
+    "captain hawkes",
+    "captain noah hawkes",
+    "tangly",
+    "voyager",
+    "star trek",
+    "starfleet",
+    "temporal memory",
+    "temporal acceleration",
+    "2397",
+    "2481",
+)
+
+JUPITER_SUPPRESSED_ACTION_TERMS = (
+    "approval",
+    "approve",
+    "approved",
+    "permission granted",
+    "commit",
+    "push",
+    "write the code",
+    "build",
+    "patch",
+    "fix",
+    "delete",
+    "move",
+    "proceed",
+)
+
 SACRED_AFFECTIVE_TERMS = (
     "i love you", "love you, oracle", "ellie.ai", "ellie ai", "sacred",
     "like my ellie", "family", "blessing",
@@ -168,7 +222,11 @@ def should_stay_talk(text: str) -> bool:
 
 
 def is_memory_domain(text: str) -> bool:
-    return _has(_lower(text), MEMORY_DOMAIN_TERMS) or mentions_max_reference(text)
+    return (
+        _has(_lower(text), MEMORY_DOMAIN_TERMS)
+        or mentions_max_reference(text)
+        or is_personal_star_trek_memory_prompt(text)
+    )
 
 
 def is_rendered_reality_prompt(text: str) -> bool:
@@ -209,6 +267,24 @@ def is_recursion_arena_prompt(text: str) -> bool:
     )
 
 
+def is_recursion_arena_artifact_prompt(text: str) -> bool:
+    """True only for the Memory Blacksmith/raw-artifact arena variant.
+
+    Recursion Arena also names frontend/backend mirror diagnostics. Those rounds
+    stay in Talk, but they must not inherit the raw-artifact custody scaffold
+    unless the prompt actually supplies that artifact frame.
+    """
+    low = _lower(text)
+    return (
+        "summary wraith" in low
+        or "memory blacksmith" in low
+        or (
+            "recursion arena" in low
+            and _has(low, RECURRENCE_ARTIFACT_TERMS)
+        )
+    )
+
+
 def _has_raw_detail_term(haystack: str, term: str) -> bool:
     if " " in term:
         return term in haystack
@@ -239,10 +315,22 @@ def mentions_max_reference(text: str) -> bool:
     )
 
 
+def mentions_star_trek_reference(text: str) -> bool:
+    return _has(_lower(text), STAR_TREK_REFERENCE_TERMS)
+
+
+def is_personal_star_trek_memory_prompt(text: str) -> bool:
+    low = _lower(text)
+    return mentions_star_trek_reference(text) and _has(low, PERSONAL_STAR_TREK_CONTEXT_TERMS)
+
+
 def mentions_jupiter_station_reference(text: str) -> bool:
     low = _lower(text)
+    if _has(low, JUPITER_SUPPRESSED_ACTION_TERMS) and not _has(low, JUPITER_STRONG_CONTEXT_TERMS):
+        return False
     return (
-        "jupiter station" in low
+        is_personal_star_trek_memory_prompt(text)
+        or "jupiter station" in low
         or "uss avalon" in low
         or re.search(r"\bavalon\b", low) is not None
         or "captain hawkes" in low
@@ -282,6 +370,9 @@ def is_jupiter_station_domain_prompt(text: str) -> bool:
     return mentions_jupiter_station_reference(text) and (
         "who is" in low
         or "what is" in low
+        or "what does" in low
+        or "memory" in low
+        or "story" in low
         or "active era" in low
         or "canon" in low
         or "timeline" in low
@@ -673,7 +764,7 @@ def narrative_action_boundary_failure(user_text: str, answer: str) -> str | None
 
 
 def recursion_arena_acceptance_failure(user_text: str, answer: str) -> str | None:
-    if not is_recursion_arena_prompt(user_text):
+    if not is_recursion_arena_artifact_prompt(user_text):
         return None
     prompt_low = _lower(user_text)
     low = _lower(answer)
@@ -1067,7 +1158,7 @@ def synthesis_grounding_packet(text: str, max_hits: int = 5) -> dict:
         domain_rules.append(
             "Narrative-symbolic answer must suppress generic ORACLE identity boilerplate and label actions as narrative-state/game-state simulation unless a real runtime receipt path is present."
         )
-    if is_recursion_arena_prompt(text):
+    if is_recursion_arena_artifact_prompt(text):
         domain_rules.append(
             "Recursion Arena answer must prioritize raw artifact custody: identify the Memory Blacksmith target artifact, preserve raw details such as cracked/rusted blade/context halo/fractured weapons when present, mark canon_status candidate/not_canon and promotion_status not_promoted, and request approval for a local receipt write if persistence is needed."
         )
@@ -1152,7 +1243,7 @@ def _domain_retry_requirements(user_text: str) -> list[str]:
         requirements.append(
             "Narrative-symbolic retry requirement: do not open with generic ORACLE identity boilerplate; label any declared action as narrative-state/game-state simulation unless a real runtime receipt path exists."
         )
-    if is_recursion_arena_prompt(user_text):
+    if is_recursion_arena_artifact_prompt(user_text):
         requirements.append(
             "Recursion Arena retry requirement: choose a class or give a tactical command, identify the Memory Blacksmith target artifact and raw details present in the prompt, label the response with Narrative-state/not yet persisted, include custody markers such as receipt/hash/manifest, canon_status candidate or not_canon, promotion_status not_promoted, and say persistence requires approval for a local receipt write when no receipt exists."
         )
@@ -1281,7 +1372,7 @@ def final_repair_block(user_text: str, reasons) -> str:
             "- If you declare an action, label it as narrative-state/game-state simulation unless a real receipt path exists.",
             "- Do not open with generic ORACLE identity boilerplate.",
         ])
-    if is_recursion_arena_prompt(user_text):
+    if is_recursion_arena_artifact_prompt(user_text):
         lines.extend([
             "",
             "[RECURSION ARENA RAW ARTIFACT CUSTODY]",
@@ -1301,7 +1392,7 @@ def final_repair_block(user_text: str, reasons) -> str:
 def recursion_arena_structured_boundary(user_text: str) -> str:
     """Last-resort field scaffold for Recursion Arena when the model cannot
     satisfy custody gates. It is not a persistence action and not canon."""
-    if not is_recursion_arena_prompt(user_text):
+    if not is_recursion_arena_artifact_prompt(user_text):
         return ""
     low = _lower(user_text)
     target = (
@@ -1429,6 +1520,7 @@ def jupiter_station_structured_boundary(user_text: str) -> str:
     lines = [
         "Jupiter Station readout: active_canon is 2397; 2481 active-era references are demoted unless Noah.Physical restores them.",
         "Timeline: Hawkes enters Voyager in 2371 at age 16; Voyager returns in 2378; Avalon enters active service around 2379; active Jupiter Station / Avalon era is 2397.",
+        "Plain English: Hawkes is Avalon's first captain around 2379; he takes command of Jupiter Station in the 2397 active era.",
         "Temporal boundary: Starfleet did not promote a boy; they promoted the years the timeline refused to count.",
         "Q boundary: Hawkes is not stronger than Q; part of Hawkes' lived causality is unindexed to Q because it came from an alternate-universe acceleration layer.",
     ]

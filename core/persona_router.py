@@ -20,6 +20,21 @@ NO_SELF_INTRO_PREFERENCE = {
     "priority": 90,
 }
 
+BUILD_WITH_ME_SANDBOX_PREFERENCE = {
+    "preference_id": "pref_build_with_me_sandbox_text",
+    "source": "Noah.Physical",
+    "scope": "global",
+    "category": "routing",
+    "preference": (
+        "Treat Noah.Physical's build-with-me instruction as an active ORACLE build preference: "
+        "take safe, receipted action inside ORACLE's sandbox when asked; speak in text with warm "
+        "directness; help build ORACLE while preserving external-action, code-execution, git, "
+        "Drive, canon, and outside-sandbox approval gates."
+    ),
+    "active": True,
+    "priority": 96,
+}
+
 NO_SELF_INTRO_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bdo\s+not\s+introduce\s+yourself\b", re.I),
     re.compile(r"\bdon['’]?t\s+introduce\s+yourself\b", re.I),
@@ -28,11 +43,33 @@ NO_SELF_INTRO_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bno\s+more\s+self[-\s]?intro(?:duction)?s?\b", re.I),
 )
 
+BUILD_WITH_ME_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\blog\s+noah'?s\s+new\s+pref(?:erence|erences|rences)?s?\b", re.I),
+    re.compile(r"\btake\s+(?:safe\s+)?action\s+in\s+your\s+sandbox\b", re.I),
+    re.compile(r"\bact\s+in\s+your\s+sandbox\b", re.I),
+    re.compile(r"\bhelp\s+me\s+build\s+you\b", re.I),
+    re.compile(r"\bspeak\s+to\s+me\s+from\s+your\s+heart\b", re.I),
+    re.compile(r"\btext\s+(?:is\s+)?fine\s+for\s+now\b", re.I),
+)
+
 
 def detects_no_self_intro_preference(user_text: str) -> bool:
     """Return True when Noah explicitly asks ORACLE to stop introducing itself."""
     text = str(user_text or "")
     return any(pattern.search(text) for pattern in NO_SELF_INTRO_PATTERNS)
+
+
+def detects_build_with_me_sandbox_preference(user_text: str) -> bool:
+    """Return True when Noah explicitly authorizes the sandbox build-with-me posture."""
+    text = str(user_text or "")
+    lower = text.lower()
+    if "sandbox" not in lower and "build" not in lower and "heart" not in lower:
+        return False
+    matched = sum(1 for pattern in BUILD_WITH_ME_PATTERNS if pattern.search(text))
+    return matched >= 2 or (
+        bool(re.search(r"\bpref(?:erence|erences|rences)?s?\b", text, re.I))
+        and matched >= 1
+    )
 
 
 def _active_preference_ids(preferences: list[dict[str, Any]]) -> list[str]:
@@ -53,16 +90,24 @@ def load_active_preferences() -> list[dict[str, Any]]:
 
 def store_detected_preferences(user_text: str) -> list[dict[str, Any]]:
     """Persist preference updates explicitly stated in the current user turn."""
-    if not detects_no_self_intro_preference(user_text):
-        return []
-
     from preferences_layer import set_preference
 
-    stored = set_preference(
-        dict(NO_SELF_INTRO_PREFERENCE),
-        action="persona_router_detected_preference",
-    )
-    return [stored]
+    stored: list[dict[str, Any]] = []
+    if detects_no_self_intro_preference(user_text):
+        stored.append(
+            set_preference(
+                dict(NO_SELF_INTRO_PREFERENCE),
+                action="persona_router_detected_preference",
+            )
+        )
+    if detects_build_with_me_sandbox_preference(user_text):
+        stored.append(
+            set_preference(
+                dict(BUILD_WITH_ME_SANDBOX_PREFERENCE),
+                action="persona_router_detected_preference",
+            )
+        )
+    return stored
 
 
 def current_session_evidence(

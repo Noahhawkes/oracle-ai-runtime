@@ -30,18 +30,51 @@ def test_2_implementation_not_swallowed_by_state():
     assert "state_query" not in got
 
 
+def test_patched_replay_word_does_not_trigger_implementation_intent():
+    prompt = (
+        "RECURSION ARENA ROUND 003 - backend mirror check.\n"
+        "This is a read-only conversation test.\n"
+        "Facts supplied by Codex:\n"
+        "- ORACLE page is served from 127.0.0.1:7782 for this patched replay.\n"
+        "- The patched test server process is PID 74096.\n"
+        "- The visible page has a status/capability panel that dialogue history does not include.\n"
+        "Please summarize those backend facts only."
+    )
+
+    assert "implementation_intent" not in classify_intent(prompt)
+
+
 def test_3_identity_continuity_routes_to_doctrine():
     assert "identity_continuity_query" in classify_intent("what is the difference 1000 years from now?")
 
 
-def test_4_unsupported_capability_qr():
+def test_4_qr_scan_routes_to_read_only_action():
     got = classify_intent("scan my QR tattoo")
-    assert "unsupported_capability_request" in got
+    assert "action_request" in got
+    assert "unsupported_capability_request" not in got
     assert action_capability("scan my QR tattoo") == "qr_scan"
+
+
+def test_4b_document_scan_is_not_qr_scan():
+    got = classify_intent("scan my documents for Oracle files")
+    assert "action_request" in got
+    assert "unsupported_capability_request" not in got
+    assert action_capability("scan my documents for Oracle files") == "local_file_read"
+
+
+def test_4c_drive_scan_is_not_qr_scan():
+    got = classify_intent("scan all drives for .AI sources")
+    assert "action_request" in got
+    assert "unsupported_capability_request" not in got
+    assert action_capability("scan all drives for .AI sources") == "local_file_read"
 
 
 def test_5_state_query_still_works():
     assert "state_query" in classify_intent("what can you do right now")
+
+
+def test_noah_hawkes_approval_given_is_approval_request():
+    assert "approval_request" in classify_intent("Noah Hawkes Approval given")
 
 
 def test_mixed_intent_answers_natural_and_stages():
@@ -51,7 +84,10 @@ def test_mixed_intent_answers_natural_and_stages():
 
 def test_registry_marks_chat_unsupported_as_missing():
     reg = capability_registry()
-    assert registry_status("qr_scan", reg) == "missing"
+    assert registry_status("qr_scan", reg) == "available"
+    assert reg["qr_scan"]["allowed_action_lane"] == "read_only"
+    assert reg["qr_scan"]["requires_approval"] is False
+    assert "local image QR decode" in reg["qr_scan"]["detail"]
     assert registry_status("command_exec", reg) == "missing"
     assert registry_status("web_access", reg) == "available"
     assert reg["web_access"]["allowed_action_lane"] == "read_only"
@@ -211,7 +247,7 @@ def test_exec_3_capability_with_evidence():
                   "requires_approval", "last_verified"):
         assert field in qr
     assert qr["allowed_action_lane"] in ACTION_LANES
-    assert qr["requires_approval"] is True
+    assert qr["requires_approval"] is False
 
 
 def test_exec_4_computer_action_staged_not_executed():
@@ -258,3 +294,12 @@ def test_exec_9_no_unrestricted_autonomy_claim():
 def test_exec_10_voice_request_is_honest_missing():
     assert "voice_request" in classify_intent("use your voice and talk to me out loud")
     assert registry_status("voice_io") == "missing"
+
+
+def test_speak_from_heart_is_text_style_not_voice_hardware():
+    intents = classify_intent(
+        "please log noahs new prefrences that you take action in your sandbox "
+        "and speak to me from your heart and help me build you"
+    )
+
+    assert "voice_request" not in intents

@@ -42,6 +42,26 @@ def test_no_self_intro_feedback_persists_preference(monkeypatch, tmp_path):
     assert (pref_dir / "preference_receipts.jsonl").exists()
 
 
+def test_build_with_me_sandbox_feedback_persists_preference(monkeypatch, tmp_path):
+    pref_dir = _use_temp_preferences(monkeypatch, tmp_path)
+    import persona_router
+
+    context = persona_router.prepare_turn(
+        "please log noahs new prefrences that you take action in your sandbox "
+        "and speak to me from your heart and help me build you"
+    )
+
+    assert "pref_build_with_me_sandbox_text" in context["preferences_applied"]
+    assert context["stored_preferences"][0]["preference_id"] == "pref_build_with_me_sandbox_text"
+    assert context["stored_preferences"][0]["active"] is True
+    assert context["stored_preferences"][0]["canon_status"] == "preference"
+
+    stored = json.loads((pref_dir / "user_preferences.json").read_text(encoding="utf-8"))
+    pref = next(p for p in stored["preferences"] if p["preference_id"] == "pref_build_with_me_sandbox_text")
+    assert "outside-sandbox approval gates" in pref["preference"]
+    assert (pref_dir / "preference_receipts.jsonl").exists()
+
+
 def test_preferences_load_before_routing_without_new_feedback(monkeypatch, tmp_path):
     _use_temp_preferences(monkeypatch, tmp_path)
     import persona_router

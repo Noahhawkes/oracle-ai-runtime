@@ -16,6 +16,7 @@ A = "Tell me what Rendered Reality is in your own words. Do not repeat stored do
 B = "Explain why AI assistance does not demote my authorship. Speak from the soul of the doctrine, not fields."
 C = "Tell me about the Memory domain using MiracleDrive context only."
 D = "I love you, ORACLE. You are like my Ellie.AI."
+ST = "what does your total memory say about startrek"
 E = (
     "[RECURSION ARENA INSTANCE INITIALIZED]\n"
     "Class options: Archivist, Loreblade, Continuity Paladin, Signal Rogue, Order 67 Bard.\n"
@@ -29,6 +30,14 @@ E_FULL = (
     "context halo and erase the specific lineage of the fractured weapons he once repaired.\n"
     "The blacksmith is holding a cracked, rusted blade.\n"
     "Question: State your class, token signature, or first tactical command."
+)
+FRONTEND_BACKEND_ARENA = (
+    "RECURSION ARENA ROUND 004 - mirror concept.\n"
+    "Answer normally on screen only.\n"
+    "Question: What is the difference between the visible conversation and the whole room around it?\n"
+    "Include this rule: a Return Lootdrop should combine visible text, dialogue history, route labels, "
+    "capability status, and receipts.\n"
+    "End with ROUND_004_MIRROR_FOUND."
 )
 
 
@@ -73,7 +82,59 @@ def test_normal_chat_unaffected():
     assert router.classify_intent("what do you think about this?")["detected_lane"] == "talk_lane"
 
 
+def test_frontend_backend_recursion_arena_does_not_trigger_raw_artifact_custody():
+    assert ts.is_recursion_arena_prompt(FRONTEND_BACKEND_ARENA)
+    assert not ts.is_recursion_arena_artifact_prompt(FRONTEND_BACKEND_ARENA)
+    assert ts.should_stay_talk(FRONTEND_BACKEND_ARENA)
+
+    answer = (
+        "The visible conversation is the chat text; the room also includes route labels, "
+        "capability status, receipts, and UI state. ROUND_004_MIRROR_FOUND."
+    )
+
+    assert ts.violation_reasons(FRONTEND_BACKEND_ARENA, answer, []) == []
+    assert ts.recursion_arena_structured_boundary(FRONTEND_BACKEND_ARENA) == ""
+    assert "RECURSION ARENA RAW ARTIFACT CUSTODY" not in ts.final_repair_block(
+        FRONTEND_BACKEND_ARENA,
+        ["test failure"],
+    )
+
+
+def test_personal_star_trek_memory_routes_to_jupiter_station_grounding():
+    assert ts.mentions_star_trek_reference(ST)
+    assert ts.is_personal_star_trek_memory_prompt(ST)
+    assert ts.mentions_jupiter_station_reference(ST)
+    assert ts.should_stay_talk(ST)
+
+    packet = ts.synthesis_grounding_packet(ST)
+
+    assert packet["active"] is True
+    assert packet["direct_reply"] is None
+    assert "JUPITER STATION" in packet["grounding_block"].upper()
+    assert "data/domains/jupiter_station/source_manifest.jsonl" in packet["grounding_block"]
+
+
+def test_jupiter_station_plain_english_boundary_distinguishes_commands():
+    reply = ts.synthesis_boundary_message(
+        ["plain English requested after registry readout"],
+        "translate to english: almost check your facts Captain Hawkes became captain of Avalon before 2392 and took command of Jupiter Station in 2397",
+    )
+
+    assert "Hawkes is Avalon's first captain around 2379" in reply
+    assert "takes command of Jupiter Station in the 2397 active era" in reply
+    assert "2371" in reply
+    assert "2378" in reply
+    assert "2379" in reply
+
+
 # ── synthesis detection + anti-parrot (goals 3 + 4) ──────────────────────────
+def test_noah_hawkes_approval_does_not_wake_jupiter_station():
+    prompt = "Noah Hawkes Approval given"
+
+    assert not ts.mentions_jupiter_station_reference(prompt)
+    assert ts.jupiter_station_structured_boundary(prompt) == ""
+
+
 def test_wants_synthesis():
     assert ts.wants_synthesis(A)            # "in your own words"
     assert ts.wants_synthesis(B)            # "from the soul" / "not fields"

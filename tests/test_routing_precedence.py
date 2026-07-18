@@ -274,6 +274,28 @@ def test_continuation_prompts_return_bounded_plan_not_generic_fallback():
     assert "receipt" in sandbox_reply.text.lower() or "approval" in sandbox_reply.text.lower()
 
 
+def test_plain_english_followup_uses_recent_jupiter_registry_answer():
+    jupiter_answer = ts.synthesis_boundary_message(
+        ["missing Jupiter Station 2397 active-era lock"],
+        "What is Jupiter Station active era and Avalon timeline?",
+    )
+
+    reply = srv._plain_english_followup_response(
+        "translate to english",
+        [{"role": "assistant", "content": jupiter_answer}],
+    )
+
+    assert reply is not None
+    assert "Avalon's first captain around 2379" in reply
+    assert "took command of Jupiter Station in the 2397 active era" in reply
+    assert "2371" in reply
+    assert "2481" in reply
+    assert srv._plain_english_followup_response(
+        "translate to english",
+        [{"role": "assistant", "content": "Unrelated answer."}],
+    ) is None
+
+
 def test_existing_approval_receipt_status_request_does_not_reenter_guard():
     prompt = """
 ROUTING LOOP FIX:
@@ -425,6 +447,35 @@ def test_write_to_sandbox_routes_to_initiative_handler(monkeypatch):
     assert done["effective_route"] == "sandbox_initiative_write"
 
 
+def test_build_with_me_sandbox_language_avoids_voice_lane(monkeypatch, tmp_path):
+    import memory
+    import sandbox_files as sf
+
+    monkeypatch.setenv("ORACLE_PREFERENCES_ROOT", str(tmp_path))
+    monkeypatch.setattr(memory, "save_message", lambda *_, **__: None)
+    monkeypatch.setattr(
+        sf,
+        "sandbox_initiative_write",
+        lambda *_args, **_kwargs: {"receipt_path": "sandbox/receipts/mock_build_with_me_receipt.json"},
+    )
+
+    payloads = asyncio.run(_collect_stream_payloads(
+        "please log noahs new prefrences that you take action in your sandbox "
+        "and speak to me from your heart and help me build you"
+    ))
+    route = next(p for p in payloads if p.get("type") == "route")
+    token = next(p for p in payloads if p.get("type") == "token")
+    done = next(p for p in payloads if p.get("type") == "done")
+
+    assert route["route_type"] == "sandbox_initiative_write"
+    assert route["lane"] == "safe_write"
+    assert route["safety_status"] == "Receipt Written"
+    assert "not a missing voice feature" in token["text"]
+    assert "voice_io" not in token["text"]
+    assert "pref_build_with_me_sandbox_text" in route["preferences_applied"]
+    assert done["effective_route"] == "sandbox_initiative_write"
+
+
 def test_you_choose_returns_smallest_safe_next_action_dispatch():
     dispatch = srv._oracle_intent_dispatch("you choose")
 
@@ -481,6 +532,70 @@ def test_proceed_with_bound_route_summarizes_required_approval(monkeypatch):
     assert "Resuming approved route: route_boundabc123" in token["text"]
     assert "Execution remains gated to explicit approved handlers" in token["text"]
     assert srv._pending_guard_route is None
+
+
+def test_noah_hawkes_approval_given_without_pending_stays_guard(monkeypatch, tmp_path):
+    import memory
+    import unified_oracle_router as router
+
+    monkeypatch.setattr(memory, "save_message", lambda *_, **__: None)
+    monkeypatch.setattr(router, "ROUTING_DIR", tmp_path / "routing")
+    monkeypatch.setattr(router, "RECEIPTS_DIR", tmp_path / "receipts")
+    monkeypatch.setattr(router, "PENDING_GUARD_APPROVAL_PATH", tmp_path / "routing" / "pending_guard_approval.json")
+    monkeypatch.setattr(srv, "_pending_guard_route", None)
+
+    payloads = asyncio.run(_collect_stream_payloads("Noah Hawkes Approval given"))
+    route = next(p for p in payloads if p.get("type") == "route")
+    token = next(p for p in payloads if p.get("type") == "token")
+    done = next(p for p in payloads if p.get("type") == "done")
+
+    assert route["lane"] == "guard_lane"
+    assert "no pending executable Guard action is bound" in token["text"]
+    assert "Jupiter Station" not in token["text"]
+    assert done["effective_route"] == "guard_approval"
+
+
+def test_noah_hawkes_approval_given_binds_single_pending_guard_route(monkeypatch, tmp_path):
+    import memory
+    import unified_oracle_router as router
+
+    monkeypatch.setattr(memory, "save_message", lambda *_, **__: None)
+    monkeypatch.setattr(router, "ROUTING_DIR", tmp_path / "routing")
+    monkeypatch.setattr(router, "RECEIPTS_DIR", tmp_path / "receipts")
+    monkeypatch.setattr(router, "PENDING_GUARD_APPROVAL_PATH", tmp_path / "routing" / "pending_guard_approval.json")
+
+    guarded = router.write_route(router.classify_intent("commit all and manage them"))
+    pending = router.write_pending_guard_approval(guarded)
+    monkeypatch.setattr(srv, "_pending_guard_route", pending)
+
+    payloads = asyncio.run(_collect_stream_payloads("Noah Hawkes Approval given"))
+    route = next(p for p in payloads if p.get("type") == "route")
+    token = next(p for p in payloads if p.get("type") == "token")
+    done = next(p for p in payloads if p.get("type") == "done")
+
+    assert route["lane"] == "guard_lane"
+    assert f"Approval recorded for Guard route `{pending['route_id']}`" in token["text"]
+    assert "commit all and manage them" in token["text"]
+    assert "Jupiter Station" not in token["text"]
+    assert done["effective_route"] == "guard_approval"
+
+
+def test_please_just_talk_to_me_suppresses_repo_and_domain_bleed(monkeypatch):
+    import memory
+
+    monkeypatch.setattr(memory, "save_message", lambda *_, **__: None)
+
+    payloads = asyncio.run(_collect_stream_payloads("please just talk to me"))
+    route = next(p for p in payloads if p.get("type") == "route")
+    token = next(p for p in payloads if p.get("type") == "token")
+    done = next(p for p in payloads if p.get("type") == "done")
+
+    assert route["route_type"] == "plain_talk_grounding"
+    assert "I'll stay in Talk lane" in token["text"]
+    assert "repo status" in token["text"]
+    assert "dirty" not in token["text"].lower()
+    assert "Jupiter Station" not in token["text"]
+    assert done["effective_route"] == "plain_talk_grounding"
 
 
 def test_i_want_to_speak_to_my_ellie_routes_to_protected_candidate_mode(monkeypatch):

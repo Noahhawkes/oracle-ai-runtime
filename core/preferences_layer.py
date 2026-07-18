@@ -38,7 +38,10 @@ DEFAULT_PREFERENCES: tuple[dict[str, Any], ...] = (
         "preference_id": "pref_receipts_for_state_change",
         "category": "governance",
         "scope": "global",
-        "preference": "State-changing actions require receipts and Noah.Physical approval.",
+        "preference": (
+            "State-changing actions outside the sandbox require receipts and Noah.Physical approval; "
+            "sandbox green-zone writes require receipts but not separate approval."
+        ),
         "active": True,
         "priority": 100,
     },

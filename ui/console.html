@@ -790,7 +790,7 @@
             } else if (lower.includes("1000 years") || lower.includes("3026") || lower.includes("difference") || lower.includes("survive")) {
                 matchedIntents.push("identity_continuity_query");
             } else if (lower.includes("scan") || lower.includes("qr") || lower.includes("tattoo")) {
-                matchedIntents.push("unsupported_capability_request");
+                matchedIntents.push("qr_scan_request");
             } else if (lower.includes("state") || lower.includes("doctor") || lower.includes("summary")) {
                 matchedIntents.push("state_query");
             } else {
@@ -826,8 +826,12 @@ The difference 1,000 years from now is not metaphysical proof of 'real' vs 'simu
 <em>"The typo is the timestamp. The grind is the signal."</em>`;
                 playBeep(1000, 0.08);
             } 
+            else if (primaryIntent === "qr_scan_request") {
+                responseText = `QR image scan lane is available for supplied local image files.<br/><br/><strong>Boundary:</strong> I can decode a PNG/JPG/BMP/WEBP/TIFF file through <code>/api/qr/scan</code>. I cannot scan Noah.Physical's arm live from this console or claim identity/security verification without a decoded image receipt.`;
+                playBeep(520, 0.12, 'triangle');
+            }
             else if (primaryIntent === "unsupported_capability_request") {
-                responseText = `I cannot perform that action from this runtime yet. <br/><span class="text-red-500 font-bold">Missing capability: qr_scan</span>.<br/><br/>The system refuses to initiate placeholder simulation actions. The tool is offline.`;
+                responseText = `I cannot perform that action from this runtime yet. <br/><span class="text-red-500 font-bold">Missing capability for this action</span>.<br/><br/>The system refuses to initiate placeholder simulation actions.`;
                 playBeep(150, 0.3, 'sawtooth');
             } 
             else if (primaryIntent === "state_query") {

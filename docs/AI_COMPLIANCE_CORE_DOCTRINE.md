@@ -410,3 +410,27 @@ Candidate vertical notes extend the product map without rewriting it:
   and approval-traceability support for documentation-burdened regulated
   teams. Never an FDA certification, compliance guarantee, or counsel
   replacement.
+
+## 16. ORACLE Iceberg Boundary
+
+Source addendum:
+
+- `docs/ORACLE_ICEBERG_DOCTRINE.md`
+
+The Codex implementation brief describes the visible machine room: local
+runtime, SQLite memory, receipts, file recall, human-state re-entry, source
+manifests, approval gates, and cockpit surfaces.
+
+That is not ORACLE in total.
+
+The larger archive includes Rendered Reality, Legacy.GI, SOV1.AI, AI Compliance
+Core, family and life continuity anchors, EcoWater work state, thesis material,
+world-bible artifacts, public writing, AI collaborations, failures,
+contradictions, and corrections.
+
+Compliance rule:
+
+AI Compliance Core may productize the audit-trail and approval-gate logic, but
+it must not collapse the entire ORACLE project into a compliance product. ORACLE
+is the local lab and continuity instrument. AI Compliance Core is one commercial
+expression of that lab.

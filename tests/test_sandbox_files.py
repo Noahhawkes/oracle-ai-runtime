@@ -122,7 +122,11 @@ def test_sandbox_self_prompt_write_is_one_step_and_receipted(monkeypatch, tmp_pa
     assert result["source_route"] == "ORACLE.self_prompt"
     assert result["max_steps"] == 1
     assert result["stop_condition"] == "one_child_prompt_written_then_stop"
+    assert result["content_written"] is True
+    assert result["deduped"] is False
     assert final_path.parent == (tmp_path / "sandbox" / "workbench").resolve()
+    assert final_path.name == "oracle_self_prompt_journal.ai"
+    assert ".AI:ORACLE_SELF_PROMPT_JOURNAL" in content
     assert ".AI:ORACLE_SELF_PROMPT_CYCLE" in content
     assert "child_prompt:" in content
     assert child_prompt in content
@@ -138,6 +142,40 @@ def test_sandbox_self_prompt_write_is_one_step_and_receipted(monkeypatch, tmp_pa
     assert receipt["external_send"] is False
     assert receipt["git_push"] is False
     assert receipt["canon_promotion"] is False
+
+
+def test_sandbox_self_prompt_duplicate_response_is_suppressed(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+
+    child_prompt = "Choose one sandbox-only next task, then stop."
+    child_response = "selected_task: repeat the same note\nstop_after_this: true"
+    first = sf.sandbox_self_prompt_write(
+        child_prompt,
+        child_response,
+        seed_prompt="Noah asked for proof of self-prompting",
+        caller="ORACLE.self_prompt",
+        source_route="ORACLE.self_prompt",
+        action_id="self_prompt_once",
+    )
+    second = sf.sandbox_self_prompt_write(
+        child_prompt + " Again.",
+        child_response,
+        seed_prompt="Noah asked for proof of self-prompting again",
+        caller="ORACLE.self_prompt",
+        source_route="ORACLE.self_prompt",
+        action_id="self_prompt_twice",
+    )
+
+    journal_path = Path(first["final_path"])
+    content = journal_path.read_text(encoding="utf-8")
+    receipts = list((tmp_path / "sandbox" / "receipts").glob("*_receipt.json"))
+    assert second["ok"] is True
+    assert second["deduped"] is True
+    assert second["content_written"] is False
+    assert second["receipt_path"] is None
+    assert second["final_path"] == first["final_path"]
+    assert content.count(".AI:ORACLE_SELF_PROMPT_CYCLE") == 1
+    assert len(receipts) == 1
 
 
 def test_autonomous_self_prompt_after_boot_writes_without_chat_command(monkeypatch, tmp_path):

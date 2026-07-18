@@ -50,6 +50,7 @@ STATE_FOLDER = "state"
 JOURNAL_FOLDER = "journal"
 REFLECTIONS_FOLDER = "reflections"
 WORKBENCH_FOLDER = "workbench"
+SELF_PROMPT_JOURNAL_PATH = Path(WORKBENCH_FOLDER) / "oracle_self_prompt_journal.ai"
 JOURNAL_PATH = Path(JOURNAL_FOLDER) / "oracle_journal.jsonl"
 LEGACY_JOURNAL_PATH = Path("notes") / "oracle_sandbox_journal.ai"
 REFLECTION_RECEIPT_FIELDS = (
@@ -1016,6 +1017,42 @@ def sandbox_initiative_write(
     }
 
 
+_NOVELTY_STOPWORDS = frozenset({
+    "the", "and", "for", "with", "that", "this", "have", "has", "are", "was",
+    "will", "would", "should", "could", "can", "not", "but", "his", "her",
+    "our", "their", "them", "more", "into", "from", "which", "there", "been",
+    "noah", "oracle", "task", "sandbox", "candidate", "reflection", "only",
+    "selected", "true", "stop", "after", "one", "step", "next", "also",
+})
+_NOVELTY_SIMILARITY_THRESHOLD = 0.80
+_NOVELTY_LOOKBACK_ENTRIES = 10
+
+
+def _response_essence(text: str) -> frozenset[str]:
+    """Content-word fingerprint of a self-prompt response for novelty checks."""
+    cleaned = "".join(ch.lower() if (ch.isalnum() or ch == "'") else " " for ch in str(text or ""))
+    return frozenset(
+        w for w in cleaned.split()
+        if len(w) > 2 and w not in _NOVELTY_STOPWORDS
+    )
+
+
+def _essence_similarity(a: frozenset[str], b: frozenset[str]) -> float:
+    """Overlap coefficient: how much of the smaller thought is contained in the
+    larger one. A new response that is a subset of a recent one is not new."""
+    if not a or not b:
+        return 0.0
+    return len(a & b) / min(len(a), len(b))
+
+
+def _recent_journal_responses(existing_text: str, limit: int = _NOVELTY_LOOKBACK_ENTRIES) -> list[str]:
+    chunks = str(existing_text or "").split("child_response:")
+    responses = []
+    for chunk in chunks[1:]:
+        responses.append(chunk.split("self_reflection:")[0].strip())
+    return responses[-limit:]
+
+
 def sandbox_self_prompt_write(
     child_prompt: str,
     child_response: str,
@@ -1028,10 +1065,13 @@ def sandbox_self_prompt_write(
     model_name: str | None = None,
     model_error: str | None = None,
 ) -> dict[str, Any]:
-    """Write one bounded self-prompt result inside sandbox/workbench.
+    """Append one bounded self-prompt result to the sandbox workbench journal.
 
     This is not a daemon and not an execution lane. It records a single
     self-addressed prompt plus one resulting sandbox-only response, then stops.
+    Duplicate response hashes AND near-duplicate responses (same substance in
+    different words) are suppressed, so the autonomous loop writes nothing
+    when it has nothing new to say — Noah's ruling, 2026-07-16.
     """
     prompt_text = str(child_prompt or "").strip()
     response_text = str(child_response or "").strip()
@@ -1040,14 +1080,70 @@ def sandbox_self_prompt_write(
     if not response_text:
         raise SandboxWriteError("self-prompt child_response is required")
 
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    requested_path = Path(WORKBENCH_FOLDER) / f"oracle_self_prompt_{stamp}.ai"
+    requested_path = SELF_PROMPT_JOURNAL_PATH
     target = _resolve_sandbox_path(requested_path, allow_missing=True, require_text_artifact=True)
-    final_path = _versioned_path(target)
     prompt_hash = _sha256_bytes(prompt_text.encode(TEXT_ENCODING))
     response_hash = _sha256_bytes(response_text.encode(TEXT_ENCODING))
     seed_excerpt = " ".join(str(seed_prompt or "").split())[:500]
-    content = "\n".join([
+    existing_text = ""
+    if target.exists() and target.is_file():
+        existing_text = target.read_text(encoding=TEXT_ENCODING, errors="replace")
+    def _suppressed(novelty_status: str, similarity: float | None = None) -> dict[str, Any]:
+        payload = {
+            "ok": True,
+            "operation_type": "sandbox_self_prompt_write",
+            "action_id": None,
+            "requested_path": str(requested_path),
+            "final_path": str(target),
+            "sha256": _hash_file(target),
+            "receipt_path": None,
+            "approval_required": False,
+            "source_route": source_route,
+            "max_steps": 1,
+            "stop_condition": "duplicate_response_suppressed_then_stop",
+            "canon_status": "sandbox_candidate",
+            "promotion_status": "not_promoted",
+            "child_prompt_sha256": prompt_hash,
+            "child_response_sha256": response_hash,
+            "model_called": bool(model_called),
+            "model_name": model_name,
+            "model_error": model_error,
+            "deduped": True,
+            "content_written": False,
+            "novelty_status": novelty_status,
+        }
+        if similarity is not None:
+            payload["similarity_to_recent"] = round(similarity, 3)
+        return payload
+
+    if f"child_response_sha256={response_hash}" in existing_text:
+        return _suppressed("duplicate_suppressed")
+
+    # near-duplicate gate: if the new thought says substantially the same thing
+    # as a recent journal entry (in different words), write nothing
+    new_essence = _response_essence(response_text)
+    highest_similarity = 0.0
+    for prior_response in _recent_journal_responses(existing_text):
+        highest_similarity = max(
+            highest_similarity,
+            _essence_similarity(new_essence, _response_essence(prior_response)),
+        )
+        if highest_similarity >= _NOVELTY_SIMILARITY_THRESHOLD:
+            return _suppressed("near_duplicate_suppressed", highest_similarity)
+
+    header = ""
+    if not existing_text:
+        header = "\n".join([
+            ".AI:ORACLE_SELF_PROMPT_JOURNAL",
+            f"created_at={_now()}",
+            "journal_mode=single_running_append_only",
+            "sandbox_only=true",
+            "dedupe_key=child_response_sha256",
+            "canon_status=sandbox_candidate",
+            "promotion_status=not_promoted",
+            "",
+        ])
+    entry = "\n".join([
         ".AI:ORACLE_SELF_PROMPT_CYCLE",
         f"timestamp={_now()}",
         f"caller={caller}",
@@ -1084,29 +1180,34 @@ def sandbox_self_prompt_write(
         "I completed exactly one sandbox-only self-prompt step and stopped.",
         "",
     ])
-    data = content.encode(TEXT_ENCODING)
-    content_hash = _sha256_bytes(data)
+    append_text = (("\n" if existing_text and not existing_text.endswith("\n") else "") + header + entry + "\n")
+    data = append_text.encode(TEXT_ENCODING)
+    entry_hash = _sha256_bytes(data)
     safe_action_id = str(action_id or "").strip() or _safe_action_id(
         caller,
-        final_path.name,
-        content_hash,
+        target.name,
+        entry_hash,
         "sandbox_self_prompt_write",
     )
-    final_path.parent.mkdir(parents=True, exist_ok=True)
-    with final_path.open("xb") as handle:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    pre_hash = _hash_file(target)
+    with target.open("ab") as handle:
         handle.write(data)
+    content_hash = _hash_file(target)
     receipt_path = _write_operation_receipt(
         operation_type="sandbox_self_prompt_write",
-        target_path=final_path,
+        target_path=target,
         caller=caller,
         action_id=safe_action_id,
-        pre_hash=None,
+        pre_hash=pre_hash,
         post_hash=content_hash,
-        created=True,
+        created=pre_hash is None,
+        appended=pre_hash is not None,
         requested_path=str(requested_path),
         extra={
-            "final_path": str(final_path),
+            "final_path": str(target),
             "sha256": content_hash,
+            "entry_sha256": entry_hash,
             "approval_required": False,
             "approval_scope": "not_required_inside_sandbox",
             "self_prompt": True,
@@ -1120,6 +1221,9 @@ def sandbox_self_prompt_write(
             "model_name": model_name,
             "model_error": model_error,
             "overwrote_existing_file": False,
+            "deduped": False,
+            "content_written": True,
+            "novelty_status": "new_response_appended",
         },
     )
     return {
@@ -1127,8 +1231,9 @@ def sandbox_self_prompt_write(
         "operation_type": "sandbox_self_prompt_write",
         "action_id": safe_action_id,
         "requested_path": str(requested_path),
-        "final_path": str(final_path),
+        "final_path": str(target),
         "sha256": content_hash,
+        "entry_sha256": entry_hash,
         "receipt_path": str(receipt_path),
         "approval_required": False,
         "source_route": source_route,
@@ -1141,6 +1246,9 @@ def sandbox_self_prompt_write(
         "model_called": bool(model_called),
         "model_name": model_name,
         "model_error": model_error,
+        "deduped": False,
+        "content_written": True,
+        "novelty_status": "new_response_appended",
     }
 
 

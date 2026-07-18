@@ -828,7 +828,19 @@ def _terminal_status(inp: dict, log) -> str:
     term = get_terminal()
     cwd = term.get_cwd()
     alive = term.alive
-    return f"Terminal alive: {alive}\nCurrent directory: {cwd}"
+    lines = [
+        f"Terminal alive: {alive}",
+        f"Current directory: {cwd}",
+    ]
+    try:
+        from terminal_census import LATEST_JSON, status_text, write_snapshot
+
+        snapshot = write_snapshot()
+        lines.append(status_text(snapshot))
+        lines.append(f"Census receipt: {LATEST_JSON}")
+    except Exception as exc:
+        lines.append(f"Terminal census unavailable: {type(exc).__name__}: {exc}")
+    return "\n".join(lines)
 
 
 def _send_to_claude_code(inp: dict, log) -> str:

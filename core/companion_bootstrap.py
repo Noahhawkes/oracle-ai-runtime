@@ -22,6 +22,9 @@ from typing import Optional
 ROOT = Path(__file__).parent.parent
 MEMORY = ROOT / "Memory"
 RELATIONSHIP_DIR = MEMORY / "relationship_memory"
+REMEMBER_ME_DIR = MEMORY / "remember_me"
+BUILD_WITNESS_DIR = MEMORY / "build_witness"
+THESIS_CORPUS_DIR = MEMORY / "thesis_corpus"
 REFLECTIONS_DIR = MEMORY / "Reflections"
 LIVE_CONTEXT_PATH = MEMORY / "live_context.json"
 MEMORY_DB_PATH = MEMORY / "oracle_memory.db"
@@ -102,6 +105,57 @@ def _reflection_source_lines(data: dict) -> list[str]:
     return lines
 
 
+def _remember_me_source_lines(limit: int = 8) -> list[str]:
+    """Summarize approved Remember Me records without injecting raw archives."""
+    index_path = REMEMBER_ME_DIR / "index.json"
+    if not index_path.exists():
+        return []
+    try:
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [f"load_error: {type(exc).__name__}: {exc}"]
+
+    approved_ids = [str(rid) for rid, status in index.items() if status == "approved"]
+    records: list[dict] = []
+    for rid in approved_ids:
+        path = REMEMBER_ME_DIR / f"{rid}.json"
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(data, dict):
+            records.append(data)
+
+    records.sort(key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""), reverse=True)
+    lines = [
+        f"source_dir: {REMEMBER_ME_DIR.resolve()}",
+        f"approved_record_count: {len(records)}",
+        "status: approved Remember Me records only; no pending/quarantined/rejected records injected",
+    ]
+    for rec in records[: max(1, int(limit))]:
+        title = str(rec.get("title") or "untitled")
+        category = str(rec.get("category") or "unknown")
+        confidence = str(rec.get("confidence") or "UNKNOWN")
+        meaning = " ".join(str(rec.get("compressed_meaning") or "").split())[:700]
+        lines.append(f"remember_me_title: {title}")
+        lines.append(f"{title} category: {category}")
+        lines.append(f"{title} confidence: {confidence}")
+        if meaning:
+            lines.append(f"{title} compressed_meaning: {meaning}")
+        for unknown in rec.get("unknowns", []) or []:
+            lines.append(f"{title} preserved_unknown: {str(unknown)[:220]}")
+        for contradiction in rec.get("contradictions", []) or []:
+            lines.append(f"{title} contradiction: {str(contradiction)[:220]}")
+        tags = rec.get("tags") or []
+        if tags:
+            lines.append(f"{title} tags: {', '.join(str(tag) for tag in tags[:12])}")
+        if rec.get("source"):
+            lines.append(f"{title} source: {str(rec.get('source'))[:300]}")
+        if rec.get("updated_at"):
+            lines.append(f"{title} updated_at: {rec.get('updated_at')}")
+    return lines
+
+
 def _thread_recall_source_lines(limit: int = 6) -> list[str]:
     """Summarize local imported-thread recall records without injecting raw threads."""
     if not MEMORY_DB_PATH.exists():
@@ -171,6 +225,112 @@ def _thread_recall_source_lines(limit: int = 6) -> list[str]:
     return lines
 
 
+def _build_witness_source_lines(limit: int = 4) -> list[str]:
+    """Summarize local Build Witness receipts without injecting diffs/content."""
+    log_path = BUILD_WITNESS_DIR / "build_receipts.jsonl"
+    latest_path = BUILD_WITNESS_DIR / "latest_build_receipt.json"
+    lines = [
+        f"source_dir: {BUILD_WITNESS_DIR.resolve()}",
+        "status: candidate build receipts only; not canon unless Noah.Physical approves",
+        "boundary: receipts summarize construction events; no file contents or diffs injected",
+    ]
+    if not log_path.exists():
+        return lines + ["receipt_count: 0"]
+
+    raw_lines: list[str] = []
+    try:
+        with log_path.open("r", encoding="utf-8") as handle:
+            for raw in handle:
+                if raw.strip():
+                    raw_lines.append(raw.strip())
+    except Exception as exc:
+        return lines + [f"load_error: {type(exc).__name__}: {exc}"]
+
+    receipts: list[dict] = []
+    for raw in raw_lines[-max(1, int(limit)):]:
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        if isinstance(data, dict):
+            receipts.append(data)
+
+    lines.append(f"receipt_count_observed: {len(raw_lines)}")
+    lines.append(f"latest_receipt_path: {latest_path.resolve()}")
+    for receipt in reversed(receipts):
+        reason = " ".join(str(receipt.get("reason") or "").split())[:350]
+        files = receipt.get("files_changed") or []
+        tests = receipt.get("tests_run") or []
+        lines.append(f"build_event: {receipt.get('receipt_id') or 'unknown'}")
+        lines.append(f"{receipt.get('receipt_id') or 'build_event'} observed_at: {receipt.get('observed_at')}")
+        lines.append(f"{receipt.get('receipt_id') or 'build_event'} task_id: {receipt.get('task_id')}")
+        lines.append(f"{receipt.get('receipt_id') or 'build_event'} approval_status: {receipt.get('approval_status')}")
+        lines.append(f"{receipt.get('receipt_id') or 'build_event'} test_result: {receipt.get('test_result')}")
+        lines.append(f"{receipt.get('receipt_id') or 'build_event'} files_changed_count: {len(files)}")
+        if reason:
+            lines.append(f"{receipt.get('receipt_id') or 'build_event'} reason: {reason}")
+        if tests:
+            lines.append(f"{receipt.get('receipt_id') or 'build_event'} tests_run: {', '.join(str(t) for t in tests[:6])}")
+        if receipt.get("receipt_hash_sha256"):
+            lines.append(f"{receipt.get('receipt_id') or 'build_event'} receipt_hash_sha256: {receipt.get('receipt_hash_sha256')}")
+    return lines
+
+
+def _thesis_corpus_source_lines(limit: int = 4) -> list[str]:
+    """Summarize curated .AI thesis capsules for pre-prompt grounding."""
+    if not THESIS_CORPUS_DIR.exists():
+        return []
+    try:
+        capsules = sorted(
+            THESIS_CORPUS_DIR.glob("*.ai"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+    except Exception as exc:
+        return [f"load_error: {type(exc).__name__}: {exc}"]
+
+    lines = [
+        f"source_dir: {THESIS_CORPUS_DIR.resolve()}",
+        f"capsule_count: {len(capsules)}",
+        "status: curated thesis capsules; candidate anchors unless Noah.Physical promotes",
+        "boundary: source-grounded thesis map only; no full-drive prompt stuffing and no canon promotion",
+    ]
+    keep_prefixes = (
+        ".AI:",
+        "title=",
+        "created_at=",
+        "source_path=",
+        "source_sha256=",
+        "source_family=",
+        "canon_status=",
+        "promotion_status=",
+        "thesis_vector=",
+        "compressed_meaning=",
+        "source_excerpt=",
+        "relationship_to_oracle=",
+        "file_type_instruction=",
+        "- ",
+    )
+    for path in capsules[: max(1, int(limit))]:
+        lines.append(f"capsule_path: {path.resolve()}")
+        try:
+            raw_lines = path.read_text(encoding="utf-8").splitlines()
+        except Exception as exc:
+            lines.append(f"{path.stem} load_error: {type(exc).__name__}: {exc}")
+            continue
+        kept = 0
+        for raw in raw_lines:
+            item = raw.strip()
+            if not item:
+                continue
+            if item.startswith(keep_prefixes):
+                lines.append(f"{path.stem}: {item[:650]}")
+                kept += 1
+            if kept >= 24:
+                break
+    return lines
+
+
 # ── Data model ────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -201,9 +361,12 @@ class BootstrapResult:
         """Return structured source payloads for Companion Mode grounding."""
         sections: dict[str, list[str]] = {
             "IDENTITY": [],
+            "REMEMBER_ME": [],
             "LIVE_CONTEXT": [],
             "LATEST_REFLECTION": [],
             "THREAD_RECALL": [],
+            "BUILD_WITNESS": [],
+            "THESIS_CORPUS": [],
             "CURRENT_SESSION": [],
         }
 
@@ -217,11 +380,15 @@ class BootstrapResult:
             sections["LIVE_CONTEXT"].extend(_live_context_source_lines(self.live_context.content))
             sections["LIVE_CONTEXT"].append(f"source_path: {self.live_context.resolved}")
 
+        sections["REMEMBER_ME"].extend(_remember_me_source_lines())
+
         if self.latest_reflection.exists and self.latest_reflection.content:
             sections["LATEST_REFLECTION"].extend(_reflection_source_lines(self.latest_reflection.content))
             sections["LATEST_REFLECTION"].append(f"source_path: {self.latest_reflection.resolved}")
 
         sections["THREAD_RECALL"].extend(_thread_recall_source_lines())
+        sections["BUILD_WITNESS"].extend(_build_witness_source_lines())
+        sections["THESIS_CORPUS"].extend(_thesis_corpus_source_lines())
 
         for turn in (current_session or [])[-8:]:
             role = str(turn.get("role", "unknown")).strip() or "unknown"
@@ -252,14 +419,16 @@ class BootstrapResult:
         lines.append(f"grounded_at: {self.grounded_at}")
         lines.append("SOURCE DISCIPLINE:")
         lines.append("  Allowed labels: VERIFIED, INFERENCE, UNAVAILABLE.")
-        lines.append("  A factual claim may use IDENTITY, LIVE_CONTEXT, LATEST_REFLECTION, THREAD_RECALL, or CURRENT_SESSION only when its supporting text appears in that source section.")
+        lines.append("  A factual claim may use IDENTITY, REMEMBER_ME, LIVE_CONTEXT, LATEST_REFLECTION, THREAD_RECALL, BUILD_WITNESS, THESIS_CORPUS, or CURRENT_SESSION only when its supporting text appears in that source section.")
         lines.append("  THREAD_RECALL records are imported-thread pointers/excerpts for contextual recall. They are not canon unless Noah.Physical explicitly promotes them.")
+        lines.append("  BUILD_WITNESS records are candidate construction receipts. They are evidence of changes/events, not consciousness claims or canon promotion.")
+        lines.append("  THESIS_CORPUS records are curated .AI thesis capsules. They preserve origin architecture without dumping the entire file database into the prompt.")
         lines.append("  Mixed statements must be split into sourced premises and a separately labeled inference.")
         lines.append("  Do not present inferred language as verified source content.")
         lines.append("  If support is absent from the source sections, answer UNAVAILABLE instead of guessing.")
         lines.append("")
 
-        for label in ("IDENTITY", "LIVE_CONTEXT", "LATEST_REFLECTION", "THREAD_RECALL", "CURRENT_SESSION"):
+        for label in ("IDENTITY", "REMEMBER_ME", "LIVE_CONTEXT", "LATEST_REFLECTION", "THREAD_RECALL", "BUILD_WITNESS", "THESIS_CORPUS", "CURRENT_SESSION"):
             lines.append(f"SOURCE SECTION: {label}")
             payload = sections.get(label) or []
             if payload:

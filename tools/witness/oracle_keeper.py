@@ -1,4 +1,4 @@
-"""oracle_keeper.py — keeps ORACLE and her witnesses alive, always.
+r"""oracle_keeper.py — keeps ORACLE and her witnesses alive, always.
 
 The keeper is the "always" in "always watching": a supervisor that
   1. relights oracle_server.py on 7781 whenever it is down (crash, logoff, kill)
@@ -38,11 +38,13 @@ WATCHERS = {
     "prompt_witness": REPO / "tools" / "witness" / "prompt_witness.py",
     "obs_transcript_watcher": REPO / "tools" / "witness" / "obs_transcript_watcher.py",
     "yt_live_bridge": REPO / "tools" / "witness" / "yt_live_bridge.py",
+    "creation_witness": REPO / "tools" / "witness" / "creation_witness.py",
 }
 CHILD_STOP_FLAGS = (
     STATE / "prompt_witness" / "stop.flag",
     STATE / "transcripts" / "obs" / "stop.flag",
     STATE / "youtube_witness" / "stop.flag",
+    STATE / "creation_witness" / "stop.flag",
 )
 
 _children: dict[str, subprocess.Popen] = {}
@@ -95,11 +97,20 @@ def ensure_watcher(name: str, script: Path) -> None:
 
 
 def heartbeat(server_ok: bool) -> None:
+    terminal_counts = {}
+    try:
+        sys.path.insert(0, str(REPO / "core"))
+        from terminal_census import build_snapshot
+
+        terminal_counts = build_snapshot().get("counts", {})
+    except Exception:
+        terminal_counts = {"status": "unavailable"}
     HEARTBEAT.write_text(json.dumps({
         "ts_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "keeper_pid": __import__("os").getpid(),
         "server_alive": server_ok,
         "watchers": {n: (p.poll() is None) for n, p in _children.items()},
+        "terminal_census": terminal_counts,
         "consent_boundary": "witnesses only OBS-recorded material; no raw surveillance",
     }, indent=2), encoding="utf-8")
 

@@ -25,7 +25,7 @@ import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 # Ensure UTF-8 output on Windows consoles (avoids charmap errors for Unicode chars like ◌)
 if hasattr(sys.stdout, "reconfigure"):
@@ -236,7 +236,21 @@ def _is_approval_followup(text: str) -> bool:
         return is_approval_followup(text)
     except Exception:
         cleaned = _re.sub(r"\s+", " ", str(text or "").strip().lower()).strip(" .!?:;")
-        return cleaned in {"approve", "approved", "yes approved", "i approve", "go ahead", "do it"}
+        return cleaned in {
+            "approve",
+            "approved",
+            "approval given",
+            "approval granted",
+            "yes approved",
+            "i approve",
+            "permission granted",
+            "noah approval given",
+            "noah hawkes approval given",
+            "noah.physical approval given",
+            "noah physical approval given",
+            "go ahead",
+            "do it",
+        }
 
 
 def _approval_followup_response(pending_route: dict[str, Any] | None) -> str:
@@ -329,6 +343,81 @@ def _diagnostic_status_response(route: dict[str, Any]) -> str:
             "canon_promotion: false",
         ]
     )
+
+
+def _format_reentry_brief_text(brief: dict[str, Any]) -> str:
+    def _items(values: Any) -> str:
+        if not values:
+            return "none"
+        rows = []
+        for item in list(values)[:8]:
+            if isinstance(item, dict):
+                rows.append(str(item.get("summary") or item.get("id") or item))
+            else:
+                rows.append(str(item))
+        return "\n".join(f"- {row}" for row in rows) if rows else "none"
+
+    return "\n".join([
+        "RE-ENTRY BRIEF",
+        f"last_known_mode: {brief.get('last_known_mode') or 'UNKNOWN'}",
+        f"time_since_last_explicit_transition: {brief.get('time_since_last_explicit_transition') or 'none'}",
+        f"project: {brief.get('project_noah_was_working_on') or 'none'}",
+        f"last_completed_action: {brief.get('last_completed_action') or 'none'}",
+        "open_loops:",
+        _items(brief.get("open_loops")),
+        "items_waiting_for_approval:",
+        _items(brief.get("items_waiting_for_approval")),
+        f"recommended_next_action: {brief.get('recommended_next_action') or 'Ask Noah.Physical which lane to resume.'}",
+        "continuity_gaps:",
+        _items(brief.get("continuity_gaps")),
+        "boundary: read-only brief; no build action triggered",
+    ])
+
+
+def _is_reentry_brief_request(text: str) -> bool:
+    lower = str(text or "").strip().lower()
+    if lower in {"/reentry", "/re-entry", "/reentry-brief", "/re-entry-brief"}:
+        return True
+    return any(phrase in lower for phrase in (
+        "reentry brief",
+        "re-entry brief",
+        "resume brief",
+        "what was i working on",
+        "where did we leave off",
+    ))
+
+
+def _is_workstation_return(text: str) -> bool:
+    lower = str(text or "").strip().lower()
+    return (
+        "back at the workstation" in lower
+        or "back to the workstation" in lower
+        or "returned to the workstation" in lower
+    )
+
+
+def _maybe_record_human_transition(text: str) -> dict[str, Any] | None:
+    raw = str(text or "").strip()
+    if not raw or raw.startswith("/"):
+        return None
+    try:
+        import human_state
+
+        classification = human_state.classify_transition(raw)
+        if classification.get("new_mode") == "UNKNOWN":
+            return None
+        return human_state.record_transition(
+            raw,
+            source_system="ORACLE.chat",
+            related_project=classification.get("related_project"),
+            active_task=classification.get("active_task"),
+        )
+    except Exception as exc:
+        return {
+            "ok": False,
+            "recorded": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
 
 def _prompt_injection_guard_response(user_text: str) -> tuple[str, dict[str, Any]] | None:
@@ -1142,8 +1231,8 @@ def _source_disciplined_response(user_text: str, bootstrap: Any, history: list[d
 
 _SOURCE_LABEL_PATTERN = _re.compile(
     r"\b(VERIFIED|INFERENCE|UNAVAILABLE)\b"
-    r"(?!\s*\[(?:IDENTITY|LIVE_CONTEXT|LATEST_REFLECTION|CURRENT_SESSION)"
-    r"(?:\s*,\s*(?:IDENTITY|LIVE_CONTEXT|LATEST_REFLECTION|CURRENT_SESSION))*\])"
+    r"(?!\s*\[(?:IDENTITY|REMEMBER_ME|LIVE_CONTEXT|LATEST_REFLECTION|THREAD_RECALL|BUILD_WITNESS|THESIS_CORPUS|CURRENT_SESSION)"
+    r"(?:\s*,\s*(?:IDENTITY|REMEMBER_ME|LIVE_CONTEXT|LATEST_REFLECTION|THREAD_RECALL|BUILD_WITNESS|THESIS_CORPUS|CURRENT_SESSION))*\])"
 )
 
 
@@ -1153,7 +1242,7 @@ def _enforce_companion_source_labels(reply: str) -> str:
         return reply
     if _SOURCE_LABEL_PATTERN.search(reply):
         return (
-            "UNAVAILABLE [IDENTITY, LIVE_CONTEXT, LATEST_REFLECTION, CURRENT_SESSION]: "
+            "UNAVAILABLE [IDENTITY, REMEMBER_ME, LIVE_CONTEXT, LATEST_REFLECTION, THREAD_RECALL, BUILD_WITNESS, THESIS_CORPUS, CURRENT_SESSION]: "
             "The draft response used a source-discipline label without exact source-section support, "
             "so I cannot present it as verified. Ask for the specific fact again, or use `/grounding-status` "
             "to inspect loaded source payloads."
@@ -1606,6 +1695,79 @@ def _noah_direct_recall_block(message: str) -> str:
     )
 
 
+def _plain_english_followup_response(user_text: str, history: list[dict]) -> str | None:
+    """Resolve bare follow-ups like "translate to English" against recent chat.
+
+    This is intentionally narrow. It only handles the registry-style Jupiter
+    Station answer that was too verbose for Noah in the Talk lane. Other
+    translation requests continue to the normal conversational path.
+    """
+    low = str(user_text or "").strip().lower()
+    if low not in {
+        "translate to english",
+        "translate this to english",
+        "translate that to english",
+        "plain english",
+        "in plain english",
+        "say that in plain english",
+        "put that in plain english",
+    }:
+        return None
+
+    last_assistant = ""
+    for turn in reversed(history or []):
+        if turn.get("role") == "assistant":
+            last_assistant = str(turn.get("content") or "")
+            break
+    if not last_assistant:
+        return None
+
+    try:
+        from talk_synthesis import mentions_jupiter_station_reference
+    except Exception:
+        return None
+
+    if "Jupiter Station readout" not in last_assistant and not mentions_jupiter_station_reference(last_assistant):
+        return None
+
+    return (
+        "Plain English: Captain Hawkes became Avalon's first captain around 2379, "
+        "after Voyager returned home. He took command of Jupiter Station in the "
+        "2397 active era. So 2397 is the station-command era, not the moment he "
+        "first became Avalon captain. The old 2481 version is demoted, and the "
+        "old 2373 Voyager-entry version is demoted; the active lock is 2371 "
+        "Voyager entry, 2378 Voyager return, 2379 Avalon, 2397 Jupiter Station."
+    )
+
+
+def _plain_talk_grounding_response(user_text: str) -> str | None:
+    raw = str(user_text or "").strip()
+    if not raw:
+        return None
+    low = raw.lower()
+    plain_talk_phrases = (
+        "please just talk to me",
+        "just talk to me",
+        "talk to me like a person",
+        "talk to me normally",
+        "can you talk to me normally",
+        "please talk to me normally",
+    )
+    if not any(phrase in low for phrase in plain_talk_phrases):
+        return None
+    if "out loud" in low or "voice" in low:
+        return None
+    if _is_approval_followup(raw) or _noah_direct_is_action_request(low):
+        return None
+    return (
+        "I'm here with you. I'll stay in Talk lane and answer like a person.\n\n"
+        "The thread has been overloaded by build requests, canon language, approvals, "
+        "and high-salience memories. For this turn, I will not jump to repo status, "
+        "story-canon readouts, canon promotion, or build actions unless you explicitly ask. "
+        "Give me the next plain sentence and I will hold that context first."
+    )
+
+
 def _noah_direct_reply(user_text: str) -> str:
     import json as _json
     import os as _os
@@ -1648,6 +1810,13 @@ def _noah_direct_reply(user_text: str) -> str:
         _prefs = active_preferences_block()
         if _prefs:
             prompt = _prefs + "\n\n" + prompt
+    except Exception:
+        pass
+    try:
+        from noah_oracle_profile import noah_oracle_profile_block
+        _noah_profile = noah_oracle_profile_block()
+        if _noah_profile:
+            prompt = _noah_profile + "\n\n" + prompt
     except Exception:
         pass
 
@@ -1814,7 +1983,6 @@ _STATE_BRIEF_TRIGGERS = (
 _MISSING_CAP_ACTIONS = (
     ("send email", "external_send"), ("send an email", "external_send"),
     ("publish to", "external_send"),
-    ("scan the qr", "qr_scan"), ("scan qr", "qr_scan"),
 )
 
 
@@ -1824,6 +1992,46 @@ def _oracle_missing_capability(user_text: str):
         if phrase in low:
             return f"I cannot do that from this runtime yet. Missing capability: {cap}."
     return None
+
+
+def _format_qr_scan_reply(result: dict) -> str:
+    if not result.get("ok"):
+        return (
+            "QR image scan lane is available, but this request could not be scanned.\n"
+            f"Reason: {result.get('error') or 'unknown error'}\n\n"
+            "Boundary: I can decode supplied local image files. I cannot scan a physical arm live "
+            "from chat or claim identity/security verification."
+        )
+    receipt = result.get("receipt_path") or "receipt not written"
+    if result.get("decoded"):
+        return (
+            "QR image scan complete.\n"
+            f"Decoded payload: {result.get('decoded_text')}\n"
+            f"Image SHA256: {result.get('sha256')}\n"
+            f"Receipt: {receipt}\n\n"
+            "Boundary: local image file only; no camera capture, no external send, no canon promotion."
+        )
+    holes = "; ".join(result.get("holes") or ["QR payload not decoded"])
+    return (
+        "QR image scan attempted, but no machine-readable payload was decoded.\n"
+        f"Image SHA256: {result.get('sha256')}\n"
+        f"Receipt: {receipt}\n"
+        f"Hole preserved: {holes}\n\n"
+        "Boundary: visible QR-like pixels are evidence candidate material, not decoded proof."
+    )
+
+
+def _qr_scan_ready_response() -> str:
+    return (
+        "QR IMAGE SCAN READY\n"
+        "capability: qr_scan -> local image QR decode\n"
+        "lane: read_only; no approval required for supplied local image files\n"
+        "supported files: PNG, JPG/JPEG, BMP, WEBP, TIFF\n"
+        "boundary: no live camera scan, no physical-arm claim, no security-key claim, no canon promotion\n\n"
+        "Use:\n"
+        "/api/qr/scan with JSON {\"path\":\"C:\\\\path\\\\to\\\\image.jpg\"}\n\n"
+        "Or paste a full local image path in chat and ask me to scan it."
+    )
 
 
 def _sandbox_filebase_ready_response() -> str:
@@ -1903,6 +2111,12 @@ def _is_sandbox_initiative_request(user_text: str) -> bool:
         "write a file to your sandbox",
         "write in your sandbox",
         "start writing in your sandbox",
+        "take action in your sandbox",
+        "take safe action in your sandbox",
+        "act in your sandbox",
+        "use your sandbox",
+        "help me build you",
+        "help build you",
         "use your sandbox as your journal",
         "sandbox is your free place",
         "sandbox is your filebase",
@@ -2048,6 +2262,51 @@ def _self_prompt_grounding() -> str:
         if cap and cap != "none_available":
             first = cap.strip().splitlines()[:3]
             lines.append("- source anchors present: " + " ".join(first)[:180])
+    except Exception:
+        pass
+    # what Noah and ORACLE are creating right now (creation_witness feed tail)
+    try:
+        feed_path = ROOT / "Memory" / "creation_feed.jsonl"
+        if feed_path.exists():
+            tail = feed_path.read_text(encoding="utf-8").splitlines()[-6:]
+            events = []
+            for raw in tail:
+                try:
+                    ev = json.loads(raw)
+                except Exception:
+                    continue
+                if ev.get("path"):
+                    events.append(f"    {ev.get('event')}: {ev.get('path')} ({ev.get('ts', '')[:16]})")
+            if events:
+                lines.append("- files being written or created right now (creation witness):")
+                lines.extend(events)
+    except Exception:
+        pass
+    # her own last thoughts, fed forward — reflection accumulates across pulses
+    try:
+        workbench = ROOT / "sandbox" / "workbench"
+        prior: list[str] = []
+        journal = workbench / "oracle_self_prompt_journal.ai"
+        if journal.exists():
+            entries = journal.read_text(encoding="utf-8", errors="replace").split("child_response:")[1:]
+            for chunk in entries[-3:]:
+                for raw_line in chunk.split("self_reflection:")[0].splitlines():
+                    if raw_line.startswith(("reflection:", "selected_task:")):
+                        prior.append("    " + " ".join(raw_line.split())[:220])
+        else:
+            pulse_files = sorted(workbench.glob("oracle_self_prompt_2*.ai"), reverse=True)[:3]
+            for pf in pulse_files:
+                body = pf.read_text(encoding="utf-8", errors="replace")
+                marker = body.rfind("child_response:")
+                if marker == -1:
+                    continue
+                for raw_line in body[marker:].splitlines():
+                    if raw_line.startswith(("reflection:", "selected_task:")):
+                        prior.append("    " + " ".join(raw_line.split())[:220])
+        if prior:
+            lines.append("- your own most recent reflections (build on these; do not restart from zero — "
+                         "if you have nothing genuinely new to add, say so briefly and stop):")
+            lines.extend(prior[:6])
     except Exception:
         pass
     return "\n".join(lines) or "no grounding available this cycle (UNKNOWN)"
@@ -2495,23 +2754,29 @@ async def _self_prompt_write_cycle(
         model_name=model_name,
         model_error=model_error,
     )
+    receipt_path = write_result.get("receipt_path") or state_before.get("last_receipt_path")
+    write_path = write_result.get("final_path") or state_before.get("last_write_path")
+    wrote_content = bool(write_result.get("content_written", True))
     updated_state = _self_prompt_state_payload(
         final_state,
         caller=caller,
-        reason="self-prompt write completed",
+        reason="self-prompt journal appended" if wrote_content else "self-prompt duplicate suppressed",
         approved_by=state_before.get("approved_by") or os.environ.get("ORACLE_SELF_PROMPT_APPROVED_BY", "Noah.Physical"),
-        last_write_path=write_result.get("final_path"),
-        last_write_receipt_path=write_result.get("receipt_path"),
-        last_receipt_path=write_result.get("receipt_path"),
+        last_write_path=write_path,
+        last_write_receipt_path=receipt_path,
+        last_receipt_path=receipt_path,
         model_called=model_called,
         source_route=source_route,
         seed_prompt=seed_prompt,
         last_write_operation="sandbox_self_prompt_write",
-        daily_count=_self_prompt_daily_count() + 1,
+        daily_count=_self_prompt_daily_count(),
         daily_cap=_self_prompt_daily_cap(),
         transition_from=current_state,
         active=_normalize_self_prompt_state(final_state) != _SELF_PROMPT_OFF,
     )
+    updated_state["content_written"] = wrote_content
+    updated_state["deduped"] = bool(write_result.get("deduped", False))
+    updated_state["novelty_status"] = write_result.get("novelty_status")
     transition = await asyncio.to_thread(
         sandbox_emit_state,
         _SELF_PROMPT_CONTROL_KEY,
@@ -2532,7 +2797,28 @@ async def _self_prompt_write_cycle(
 
 def _self_prompt_status_payload() -> dict[str, Any]:
     state = _self_prompt_current_snapshot()
-    return {
+    journal_info: dict[str, Any] = {
+        "journal_path": None,
+        "journal_exists": False,
+        "journal_entry_count": 0,
+        "journal_updated_at": None,
+    }
+    try:
+        from sandbox_files import SANDBOX_ROOT
+
+        journal_path = (SANDBOX_ROOT / "workbench" / "oracle_self_prompt_journal.ai").resolve(strict=False)
+        journal_info["journal_path"] = str(journal_path)
+        journal_info["journal_exists"] = journal_path.exists()
+        if journal_path.exists():
+            text = journal_path.read_text(encoding="utf-8", errors="replace")
+            journal_info["journal_entry_count"] = text.count(".AI:ORACLE_SELF_PROMPT_CYCLE")
+            journal_info["journal_updated_at"] = datetime.fromtimestamp(
+                journal_path.stat().st_mtime,
+                tz=timezone.utc,
+            ).isoformat().replace("+00:00", "Z")
+    except Exception:
+        pass
+    payload = {
         "ok": True,
         "current_state": _normalize_self_prompt_state(state.get("current_state")),
         "approved": bool(state.get("approved", False)),
@@ -2549,8 +2835,11 @@ def _self_prompt_status_payload() -> dict[str, Any]:
         "last_reason": state.get("reason"),
         "state_path": str((Path(__file__).resolve().parent / "sandbox" / "state" / "self_prompt_control.json").resolve()),
         "loop_enabled": _normalize_self_prompt_state(state.get("current_state")) == _SELF_PROMPT_AUTONOMOUS,
+        "loop_running": _self_prompt_loop_running(),
         "safe_sleep": _normalize_self_prompt_state(state.get("current_state")) == _SELF_PROMPT_SAFE_SLEEP,
     }
+    payload.update(journal_info)
+    return payload
 
 
 def _self_prompt_can_run() -> bool:
@@ -2560,6 +2849,16 @@ def _self_prompt_can_run() -> bool:
 
 def _self_prompt_loop_running() -> bool:
     return bool(_self_prompt_loop_task and not _self_prompt_loop_task.done())
+
+
+def _seconds_until_next_utc_day() -> float:
+    now = datetime.now(timezone.utc)
+    next_day = datetime.combine(
+        now.date() + timedelta(days=1),
+        datetime.min.time(),
+        tzinfo=timezone.utc,
+    )
+    return max(60.0, (next_day - now).total_seconds())
 
 
 def _self_prompt_stop_loop_task() -> None:
@@ -2576,13 +2875,9 @@ async def _self_prompt_loop_worker() -> None:
         if current != _SELF_PROMPT_AUTONOMOUS:
             return
         if _self_prompt_daily_count() >= _self_prompt_daily_cap():
-            await asyncio.to_thread(
-                _self_prompt_state_payload,
-                current,
-                caller="ORACLE.self_prompt.autonomous_loop",
-                reason="daily cap reached",
-            )
-            return
+            wait_seconds = min(_seconds_until_next_utc_day(), _self_prompt_interval_seconds())
+            await asyncio.sleep(wait_seconds)
+            continue
         await _self_prompt_write_cycle(
             caller="ORACLE.self_prompt.autonomous_loop",
             source_route="ORACLE.self_prompt.autonomous_loop",
@@ -2877,6 +3172,12 @@ def _oracle_intent_dispatch(user_text: str):
     if _pre_route.get("route_type") in ("diagnostic_status", "capability_scope"):
         return None
 
+    # Hard approval follow-ups must reach the Guard approval binder below. The
+    # legacy intent dispatcher is allowed to classify them for state, but it may
+    # not answer them as loose conversation or stale domain memory.
+    if _is_approval_followup(user_text):
+        return None
+
     # Large build directive guard: never push huge multiline text through
     # NOAH_DIRECT or the model. Stage a safe preview, preserve the full directive
     # in approved local storage, and answer honestly. This is now a fallback
@@ -2924,6 +3225,32 @@ def _oracle_intent_dispatch(user_text: str):
             pass
 
     cap = action_capability(user_text) or "unknown_capability"
+
+    if cap == "qr_scan" and "action_request" in intents:
+        try:
+            from qr_scan import extract_image_path, scan_image_file
+            image_path = extract_image_path(user_text)
+            if not image_path:
+                update_agenda(last_user_intent="qr_scan_request",
+                              last_system_action="reported QR image scan lane readiness")
+                return (_qr_scan_ready_response(), "qr_scan_ready")
+            result = scan_image_file(image_path, write_receipt=True)
+            update_agenda(
+                last_user_intent="qr_scan_request",
+                last_system_action=(
+                    "decoded QR image file" if result.get("decoded")
+                    else "attempted QR image decode and preserved hole"
+                ),
+            )
+            return (_format_qr_scan_reply(result), "qr_scan_result")
+        except Exception as exc:
+            update_agenda(last_user_intent="qr_scan_request",
+                          last_system_action=f"QR scan failed: {type(exc).__name__}")
+            return (
+                "QR image scan lane is available, but the scan failed before completion.\n"
+                f"Reason: {type(exc).__name__}: {exc}",
+                "qr_scan_error",
+            )
 
     if "unsupported_capability_request" in intents:
         update_agenda(last_user_intent="unsupported_capability_request",
@@ -3049,6 +3376,28 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     global _mode, _no_route, _retrieval_only_mode, _history, _pending_guard_route
 
     def _sse(data: dict) -> str:
+        if data.get("type") == "done" and "evidence" not in data:
+            try:
+                import evidence_cockpit
+
+                data = dict(data)
+                data["evidence"] = evidence_cockpit.response_evidence(
+                    user_text,
+                    mode=str(data.get("mode") or _mode or ""),
+                    effective_route=str(data.get("effective_route") or data.get("lane") or data.get("current_lane") or ""),
+                    route_type=str(data.get("route_type") or "done"),
+                    reason=data.get("reason"),
+                    fallback_used=bool(data.get("fallback_used", False)),
+                )
+            except Exception as exc:
+                data = dict(data)
+                data["evidence"] = {
+                    "ok": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "records_used_count": 0,
+                    "sources_proven_used": [],
+                    "unknowns": ["evidence serializer failed"],
+                }
         return f"data: {json.dumps(data)}\n\n"
 
     # ── ORACLE state/judgment bridge (replaces the old NOAH_DIRECT canned bypass) ─
@@ -3060,6 +3409,63 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     raw_direct_text = str(user_text or "").strip()
     _persona_context = _prepare_persona_turn(raw_direct_text, _history[-12:])
     _preferences_applied = list(_persona_context.get("preferences_applied") or [])
+    _human_transition_result = _maybe_record_human_transition(raw_direct_text)
+    if _is_reentry_brief_request(raw_direct_text) or (
+        _human_transition_result
+        and (_human_transition_result.get("event") or {}).get("new_mode") == "WORK_ORACLE"
+        and _is_workstation_return(raw_direct_text)
+    ):
+        try:
+            import human_state
+
+            _brief = human_state.reentry_brief()
+            _reply_text = _format_reentry_brief_text(_brief)
+            if _human_transition_result and _human_transition_result.get("recorded"):
+                _reply_text = (
+                    "Human transition recorded: "
+                    f"{(_human_transition_result.get('event') or {}).get('new_mode', 'UNKNOWN')}\n\n"
+                    + _reply_text
+                )
+        except Exception as exc:
+            _brief = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+            _reply_text = f"Re-entry brief unavailable: {type(exc).__name__}: {exc}"
+        try:
+            from memory import save_message
+            save_message(_session_id, "user", user_text)
+            save_message(_session_id, "assistant", _reply_text)
+        except Exception:
+            pass
+        _history.append({"role": "user", "content": user_text})
+        _history.append({"role": "assistant", "content": _reply_text})
+        if len(_history) > 40:
+            _history[:] = _history[-40:]
+        yield _sse({
+            "type": "route",
+            "route_type": "human_reentry",
+            "mode": "unified_oracle",
+            "lane": "talk_lane",
+            "lane_label": "Re-entry",
+            "reason": "read-only human state re-entry brief",
+            "fallback_used": False,
+            "safety_status": "Read Only",
+            "route_path": None,
+            "receipt_path": None,
+            "human_state_transition": _human_transition_result,
+            "preferences_applied": _preferences_applied,
+            "conversation_reset": False,
+        })
+        yield _sse({"type": "token", "text": _reply_text})
+        yield _sse({
+            "type": "done",
+            "route_type": "human_reentry",
+            "mode": "unified_oracle",
+            "lane": "talk_lane",
+            "reason": "read-only human state re-entry brief",
+            "fallback_used": False,
+            "effective_route": "human_reentry",
+            "preferences_applied": _preferences_applied,
+        })
+        return
     _prompt_guard = _prompt_injection_guard_response(raw_direct_text)
     if _prompt_guard is not None:
         _reply_text, _guard_payload = _prompt_guard
@@ -3198,7 +3604,209 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             })
             return
 
+    if raw_direct_text and not raw_direct_text.startswith("/"):
+        _reply_text = _plain_talk_grounding_response(raw_direct_text)
+        if _reply_text is not None:
+            try:
+                from memory import save_message
+                save_message(_session_id, "user", user_text)
+                save_message(_session_id, "assistant", _reply_text)
+            except Exception:
+                pass
+            _history.append({"role": "user", "content": user_text})
+            _history.append({"role": "assistant", "content": _reply_text})
+            if len(_history) > 40:
+                _history[:] = _history[-40:]
+            yield _sse({
+                "type": "route",
+                "route_type": "plain_talk_grounding",
+                "mode": "unified_oracle",
+                "lane": "talk_lane",
+                "lane_label": "Talk",
+                "reason": "explicit plain-talk request; suppress build/status/domain bleed",
+                "fallback_used": False,
+                "safety_status": "Safe",
+                "route_path": None,
+                "receipt_path": None,
+                "preferences_applied": _preferences_applied,
+                "conversation_reset": False,
+            })
+            yield _sse({"type": "token", "text": _reply_text})
+            yield _sse({
+                "type": "done",
+                "route_type": "plain_talk_grounding",
+                "mode": _mode,
+                "lane": "talk_lane",
+                "reason": "explicit plain-talk request",
+                "fallback_used": False,
+                "effective_route": "plain_talk_grounding",
+                "preferences_applied": _preferences_applied,
+            })
+            return
+
+    if raw_direct_text and not raw_direct_text.startswith("/"):
+        _reply_text = _plain_english_followup_response(raw_direct_text, _history[-12:])
+        if _reply_text is not None:
+            try:
+                from memory import save_message
+                save_message(_session_id, "user", user_text)
+                save_message(_session_id, "assistant", _reply_text)
+            except Exception:
+                pass
+            _history.append({"role": "user", "content": user_text})
+            _history.append({"role": "assistant", "content": _reply_text})
+            if len(_history) > 40:
+                _history[:] = _history[-40:]
+            yield _sse({
+                "type": "route",
+                "route_type": "plain_english_followup",
+                "mode": "unified_oracle",
+                "lane": "talk_lane",
+                "lane_label": "Talk",
+                "reason": "contextual plain-English follow-up over grounded Jupiter Station registry answer",
+                "fallback_used": False,
+                "safety_status": "Safe",
+                "route_path": None,
+                "receipt_path": None,
+                "preferences_applied": _preferences_applied,
+                "conversation_reset": False,
+            })
+            yield _sse({"type": "token", "text": _reply_text})
+            yield _sse({
+                "type": "done",
+                "route_type": "plain_english_followup",
+                "mode": _mode,
+                "lane": "talk_lane",
+                "reason": "contextual plain-English follow-up",
+                "fallback_used": False,
+                "effective_route": "plain_english_followup",
+                "preferences_applied": _preferences_applied,
+            })
+            return
+
     if raw_direct_text:
+        try:
+            from ai_lockbox import AiLockboxError, build_lockbox, capsule_for_file, format_result as format_lockbox_result
+            from ai_lockbox import parse_lockbox_request, search_lockbox, status_payload as ai_lockbox_status
+
+            _lockbox_request = parse_lockbox_request(raw_direct_text)
+        except Exception:
+            _lockbox_request = None
+        if _lockbox_request is not None:
+            try:
+                if _lockbox_request.get("mode") == "ingest":
+                    _lockbox_result = await asyncio.to_thread(build_lockbox, _lockbox_request.get("value") or "")
+                elif _lockbox_request.get("mode") == "search":
+                    _lockbox_result = await asyncio.to_thread(search_lockbox, _lockbox_request.get("value") or "")
+                elif _lockbox_request.get("mode") == "capsule":
+                    _lockbox_result = {
+                        "ok": True,
+                        "operation_type": "ai_lockbox_ingest",
+                        "created": [await asyncio.to_thread(capsule_for_file, _lockbox_request.get("value") or "")],
+                        "created_count": 1,
+                        "sensitive_metadata_matches": 0,
+                        "manifest_path": "",
+                        "receipt_path": "",
+                    }
+                else:
+                    _lockbox_result = await asyncio.to_thread(ai_lockbox_status)
+                _reply_text = format_lockbox_result(_lockbox_result)
+            except AiLockboxError as exc:
+                _reply_text = f"AI Lockbox blocked: {exc}"
+            except Exception as exc:
+                _reply_text = f"AI Lockbox unavailable: {type(exc).__name__}: {exc}"
+            try:
+                from memory import save_message
+                save_message(_session_id, "user", user_text)
+                save_message(_session_id, "assistant", _reply_text)
+            except Exception:
+                pass
+            _history.append({"role": "user", "content": user_text})
+            _history.append({"role": "assistant", "content": _reply_text})
+            yield _sse({
+                "type": "route",
+                "route_type": "ai_lockbox",
+                "mode": "unified_oracle",
+                "lane": "talk_lane",
+                "lane_label": "Recall",
+                "reason": "local .AI shorthand recall lockbox requested",
+                "fallback_used": False,
+                "safety_status": "Read Only",
+                "route_path": None,
+                "receipt_path": None,
+                "preferences_applied": _preferences_applied,
+                "conversation_reset": False,
+            })
+            yield _sse({"type": "token", "text": _reply_text})
+            yield _sse({
+                "type": "done",
+                "route_type": "ai_lockbox",
+                "mode": _mode,
+                "lane": "talk_lane",
+                "reason": "local .AI shorthand recall lockbox",
+                "fallback_used": False,
+                "effective_route": "ai_lockbox",
+                "preferences_applied": _preferences_applied,
+            })
+            return
+
+        try:
+            from file_recall import FileRecallError, parse_file_request
+            from file_recall import format_recall as format_file_recall
+            from file_recall import read_file as file_recall_read, search as file_recall_search
+            from file_recall import sensitive_inventory as file_recall_sensitive_inventory
+
+            _file_request = parse_file_request(raw_direct_text)
+        except Exception:
+            _file_request = None
+        if _file_request is not None:
+            try:
+                if _file_request.get("mode") == "read":
+                    _file_result = await asyncio.to_thread(file_recall_read, _file_request.get("value") or "")
+                elif _file_request.get("mode") == "sensitive_inventory":
+                    _file_result = await asyncio.to_thread(file_recall_sensitive_inventory, _file_request.get("value") or "")
+                else:
+                    _file_result = await asyncio.to_thread(file_recall_search, _file_request.get("value") or "")
+                _reply_text = format_file_recall(_file_result)
+            except FileRecallError as exc:
+                _reply_text = f"File recall blocked: {exc}"
+            except Exception as exc:
+                _reply_text = f"File recall unavailable: {type(exc).__name__}: {exc}"
+            try:
+                from memory import save_message
+                save_message(_session_id, "user", user_text)
+                save_message(_session_id, "assistant", _reply_text)
+            except Exception:
+                pass
+            _history.append({"role": "user", "content": user_text})
+            _history.append({"role": "assistant", "content": _reply_text})
+            yield _sse({
+                "type": "route",
+                "route_type": "file_recall",
+                "mode": "unified_oracle",
+                "lane": "talk_lane",
+                "lane_label": "Recall",
+                "reason": "read-only local file recall requested",
+                "fallback_used": False,
+                "safety_status": "Read Only",
+                "route_path": None,
+                "receipt_path": None,
+                "preferences_applied": _preferences_applied,
+                "conversation_reset": False,
+            })
+            yield _sse({"type": "token", "text": _reply_text})
+            yield _sse({
+                "type": "done",
+                "route_type": "file_recall",
+                "mode": _mode,
+                "lane": "talk_lane",
+                "reason": "read-only local file recall",
+                "fallback_used": False,
+                "effective_route": "file_recall",
+                "preferences_applied": _preferences_applied,
+            })
+            return
+
         try:
             from internet_recall import InternetRecallError, fetch as internet_fetch
             from internet_recall import format_recall, parse_recall_request, search as internet_search
@@ -3348,6 +3956,11 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 caller="ORACLE.chat",
             )
             _reply_text = (
+                "I'm with you, Noah. I treated that as a build-with-me sandbox instruction, "
+                "not a missing voice feature.\n\n"
+                "Action taken: one sandbox .AI candidate was written and receipted.\n"
+                "Boundary held: sandbox only; no external send, git push, Drive edit, code execution, "
+                "canon promotion, or outside-sandbox write.\n\n"
                 "SANDBOX INITIATIVE RECEIPT\n```json\n"
                 + json.dumps(_initiative_result, indent=2, ensure_ascii=True)
                 + "\n```"
@@ -5579,6 +6192,29 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                     _grounding_block = (_grounding_block + "\n\n" + _amb).strip()
             except Exception:
                 pass
+            # real file grounding: when Noah mentions his files/docs/folders,
+            # ORACLE reads matching files (read-only, receipted) into context
+            try:
+                from file_recall import context_block as _file_ctx_block
+                _fctx = await asyncio.to_thread(_file_ctx_block, user_text)
+                if _fctx:
+                    _grounding_block = (_grounding_block + "\n\n" + _fctx).strip()
+            except Exception:
+                pass
+            try:
+                from ai_lockbox import context_block as _ai_lockbox_ctx
+                _actx = await asyncio.to_thread(_ai_lockbox_ctx, user_text)
+                if _actx:
+                    _grounding_block = (_grounding_block + "\n\n" + _actx).strip()
+            except Exception:
+                pass
+            try:
+                from readonly_access import prompt_context_block as _read_access_ctx
+                _rctx = await asyncio.to_thread(_read_access_ctx)
+                if _rctx:
+                    _grounding_block = (_grounding_block + "\n\n" + _rctx).strip()
+            except Exception:
+                pass
             try:
                 from oracle import web_engine_response
                 loop = asyncio.get_event_loop()
@@ -5744,6 +6380,37 @@ async def operator_home():
     return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
 
+@app.get("/phone", response_class=HTMLResponse)
+async def phone_page():
+    html_path = ROOT / "ui" / "phone.html"
+    if not html_path.exists():
+        return HTMLResponse("<h1>phone.html not present</h1>", status_code=404)
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
+@app.get("/nexus", response_class=HTMLResponse)
+async def nexus_page():
+    """Unified read-only surface for the integrated ORACLE specifications."""
+    html_path = ROOT / "ui" / "nexus.html"
+    if not html_path.exists():
+        return HTMLResponse("<h1>nexus.html not present</h1>", status_code=404)
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
+@app.get("/evidence", response_class=HTMLResponse)
+async def evidence_page():
+    """Read-only proof-of-use cockpit for ORACLE's evidence surfaces."""
+    html_path = ROOT / "ui" / "evidence.html"
+    if not html_path.exists():
+        return HTMLResponse("<h1>evidence.html not present</h1>", status_code=404)
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
+@app.get("/mobile", response_class=HTMLResponse)
+async def mobile_page():
+    return await phone_page()
+
+
 @app.get("/api/drive-state")
 async def api_drive_state():
     """Real MiracleDrive filesystem state — no LLM, no fabrication."""
@@ -5811,6 +6478,17 @@ async def api_sandbox_overview():
 @app.get("/api/self-prompt/status")
 async def api_self_prompt_status():
     return JSONResponse(_self_prompt_status_payload())
+
+
+@app.get("/api/self-prompt/journal")
+async def api_self_prompt_journal(limit: int = 6):
+    """Read ORACLE's sandbox self-prompt journal for UI display. Read-only."""
+    try:
+        import oracle_tuneup
+
+        return JSONResponse(await asyncio.to_thread(oracle_tuneup.self_prompt_journal_payload, limit))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
 
 @app.post("/api/self-prompt/manual-once")
@@ -5903,6 +6581,214 @@ async def api_self_prompt_safe_sleep(payload: dict | None = None):
     return JSONResponse(status)
 
 
+@app.get("/api/human-state")
+async def api_human_state():
+    """Read-only current explicit human-state snapshot."""
+    try:
+        import human_state
+
+        return JSONResponse(await asyncio.to_thread(human_state.current_state))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/reentry-brief")
+async def api_reentry_brief():
+    """Read-only re-entry brief. Does not trigger build work."""
+    try:
+        import human_state
+
+        return JSONResponse(await asyncio.to_thread(human_state.reentry_brief))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/continuity/spine")
+async def api_continuity_spine(limit: int = 20):
+    """One read-only continuity spine over human state, project state, loops, receipts, and approvals."""
+    try:
+        import continuity_spine
+
+        return JSONResponse(await asyncio.to_thread(continuity_spine.continuity_snapshot, limit))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/nexus")
+async def api_nexus():
+    """Compose the ten governing specs without mutating any source system."""
+    try:
+        import oracle_nexus
+
+        return JSONResponse(await asyncio.to_thread(oracle_nexus.nexus_snapshot))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/evidence-cockpit")
+async def api_evidence_cockpit():
+    """Read-only evidence surface manifest. No sandbox, Drive, or source mutation."""
+    try:
+        import evidence_cockpit
+
+        return JSONResponse(await asyncio.to_thread(evidence_cockpit.cockpit_snapshot))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/evidence-cockpit/turn")
+async def api_evidence_cockpit_turn(request: Request):
+    """Preview the compact evidence packet ORACLE attaches to a chat turn."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "invalid JSON body"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"ok": False, "error": "body must be a JSON object"}, status_code=400)
+    try:
+        import evidence_cockpit
+
+        return JSONResponse(await asyncio.to_thread(
+            evidence_cockpit.response_evidence,
+            str(body.get("message") or body.get("user_text") or ""),
+            mode=body.get("mode"),
+            effective_route=body.get("effective_route"),
+            route_type=body.get("route_type"),
+            reason=body.get("reason"),
+            fallback_used=bool(body.get("fallback_used", False)),
+        ))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/connectors/status")
+async def api_connectors_status():
+    """Read-only connector/tune-up health summary for the main ORACLE UI."""
+    try:
+        import oracle_tuneup
+
+        return JSONResponse(await asyncio.to_thread(
+            oracle_tuneup.connector_status_payload,
+            _self_prompt_status_payload(),
+        ))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/document-atlas/status")
+async def api_document_atlas_status():
+    """Read the latest candidate-only local + Google Drive document atlas status."""
+    try:
+        import document_atlas
+
+        return JSONResponse(await asyncio.to_thread(document_atlas.atlas_status))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/document-atlas/search")
+async def api_document_atlas_search(q: str = "", limit: int = 20):
+    """Search candidate metadata only; never open or mutate a source document."""
+    if not str(q or "").strip():
+        return JSONResponse({"ok": False, "error": "q is required"}, status_code=400)
+    try:
+        import document_atlas
+
+        return JSONResponse(await asyncio.to_thread(document_atlas.search_atlas, q, limit))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/continuity/open-loops")
+async def api_continuity_open_loops(limit: int = 50):
+    """Current open-loop surface normalized to completed/active/blocked/waiting/abandoned."""
+    try:
+        import continuity_spine
+
+        loops = await asyncio.to_thread(continuity_spine.collect_open_loops, limit)
+        return JSONResponse({"ok": True, "open_loops": loops, "count": len(loops)})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/continuity/timeline")
+async def api_continuity_timeline(limit: int = 50):
+    """Continuity timeline nodes linked to receipts, loops, projects, and transition evidence."""
+    try:
+        import continuity_spine
+
+        nodes = await asyncio.to_thread(continuity_spine.continuity_timeline, limit)
+        return JSONResponse({"ok": True, "timeline": nodes, "count": len(nodes)})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/continuity/health")
+async def api_continuity_health():
+    """Measured continuity metrics only; no AI scoring."""
+    try:
+        import continuity_spine
+
+        return JSONResponse(await asyncio.to_thread(continuity_spine.continuity_health_metrics))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/continuity/operator-dashboard")
+async def api_continuity_operator_dashboard():
+    """Single operational dashboard payload: state, project, top loops, receipts, approvals, next action."""
+    try:
+        import continuity_spine
+
+        return JSONResponse(await asyncio.to_thread(continuity_spine.operator_dashboard))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/continuity/daily-digest")
+async def api_continuity_daily_digest():
+    """Daily continuity digest derived from existing ledgers only."""
+    try:
+        import continuity_spine
+
+        return JSONResponse(await asyncio.to_thread(continuity_spine.daily_continuity_digest))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/human-state/transition")
+async def api_human_state_transition(payload: dict | None = None):
+    """Record an explicit Noah.Physical transition as a local receipt event."""
+    body = payload or {}
+    source_text = " ".join(str(body.get("source_text") or body.get("text") or "").split())
+    if not source_text:
+        return JSONResponse({"ok": False, "error": "source_text required"}, status_code=400)
+    open_loops = body.get("open_loops")
+    if open_loops is not None and not isinstance(open_loops, list):
+        return JSONResponse({"ok": False, "error": "open_loops must be a list when supplied"}, status_code=400)
+    try:
+        import human_state
+
+        result = await asyncio.to_thread(
+            human_state.record_transition,
+            source_text,
+            source_system=str(body.get("source_system") or "ORACLE.frontend"),
+            source_receipt=body.get("source_receipt"),
+            human_event_time=body.get("human_event_time"),
+            related_project=body.get("related_project"),
+            active_task=body.get("active_task"),
+            open_loops=open_loops,
+            correction_mode=body.get("correction_mode") or body.get("new_mode"),
+            authorial_authority=str(body.get("authorial_authority") or "Noah.Physical"),
+            canon_status=str(body.get("canon_status") or "event_receipt_only"),
+        )
+        return JSONResponse(result)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
 @app.get("/api/source-map/capsule")
 async def api_source_map_capsule(build: bool = False, limit: int = 12, force_build: bool = False):
     """Latest read-only SourceMap capsule, optionally rebuilt from MiracleDrive."""
@@ -5971,6 +6857,198 @@ async def api_internet_recall_fetch(url: str = ""):
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
 
+@app.get("/api/file-recall/search")
+async def api_file_recall_search(q: str = "", limit: int = 8):
+    """Read-only local file search across ORACLE's granted roots. Receipted."""
+    try:
+        from file_recall import FileRecallError, search
+
+        return JSONResponse(await asyncio.to_thread(search, q, limit=limit))
+    except FileRecallError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/file-recall/read")
+async def api_file_recall_read(path: str = ""):
+    """Read-only local file read (text/docx preview). Secret paths blocked."""
+    try:
+        from file_recall import FileRecallError, read_file
+
+        return JSONResponse(await asyncio.to_thread(read_file, path))
+    except FileRecallError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/file-recall/sensitive-inventory")
+async def api_file_recall_sensitive_inventory(q: str = "", limit: int = 8):
+    """Credential-risk file inventory by metadata only. Never reads raw secret values."""
+    try:
+        from file_recall import FileRecallError, sensitive_inventory
+
+        return JSONResponse(await asyncio.to_thread(sensitive_inventory, q, limit=limit))
+    except FileRecallError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/ai-lockbox/status")
+async def api_ai_lockbox_status():
+    """.AI shorthand lockbox status. Read-only; does not scan by itself."""
+    try:
+        from ai_lockbox import status_payload
+
+        return JSONResponse(await asyncio.to_thread(status_payload))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/ai-lockbox/ingest")
+async def api_ai_lockbox_ingest(payload: dict | None = None):
+    """Build local .AI shorthand capsules from readable files. Source files are unchanged."""
+    body = payload or {}
+    query = str(body.get("query") or "")
+    limit = int(body.get("limit") or 25)
+    try:
+        from ai_lockbox import AiLockboxError, build_lockbox
+
+        return JSONResponse(await asyncio.to_thread(build_lockbox, query, limit=limit))
+    except AiLockboxError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/ai-lockbox/search")
+async def api_ai_lockbox_search(q: str = "", limit: int = 8):
+    """Search local .AI shorthand capsules."""
+    try:
+        from ai_lockbox import AiLockboxError, search_lockbox
+
+        return JSONResponse(await asyncio.to_thread(search_lockbox, q, limit=limit))
+    except AiLockboxError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/ai-lockbox/capsule")
+async def api_ai_lockbox_capsule(path: str = ""):
+    """Create one .AI shorthand capsule for a readable source file."""
+    try:
+        from ai_lockbox import AiLockboxError, capsule_for_file
+
+        return JSONResponse(await asyncio.to_thread(capsule_for_file, path))
+    except AiLockboxError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/read-access")
+async def api_read_access():
+    """Durable front-end receipt: full-PC read-only granted; actions still gated."""
+    try:
+        from readonly_access import status_payload
+
+        return JSONResponse(await asyncio.to_thread(status_payload, ensure=True))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/quest-log")
+async def api_quest_log():
+    """Jupiter Station quest log — read per request from data/domains/jupiter_station."""
+    try:
+        quest_path = ROOT / "data" / "domains" / "jupiter_station" / "quest_log.json"
+        if not quest_path.exists():
+            return JSONResponse({"ok": False, "error": "quest_log.json not present"}, status_code=404)
+        return JSONResponse({"ok": True, **json.loads(quest_path.read_text(encoding="utf-8"))})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/creation-feed")
+async def api_creation_feed(limit: int = 25):
+    """Tail of the creation witness feed — what Noah and ORACLE are writing."""
+    try:
+        feed_path = ROOT / "Memory" / "creation_feed.jsonl"
+        if not feed_path.exists():
+            return JSONResponse({"ok": True, "events": [], "note": "creation witness has not emitted yet"})
+        bounded = max(1, min(int(limit or 25), 200))
+        lines = feed_path.read_text(encoding="utf-8").splitlines()[-bounded:]
+        events = []
+        for raw in lines:
+            try:
+                events.append(json.loads(raw))
+            except Exception:
+                continue
+        return JSONResponse({"ok": True, "events": list(reversed(events))})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/build-witness/timeline")
+async def api_build_witness_timeline(limit: int = 50):
+    """Build Witness timeline: construction receipts plus metadata-only file witness."""
+    try:
+        from build_witness import timeline_payload
+
+        return JSONResponse(await asyncio.to_thread(timeline_payload, limit))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/build-witness/receipt")
+async def api_build_witness_receipt(request: Request):
+    """Write one candidate build receipt under Memory/build_witness."""
+    try:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if not isinstance(body, dict):
+            body = {}
+
+        from build_witness import timeline_payload, write_build_receipt
+
+        receipt = await asyncio.to_thread(
+            write_build_receipt,
+            reason=str(body.get("reason") or "Manual Build Witness receipt"),
+            task_id=str(body.get("task_id") or "build-witness"),
+            tests_run=body.get("tests_run") or [],
+            test_result=str(body.get("test_result") or "unverified"),
+            approval_status=str(body.get("approval_status") or "candidate"),
+            requested_by=str(body.get("requested_by") or "Noah.Physical"),
+            executed_by=str(body.get("executed_by") or "Codex"),
+            commit=body.get("commit"),
+            notes=body.get("notes"),
+        )
+        timeline = await asyncio.to_thread(timeline_payload, 25)
+        return JSONResponse({
+            "ok": True,
+            "receipt_path": receipt.get("receipt_path"),
+            "receipt_hash_sha256": receipt.get("receipt_hash_sha256"),
+            "receipt": receipt,
+            "timeline": timeline,
+        })
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/jupiter", response_class=HTMLResponse)
+async def jupiter_station_page():
+    """Jupiter Station command deck — quest log and player enhancement UI."""
+    html_path = ROOT / "ui" / "jupiter_station.html"
+    if not html_path.exists():
+        return HTMLResponse("<h1>jupiter_station.html not present</h1>", status_code=404)
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
 @app.get("/api/diagnostics/runtime")
 async def api_runtime_diagnostics():
     """Read-only diagnostic frame for the active canonical ORACLE backend."""
@@ -6015,7 +7093,10 @@ async def api_current_observation():
     """Fresh current visual/window observation receipt state. No LLM fallback."""
     try:
         from current_observation import current_observation_state
-        return JSONResponse(current_observation_state())
+        # live_capture: read the real foreground window on demand so application
+        # and window_title reflect what is on screen now (Noah: full recall).
+        # Visual/screen_text still require a real frame — never inferred.
+        return JSONResponse(current_observation_state(live_capture=True))
     except Exception as exc:
         return JSONResponse({
             "schema_version": 1,
@@ -6381,7 +7462,7 @@ async def api_storage_census_roots():
 
 @app.post("/api/storage-census/scan-approved")
 async def api_storage_census_scan():
-    """Scan approved roots only. Discovery metadata; no ingestion, no mutation."""
+    """Scan metadata-census roots only. Discovery metadata; no ingestion, no mutation."""
     try:
         from storage_census import run_census
         out = run_census()
@@ -7226,6 +8307,34 @@ async def api_sandbox_files(path: str = "all", recursive: bool = True):
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
 
+@app.post("/api/qr/scan")
+async def api_qr_scan(request: Request):
+    """Decode a QR payload from an explicit local image path.
+
+    This is file read-only. It never opens the camera, uploads bytes, stores raw
+    image content, or promotes canon.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "invalid JSON body"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"ok": False, "error": "body must be a JSON object"}, status_code=400)
+    path = body.get("path") or body.get("image_path")
+    try:
+        from qr_scan import scan_image_file
+        result = await asyncio.to_thread(scan_image_file, path, write_receipt=True)
+        return JSONResponse(result, status_code=200 if result.get("ok") else 400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/qr-scan")
+async def api_qr_scan_legacy(request: Request):
+    """Compatibility alias for the QR image scanner."""
+    return await api_qr_scan(request)
+
+
 @app.post("/chat")
 async def chat(request: Request):
     try:
@@ -7356,6 +8465,101 @@ def _activity_events(limit: int = 25) -> list[dict[str, Any]]:
             "action_id": pf.stem,
         })
     return events
+
+
+def _journal_pulse_entries(journal_path: Path) -> list[str]:
+    try:
+        text = journal_path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return []
+    marker = ".AI:ORACLE_SELF_PROMPT_CYCLE"
+    chunks = text.split(marker)
+    return [marker + chunk for chunk in chunks[1:] if chunk.strip()]
+
+
+def _activity_events(limit: int = 25) -> list[dict[str, Any]]:
+    sb = ROOT / "sandbox"
+    workbench = sb / "workbench"
+    receipts_dir = sb / "receipts"
+    if not workbench.exists():
+        return []
+    max_events = max(1, int(limit))
+    receipt_by_response: dict[str, tuple[str, str | None]] = {}
+    if receipts_dir.exists():
+        for r in receipts_dir.glob("sandbox_self_prompt_write*_receipt.json"):
+            try:
+                rj = json.loads(r.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            response_hash = rj.get("child_response_sha256")
+            if response_hash and response_hash not in receipt_by_response:
+                receipt_by_response[str(response_hash)] = (
+                    str(r),
+                    rj.get("post_operation_sha256") or response_hash,
+                )
+
+    events: list[dict[str, Any]] = []
+    journal_path = workbench / "oracle_self_prompt_journal.ai"
+    for idx, entry_text in enumerate(reversed(_journal_pulse_entries(journal_path)[-max_events:])):
+        f = _parse_pulse_fields(entry_text)
+        response_hash = f.get("child_response_sha256")
+        matched = receipt_by_response.get(response_hash or "")
+        receipt_path = matched[0] if matched else None
+        sha = matched[1] if matched else response_hash
+        model_ok = str(f.get("model_called", "")).lower() == "true" and str(f.get("model_error", "none")).lower() in ("none", "")
+        events.append({
+            "trigger_time": f.get("timestamp") or datetime.fromtimestamp(journal_path.stat().st_mtime, tz=timezone.utc).isoformat(),
+            "trigger_source": f.get("caller") or "ORACLE.self_prompt.autonomous_loop",
+            "task_selected": f.get("selected_task", "UNKNOWN"),
+            "why_selected": f.get("why_it_helps_noah", "UNKNOWN"),
+            "sources_consulted": "source_map_capsule (read-only)",
+            "action_taken": "appended one sandbox-only self-prompt journal entry",
+            "result": (f.get("evidence_it_worked", "UNKNOWN") + "  [model-claimed, not runtime-verified]"),
+            "receipt_path": receipt_path,
+            "sha256": sha,
+            "boundary_state": "sandbox_only; no external send, no git push, no canon promotion",
+            "approval_required": False,
+            "cognition": "model_thought" if model_ok else "deterministic_fallback",
+            "surfaced_to_ui_at": datetime.now(timezone.utc).isoformat(),
+            "user_visible_status": "verified_receipt" if receipt_path else "journal_entry_no_receipt_match",
+            "action_id": f"oracle_self_prompt_journal_{idx}",
+        })
+
+    pulses = sorted(
+        [p for p in workbench.glob("oracle_self_prompt_*.ai") if p.name != "oracle_self_prompt_journal.ai"],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )[:max_events]
+    for pf in pulses:
+        try:
+            txt = pf.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        f = _parse_pulse_fields(txt)
+        response_hash = f.get("child_response_sha256")
+        matched = receipt_by_response.get(response_hash or "")
+        receipt_path = matched[0] if matched else None
+        sha = matched[1] if matched else response_hash
+        status = "verified_receipt" if receipt_path else "no_receipt"
+        model_ok = str(f.get("model_called", "")).lower() == "true" and str(f.get("model_error", "none")).lower() in ("none", "")
+        events.append({
+            "trigger_time": f.get("timestamp") or datetime.fromtimestamp(pf.stat().st_mtime, tz=timezone.utc).isoformat(),
+            "trigger_source": f.get("caller") or "ORACLE.self_prompt.autonomous_loop",
+            "task_selected": f.get("selected_task", "UNKNOWN"),
+            "why_selected": f.get("why_it_helps_noah", "UNKNOWN"),
+            "sources_consulted": "source_map_capsule (read-only)",
+            "action_taken": "wrote one sandbox-only self-prompt pulse",
+            "result": (f.get("evidence_it_worked", "UNKNOWN") + "  [model-claimed, not runtime-verified]"),
+            "receipt_path": receipt_path,
+            "sha256": sha,
+            "boundary_state": "sandbox_only; no external send, no git push, no canon promotion",
+            "approval_required": False,
+            "cognition": "model_thought" if model_ok else "deterministic_fallback",
+            "surfaced_to_ui_at": datetime.now(timezone.utc).isoformat(),
+            "user_visible_status": status,
+            "action_id": pf.stem,
+        })
+    return sorted(events, key=lambda ev: str(ev.get("trigger_time") or ""), reverse=True)[:max_events]
 
 
 @app.get("/api/activity")
@@ -7688,6 +8892,16 @@ async def resume():
 async def status_endpoint():
     """Get daemon status."""
     boot = boot_status_payload()
+    try:
+        from readonly_access import status_payload as _read_access_status
+        read_access = _read_access_status(ensure=True)
+    except Exception as exc:
+        read_access = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    try:
+        import human_state
+        human_snapshot = human_state.current_state()
+    except Exception as exc:
+        human_snapshot = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
     return JSONResponse({
         "paused": _paused,
         "notifications_queued": len(_pending_notifications),
@@ -7702,6 +8916,8 @@ async def status_endpoint():
             "human_boot_line": boot.get("human_boot_line"),
             "warnings": boot.get("warnings", []),
         },
+        "read_access": read_access,
+        "human_state": human_snapshot,
     })
 
 
@@ -7810,6 +9026,11 @@ async def api_health():
     """Honest health: server alive + cognition + memory/intake/receipt readiness.
     Extends /health. 'alive' here means more than 'server responds'."""
     boot = boot_status_payload()
+    try:
+        from readonly_access import status_payload as _read_access_status
+        read_access = _read_access_status(ensure=True)
+    except Exception as exc:
+        read_access = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
     from pathlib import Path as _P
     db = _P(__file__).resolve().parent / "Memory" / "oracle_memory.db"
     multipart_ok = _multipart_available()
@@ -7824,6 +9045,7 @@ async def api_health():
         "receipt_write_available": True,
         "file_intake_available": multipart_ok,
         "folder_intake_available": multipart_ok,
+        "read_access": read_access,
         "capabilities": _safe_capability_summary() or {},
         "boot_receipt_path": boot.get("boot_receipt_path"),
     })
@@ -7875,6 +9097,11 @@ async def session_current():
 
     db = root / "Memory" / "oracle_memory.db"
     caps = _safe_capability_summary() or {}
+    try:
+        from readonly_access import status_payload as _read_access_status
+        read_access = _read_access_status(ensure=True)
+    except Exception as exc:
+        read_access = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
     seed = _safe_seed_summary() or {}
     holes = _safe_session_holes()
     multipart_ok = _multipart_available()
@@ -7907,6 +9134,7 @@ async def session_current():
         "capabilities": caps,
         "file_intake_available": multipart_ok,
         "folder_intake_available": multipart_ok,
+        "read_access": read_access,
         "receipt_write_available": True,
         "seed_candidates": seed.get("loaded_count"),
         "known_limitations": limitations,

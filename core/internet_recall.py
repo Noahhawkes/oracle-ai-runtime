@@ -30,9 +30,39 @@ MEMORY_DIR = RUNTIME_ROOT / "Memory"
 RECEIPT_FILE = MEMORY_DIR / "internet_recall_receipts.jsonl"
 
 USER_AGENT = "ORACLE.AI internet_recall/1.0 read-only"
+# DuckDuckGo/Bing serve a bot-challenge page (HTTP 202 / empty shell) to
+# non-browser user agents, so HTML search endpoints get a generic browser UA.
+# MediaWiki APIs (Wikipedia, Memory Alpha) get the honest ORACLE UA, which
+# their API etiquette prefers. The UA class used is recorded per provider.
+BROWSER_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+)
 SEARCH_ENDPOINT = "https://duckduckgo.com/html/"
 BING_ENDPOINT = "https://www.bing.com/search"
-WIKIPEDIA_OPENSEARCH_ENDPOINT = "https://en.wikipedia.org/w/api.php"
+WIKIPEDIA_API_ENDPOINT = "https://en.wikipedia.org/w/api.php"
+MEMORY_ALPHA_API_ENDPOINT = "https://memory-alpha.fandom.com/api.php"
+MEMORY_ALPHA_ARTICLE_BASE = "https://memory-alpha.fandom.com/wiki/"
+MEMORY_BETA_API_ENDPOINT = "https://memory-beta.fandom.com/api.php"
+MEMORY_BETA_ARTICLE_BASE = "https://memory-beta.fandom.com/wiki/"
+STOWIKI_API_ENDPOINT = "https://stowiki.net/w/api.php"
+STOWIKI_ARTICLE_BASE = "https://stowiki.net/wiki/"
+
+# Star Trek Online / licensed-works queries route to STOwiki (game canon)
+# and Memory Beta (novels, comics, games) before the screen-canon wiki.
+STO_HINTS = ("star trek online", "stowiki", "sto ", " sto", "2409", "2410", "2411")
+
+# Queries matching any of these route to Memory Alpha (the canon Star Trek
+# wiki) first, so ORACLE answers Trek questions from the deepest source.
+STAR_TREK_HINTS = (
+    "star trek", "startrek", "starfleet", "jupiter station", "memory alpha",
+    "klingon", "vulcan", "romulan", "cardassian", "ferengi", "borg",
+    "holodeck", "tricorder", "delta quadrant", "gamma quadrant",
+    "prime directive", "united federation of planets", "q continuum",
+    "deep space nine", "ds9", "uss voyager", "voyager", "ncc-1701",
+    "warp core", "warp nacelle", "picard", "janeway", "sisko", "riker",
+    "worf", "spock", "captain kirk", "lcars", "dilithium", "replicator",
+)
 MAX_QUERY_CHARS = 240
 MAX_URL_CHARS = 2048
 MAX_FETCH_BYTES = 256_000
@@ -246,12 +276,13 @@ def validate_public_url(url: str) -> str:
     return value
 
 
-def _request(url: str, *, timeout: int = DEFAULT_TIMEOUT, max_bytes: int = MAX_FETCH_BYTES) -> dict[str, Any]:
+def _request(url: str, *, timeout: int = DEFAULT_TIMEOUT, max_bytes: int = MAX_FETCH_BYTES,
+             user_agent: str = USER_AGENT) -> dict[str, Any]:
     safe_url = validate_public_url(url)
     req = urllib.request.Request(
         safe_url,
         headers={
-            "User-Agent": USER_AGENT,
+            "User-Agent": user_agent,
             "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.2",
         },
         method="GET",
@@ -285,12 +316,18 @@ def _request(url: str, *, timeout: int = DEFAULT_TIMEOUT, max_bytes: int = MAX_F
         return {"ok": False, "url": safe_url, "status": None, "error": f"{type(exc).__name__}: {exc}", "body": ""}
 
 
-def _search_wikipedia(query: str, *, limit: int, timeout: int) -> tuple[list[SearchResult], dict[str, Any]]:
-    url = WIKIPEDIA_OPENSEARCH_ENDPOINT + "?" + urllib.parse.urlencode({
-        "action": "opensearch",
-        "search": query,
-        "limit": str(limit),
-        "namespace": "0",
+def _strip_tags(value: str) -> str:
+    return _clean_text(re.sub(r"<[^>]+>", "", value or ""))
+
+
+def _search_mediawiki(api_endpoint: str, article_base: str, provider: str, query: str,
+                      *, limit: int, timeout: int) -> tuple[list[SearchResult], dict[str, Any]]:
+    """Full-text search against any MediaWiki API (Wikipedia, Memory Alpha)."""
+    url = api_endpoint + "?" + urllib.parse.urlencode({
+        "action": "query",
+        "list": "search",
+        "srsearch": query,
+        "srlimit": str(limit),
         "format": "json",
     })
     page = _request(url, timeout=timeout)
@@ -298,15 +335,119 @@ def _search_wikipedia(query: str, *, limit: int, timeout: int) -> tuple[list[Sea
     if page.get("ok") and page.get("body"):
         try:
             data = json.loads(page["body"])
-            titles = data[1] if len(data) > 1 and isinstance(data[1], list) else []
-            snippets = data[2] if len(data) > 2 and isinstance(data[2], list) else []
-            urls = data[3] if len(data) > 3 and isinstance(data[3], list) else []
-            for title, snippet, item_url in zip(titles, snippets, urls):
-                if _is_public_http_url(str(item_url), resolve_dns=False):
-                    results.append(SearchResult(title=str(title), url=str(item_url), snippet=str(snippet or "")))
+            for item in (data.get("query") or {}).get("search") or []:
+                title = str(item.get("title") or "").strip()
+                if not title:
+                    continue
+                item_url = article_base + urllib.parse.quote(title.replace(" ", "_"))
+                if _is_public_http_url(item_url, resolve_dns=False):
+                    results.append(SearchResult(title=title, url=item_url, snippet=_strip_tags(str(item.get("snippet") or ""))))
         except Exception:
             pass
-    return results[:limit], {"provider": "wikipedia_opensearch", "ok": page.get("ok"), "status": page.get("status"), "error": page.get("error")}
+    return results[:limit], {
+        "provider": provider,
+        "ok": page.get("ok"),
+        "status": page.get("status"),
+        "error": page.get("error"),
+        "user_agent": "oracle_declared",
+    }
+
+
+def _search_wikipedia(query: str, *, limit: int, timeout: int) -> tuple[list[SearchResult], dict[str, Any]]:
+    return _search_mediawiki(
+        WIKIPEDIA_API_ENDPOINT, "https://en.wikipedia.org/wiki/", "wikipedia_search",
+        query, limit=limit, timeout=timeout,
+    )
+
+
+def _search_memory_alpha(query: str, *, limit: int, timeout: int) -> tuple[list[SearchResult], dict[str, Any]]:
+    return _search_mediawiki(
+        MEMORY_ALPHA_API_ENDPOINT, MEMORY_ALPHA_ARTICLE_BASE, "memory_alpha",
+        query, limit=limit, timeout=timeout,
+    )
+
+
+def _search_memory_beta(query: str, *, limit: int, timeout: int) -> tuple[list[SearchResult], dict[str, Any]]:
+    return _search_mediawiki(
+        MEMORY_BETA_API_ENDPOINT, MEMORY_BETA_ARTICLE_BASE, "memory_beta",
+        query, limit=limit, timeout=timeout,
+    )
+
+
+def _search_stowiki(query: str, *, limit: int, timeout: int) -> tuple[list[SearchResult], dict[str, Any]]:
+    return _search_mediawiki(
+        STOWIKI_API_ENDPOINT, STOWIKI_ARTICLE_BASE, "stowiki",
+        query, limit=limit, timeout=timeout,
+    )
+
+
+def _looks_like_star_trek(query: str) -> bool:
+    q = query.lower()
+    return any(hint in q for hint in STAR_TREK_HINTS)
+
+
+def _looks_like_sto(query: str) -> bool:
+    q = query.lower()
+    return any(hint in q for hint in STO_HINTS)
+
+
+# Article pages on these hosts sit behind bot challenges (Cloudflare), but
+# their MediaWiki APIs are open. Fetches of /wiki/<Title> URLs are routed
+# through the API's plain-text extract instead of scraping the HTML page.
+MEDIAWIKI_ARTICLE_HOSTS = {
+    "memory-alpha.fandom.com": MEMORY_ALPHA_API_ENDPOINT,
+    "memory-beta.fandom.com": MEMORY_BETA_API_ENDPOINT,
+    "stowiki.net": STOWIKI_API_ENDPOINT,
+    "en.wikipedia.org": WIKIPEDIA_API_ENDPOINT,
+}
+
+
+def _mediawiki_extract_route(url: str) -> tuple[str, str] | None:
+    """Return (api_endpoint, article_title) when the URL is a known wiki article."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except Exception:
+        return None
+    host = (parsed.hostname or "").lower()
+    api_endpoint = MEDIAWIKI_ARTICLE_HOSTS.get(host)
+    if not api_endpoint or not parsed.path.startswith("/wiki/"):
+        return None
+    title = urllib.parse.unquote(parsed.path[len("/wiki/"):]).replace("_", " ").strip()
+    return (api_endpoint, title) if title else None
+
+
+def _fetch_mediawiki_extract(api_endpoint: str, title: str, original_url: str,
+                             *, timeout: int) -> dict[str, Any] | None:
+    url = api_endpoint + "?" + urllib.parse.urlencode({
+        "action": "query",
+        "prop": "extracts",
+        "explaintext": "1",
+        "redirects": "1",
+        "titles": title,
+        "format": "json",
+    })
+    page = _request(url, timeout=timeout)
+    if not (page.get("ok") and page.get("body")):
+        return None
+    try:
+        data = json.loads(page["body"])
+        pages = (data.get("query") or {}).get("pages") or {}
+        entry = next(iter(pages.values()), {})
+        extract = str(entry.get("extract") or "")
+        if not extract:
+            return None
+        return {
+            "ok": True,
+            "url": original_url,
+            "final_url": original_url,
+            "status": page.get("status"),
+            "content_type": "text/plain; mediawiki_api_extract",
+            "title": str(entry.get("title") or title),
+            "text": _clean_text(extract)[:MAX_TEXT_CHARS],
+            "bytes_read": page.get("bytes_read", 0),
+        }
+    except Exception:
+        return None
 
 
 def _write_receipt(payload: dict[str, Any]) -> str:
@@ -343,20 +484,40 @@ def search(query: str, *, limit: int = 5, timeout: int = DEFAULT_TIMEOUT, write_
         raise InternetRecallError("query is too long")
     bounded_limit = max(1, min(int(limit or 5), 10))
     provider_statuses: list[dict[str, Any]] = []
+    parsed_results: list[SearchResult] = []
+    source = "none"
+
+    if _looks_like_sto(q):
+        parsed_results, sto_status = _search_stowiki(q, limit=bounded_limit, timeout=timeout)
+        provider_statuses.append(sto_status)
+        if parsed_results:
+            source = "stowiki"
+        else:
+            parsed_results, mb_status = _search_memory_beta(q, limit=bounded_limit, timeout=timeout)
+            provider_statuses.append(mb_status)
+            if parsed_results:
+                source = "memory_beta"
+
+    if not parsed_results and _looks_like_star_trek(q):
+        parsed_results, ma_status = _search_memory_alpha(q, limit=bounded_limit, timeout=timeout)
+        provider_statuses.append(ma_status)
+        if parsed_results:
+            source = "memory_alpha"
 
     url = SEARCH_ENDPOINT + "?" + urllib.parse.urlencode({"q": q})
-    page = _request(url, timeout=timeout)
-    provider_statuses.append({"provider": "duckduckgo_html", "ok": page.get("ok"), "status": page.get("status"), "error": page.get("error")})
-    parser = _ResultParser()
-    if page.get("body"):
-        parser.feed(page["body"])
-    parsed_results = parser.results[:bounded_limit]
-    source = "duckduckgo_html"
+    if not parsed_results:
+        page = _request(url, timeout=timeout, user_agent=BROWSER_USER_AGENT)
+        provider_statuses.append({"provider": "duckduckgo_html", "ok": page.get("ok"), "status": page.get("status"), "error": page.get("error"), "user_agent": "browser_generic"})
+        parser = _ResultParser()
+        if page.get("body"):
+            parser.feed(page["body"])
+        parsed_results = parser.results[:bounded_limit]
+        source = "duckduckgo_html"
 
     if not parsed_results:
         bing_url = BING_ENDPOINT + "?" + urllib.parse.urlencode({"q": q})
-        bing_page = _request(bing_url, timeout=timeout)
-        provider_statuses.append({"provider": "bing_html", "ok": bing_page.get("ok"), "status": bing_page.get("status"), "error": bing_page.get("error")})
+        bing_page = _request(bing_url, timeout=timeout, user_agent=BROWSER_USER_AGENT)
+        provider_statuses.append({"provider": "bing_html", "ok": bing_page.get("ok"), "status": bing_page.get("status"), "error": bing_page.get("error"), "user_agent": "browser_generic"})
         bing_parser = _BingParser()
         if bing_page.get("body"):
             bing_parser.feed(bing_page["body"])
@@ -366,7 +527,7 @@ def search(query: str, *, limit: int = 5, timeout: int = DEFAULT_TIMEOUT, write_
     if not parsed_results:
         parsed_results, wiki_status = _search_wikipedia(q, limit=bounded_limit, timeout=timeout)
         provider_statuses.append(wiki_status)
-        source = "wikipedia_opensearch"
+        source = "wikipedia_search"
 
     results = [asdict(result) for result in parsed_results[:bounded_limit]]
     response = {
@@ -401,12 +562,27 @@ def search(query: str, *, limit: int = 5, timeout: int = DEFAULT_TIMEOUT, write_
 
 
 def fetch(url: str, *, timeout: int = DEFAULT_TIMEOUT, write_receipt: bool = True) -> dict[str, Any]:
-    page = _request(url, timeout=timeout)
-    parser = _TextParser()
-    if page.get("body"):
-        parser.feed(page["body"])
-    title = _clean_text(" ".join(parser.title))
-    text = _clean_text(" ".join(parser.text))[:MAX_TEXT_CHARS]
+    wiki_route = _mediawiki_extract_route(str(url or "").strip())
+    if wiki_route:
+        api_result = _fetch_mediawiki_extract(wiki_route[0], wiki_route[1], str(url).strip(), timeout=timeout)
+        if api_result:
+            page = api_result
+            title = api_result["title"]
+            text = api_result["text"]
+        else:
+            page = _request(url, timeout=timeout)
+            parser = _TextParser()
+            if page.get("body"):
+                parser.feed(page["body"])
+            title = _clean_text(" ".join(parser.title))
+            text = _clean_text(" ".join(parser.text))[:MAX_TEXT_CHARS]
+    else:
+        page = _request(url, timeout=timeout)
+        parser = _TextParser()
+        if page.get("body"):
+            parser.feed(page["body"])
+        title = _clean_text(" ".join(parser.title))
+        text = _clean_text(" ".join(parser.text))[:MAX_TEXT_CHARS]
     response = {
         "ok": bool(page.get("ok")),
         "operation_type": "internet_fetch",
@@ -484,6 +660,7 @@ def format_recall(result: dict[str, Any]) -> str:
         "INTERNET RECALL SEARCH",
         boundary,
         f"query: {result.get('query')}",
+        f"source: {result.get('source', 'UNKNOWN')}",
         f"result_count: {result.get('result_count', 0)}",
     ]
     for idx, item in enumerate(result.get("results") or [], start=1):
@@ -508,6 +685,11 @@ def self_check() -> dict[str, Any]:
         "ok": True,
         "module": "internet_recall",
         "search_endpoint": SEARCH_ENDPOINT,
+        "providers": [
+            "stowiki + memory_beta (star trek online queries)",
+            "memory_alpha (star trek queries)",
+            "duckduckgo_html", "bing_html", "wikipedia_search",
+        ],
         "receipt_file": str(RECEIPT_FILE),
         "boundary": "public http/https GET only; no browser/session/form/send",
     }

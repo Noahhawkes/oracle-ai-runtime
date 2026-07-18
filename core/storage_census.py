@@ -440,7 +440,7 @@ def _mark_duplicates(entries: list[dict[str, Any]]) -> int:
 
 
 def run_census() -> dict[str, Any]:
-    """Scan only approved roots. Discovery only — no ingestion, no mutation."""
+    """Scan only metadata-census roots. Discovery only; no ingestion, no mutation."""
 
     gov = load_governance()
     if gov is None:
@@ -755,7 +755,7 @@ def handle_command(subcommand: str, arg: str = "") -> str:
             f"- Governance loaded: ✅  source: `{data['governance_source']}`",
             f"- Default approved root: `{data['default_approved_root']}`",
             f"- Approved roots: {', '.join(data['approved_roots']) or 'none'}",
-            "- Known roots NOT scanned (approval required):",
+            "- Known roots NOT scanned by metadata census (read-only recall remains granted):",
         ]
         for r in data["known_roots_not_scanned"]:
             lines.append(f"  - `{r['path']}` ({r['kind']}, exists={r['exists']}, {r['status']})")
@@ -767,7 +767,7 @@ def handle_command(subcommand: str, arg: str = "") -> str:
             return res.get("message", "Storage Census blocked.")
         c = res["counts"]
         return (
-            "**Storage Census complete (approved roots only).**\n"
+            "**Storage Census complete (metadata roots only).**\n"
             f"- Scanned: {', '.join(res['approved_roots_scanned'])}\n"
             f"- Files seen: {c['files_seen']}\n"
             f"- ORACLE-related candidates: {c['oracle_related_candidates']} (pending Noah.Physical approval)\n"

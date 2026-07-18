@@ -4,7 +4,7 @@
     {
       "preference_id": "pref_no_self_intro",
       "created_at": "2026-07-01T23:52:11.265195Z",
-      "updated_at": "2026-07-10T01:56:12.382885Z",
+      "updated_at": "2026-07-12T17:17:43.075173Z",
       "source": "Noah.Physical",
       "scope": "global",
       "category": "interaction_style",
@@ -14,7 +14,7 @@
       "canon_status": "preference",
       "promotion_status": "not_applicable",
       "requires_safety_override": false,
-      "receipt_id": "prefrec_311f920689e5",
+      "receipt_id": "prefrec_8544c376b9ae",
       "last_action": "persona_router_detected_preference"
     },
     {
@@ -36,18 +36,18 @@
     {
       "preference_id": "pref_receipts_for_state_change",
       "created_at": "2026-07-01T23:52:11.276278Z",
-      "updated_at": "2026-07-01T23:52:11.281701Z",
+      "updated_at": "2026-07-15T03:45:07.083364Z",
       "source": "Noah.Physical",
       "scope": "global",
       "category": "governance",
-      "preference": "State-changing actions require receipts and Noah.Physical approval.",
+      "preference": "State-changing actions outside the sandbox require receipts and Noah.Physical approval; sandbox green-zone writes require receipts but not separate approval.",
       "active": true,
       "priority": 100,
       "canon_status": "preference",
       "promotion_status": "not_applicable",
       "requires_safety_override": false,
-      "receipt_id": "prefrec_8103e00a0659",
-      "last_action": "install_default"
+      "receipt_id": "prefrec_348322985205",
+      "last_action": "codex_patch_update"
     },
     {
       "preference_id": "pref_oracle_not_assistant_label",
@@ -64,7 +64,23 @@
       "requires_safety_override": false,
       "receipt_id": "prefrec_adf7103247bf",
       "last_action": "noah_direct_preference"
+    },
+    {
+      "preference_id": "pref_build_with_me_sandbox_text",
+      "created_at": "2026-07-15T03:45:07.085425Z",
+      "updated_at": "2026-07-16T21:53:26.633924Z",
+      "source": "Noah.Physical",
+      "scope": "global",
+      "category": "routing",
+      "preference": "Treat Noah.Physical's build-with-me instruction as an active ORACLE build preference: take safe, receipted action inside ORACLE's sandbox when asked; speak in text with warm directness; help build ORACLE while preserving external-action, code-execution, git, Drive, canon, and outside-sandbox approval gates.",
+      "active": true,
+      "priority": 96,
+      "canon_status": "preference",
+      "promotion_status": "not_applicable",
+      "requires_safety_override": false,
+      "receipt_id": "prefrec_87d8a0ec67fb",
+      "last_action": "persona_router_detected_preference"
     }
   ],
-  "updated_at": "2026-07-10T01:56:12.382885Z"
+  "updated_at": "2026-07-16T21:53:26.633924Z"
 }

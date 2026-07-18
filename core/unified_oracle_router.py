@@ -42,16 +42,46 @@ APPROVAL_EFFECTIVE_ROUTE = "guard_approval"
 BARE_APPROVAL_PHRASES = {
     "approve",
     "approved",
+    "approval given",
+    "approval granted",
     "yes approved",
+    "yes approval given",
     "noah approves",
+    "noah approved",
+    "noah approval given",
+    "noah hawkes approved",
+    "noah hawkes approval given",
     "noah.physical approves",
+    "noah.physical approved",
+    "noah.physical approval given",
+    "noah physical approves",
+    "noah physical approved",
+    "noah physical approval given",
     "i approve",
+    "i approved",
+    "permission granted",
     "approved proceed",
+    "approved, proceed",
     "go ahead",
     "do it",
 }
 APPROVE_ROUTE_RE = re.compile(r"^\s*approve\s+route\s+(?P<route_id>route_[a-f0-9]{12})(?:\s*:\s*(?P<scope>.+))?\s*$", re.IGNORECASE)
 ROUTE_RECEIPT_RE = re.compile(r"\broute_[a-f0-9]{12}\b", re.IGNORECASE)
+APPROVAL_FOLLOWUP_RE = re.compile(
+    r"^\s*"
+    r"(?:(?:noah(?:\s+hawkes|\.physical|\s+physical)?|noah\.physical)\s+)?"
+    r"(?:"
+    r"approval\s+(?:given|granted|approved)"
+    r"|approved(?:\s+(?:proceed|go|now|please|do\s+it))?"
+    r"|approve"
+    r"|i\s+approve(?:d)?"
+    r"|permission\s+granted"
+    r"|go\s+ahead"
+    r"|do\s+it"
+    r")"
+    r"\s*$",
+    re.IGNORECASE,
+)
 
 BUILD_TERMS = (
     "build", "implement", "fix", "patch", "edit", "write file", "update ui",
@@ -624,6 +654,12 @@ def classify_intent(user_message: str) -> dict[str, Any]:
         confidence = "high"
         route_type = "approval_reference"
         action_type = "approval_binding"
+    elif is_approval_followup(user_message):
+        lane = "guard_lane"
+        reason = "approval_followup: approval traffic must bind to the pending Guard route or fail closed"
+        confidence = "high"
+        route_type = "approval_followup"
+        action_type = "approval_binding"
     elif is_diagnostic_status_request(user_message):
         lane = "talk_lane"
         reason = "diagnostic_status: read-only report/status prompt, no execution requested"
@@ -699,7 +735,7 @@ def classify_intent(user_message: str) -> dict[str, Any]:
         confidence = "medium"
 
     requires_approval = lane == "guard_lane"
-    if route_type == "approval_reference":
+    if route_type in ("approval_reference", "approval_followup"):
         # Approval traffic is not itself a guarded action.
         requires_approval = False
     if lane == "witness_lane" and any(term in lower for term in ("record", "watch", "audio", "video", "screenshot", "screenshare", "screen share")):
@@ -819,7 +855,12 @@ def _approval_text_key(text: str) -> str:
 
 def is_approval_followup(text: str) -> bool:
     cleaned = _approval_text_key(text)
-    if cleaned in BARE_APPROVAL_PHRASES or APPROVE_ROUTE_RE.match(str(text or "")) is not None:
+    raw = str(text or "")
+    if (
+        cleaned in BARE_APPROVAL_PHRASES
+        or APPROVE_ROUTE_RE.match(raw) is not None
+        or APPROVAL_FOLLOWUP_RE.match(cleaned) is not None
+    ):
         return True
     # Route-ID law: approval verb + explicit route id = approval traffic,
     # regardless of surrounding scope text. Never a new Guard route.

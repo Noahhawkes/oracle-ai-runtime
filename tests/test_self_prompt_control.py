@@ -60,6 +60,7 @@ def test_default_state_is_off(monkeypatch, tmp_path):
     assert status.json()["current_state"] == "OFF"
     assert status.json()["daily_count"] == 0
     assert status.json()["model_called"] is False
+    assert status.json()["loop_running"] is False
 
 
 def test_manual_once_writes_one_artifact_receipt_and_reports_last_receipt(monkeypatch, tmp_path):
@@ -76,7 +77,9 @@ def test_manual_once_writes_one_artifact_receipt_and_reports_last_receipt(monkey
     assert payload["model_called"] is True
     assert Path(payload["write_path"]).exists()
     assert Path(payload["write_receipt_path"]).exists()
-    assert len(list((tmp_path / "sandbox" / "workbench").glob("oracle_self_prompt_*.ai"))) == 1
+    workbench = tmp_path / "sandbox" / "workbench"
+    assert (workbench / "oracle_self_prompt_journal.ai").exists()
+    assert not [path for path in workbench.glob("oracle_self_prompt_*.ai") if path.name != "oracle_self_prompt_journal.ai"]
     assert len(list((tmp_path / "sandbox" / "receipts").glob("sandbox_self_prompt_write*_receipt.json"))) == 1
     assert status["last_receipt_path"] == payload["write_receipt_path"]
     assert status["last_write_path"] == payload["write_path"]
@@ -127,7 +130,9 @@ def test_autonomous_enabled_respects_sandbox_path_and_daily_cap(monkeypatch, tmp
 
     assert blocked["blocked"] is True
     assert blocked["state"]["blocked_reason"] == "daily cap reached"
-    assert len(list((tmp_path / "sandbox" / "workbench").glob("oracle_self_prompt_*.ai"))) == 1
+    workbench = tmp_path / "sandbox" / "workbench"
+    assert (workbench / "oracle_self_prompt_journal.ai").exists()
+    assert not [path for path in workbench.glob("oracle_self_prompt_*.ai") if path.name != "oracle_self_prompt_journal.ai"]
 
 
 def test_disable_prevents_loop_writes(monkeypatch, tmp_path):
@@ -152,6 +157,29 @@ def test_disable_prevents_loop_writes(monkeypatch, tmp_path):
 
     assert blocked["blocked"] is True
     assert blocked["state"]["blocked_reason"] == "state is OFF"
+    assert not list((tmp_path / "sandbox" / "workbench").glob("oracle_self_prompt_*.ai"))
+
+
+def test_autonomous_worker_waits_at_daily_cap_instead_of_exiting(monkeypatch, tmp_path):
+    srv = _isolate(monkeypatch, tmp_path)
+    states = iter([
+        {"current_state": srv._SELF_PROMPT_AUTONOMOUS, "approved": True},
+        {"current_state": srv._SELF_PROMPT_OFF, "approved": False},
+    ])
+    slept: list[float] = []
+
+    async def _record_sleep(seconds):
+        slept.append(seconds)
+
+    monkeypatch.setattr(srv, "_self_prompt_current_snapshot", lambda: next(states))
+    monkeypatch.setattr(srv, "_self_prompt_daily_count", lambda: srv._self_prompt_daily_cap())
+    monkeypatch.setattr(srv, "_self_prompt_interval_seconds", lambda: 60.0)
+    monkeypatch.setattr(srv, "_seconds_until_next_utc_day", lambda: 120.0)
+    monkeypatch.setattr(srv.asyncio, "sleep", _record_sleep)
+
+    asyncio.run(srv._self_prompt_loop_worker())
+
+    assert slept == [60.0]
     assert not list((tmp_path / "sandbox" / "workbench").glob("oracle_self_prompt_*.ai"))
 
 

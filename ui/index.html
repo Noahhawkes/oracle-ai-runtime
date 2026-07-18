@@ -218,6 +218,8 @@
     gap: 10px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   #toggle-sidebar {
@@ -232,6 +234,7 @@
   #topbar-title {
     font-size: 15px; font-weight: 600;
     flex: 1;
+    min-width: 72px;
   }
 
   #mode-indicator {
@@ -262,6 +265,22 @@
   #safety-indicator.receipt { background: rgba(251,191,36,0.14); color: #fbbf24; }
   #safety-indicator.approval { background: rgba(239,68,68,0.16); color: #f87171; }
   #safety-indicator.blocked { background: rgba(239,68,68,0.22); color: #fecaca; }
+  #read-access-btn, #ai-lockbox-btn {
+    border: 1px solid rgba(34,211,238,0.22);
+    border-radius: 6px;
+    background: rgba(34,211,238,0.10);
+    color: #67e8f9;
+    font-size: 11px;
+    font-weight: 650;
+    padding: 4px 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+  }
+  #read-access-btn.warn { border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.12); color: #fbbf24; }
+  #read-access-btn.ok { border-color: rgba(34,211,238,0.32); background: rgba(34,211,238,0.13); color: #67e8f9; }
+  #ai-lockbox-btn.warn { border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.12); color: #fbbf24; }
+  #ai-lockbox-btn.ok { border-color: rgba(16,163,127,0.36); background: rgba(16,163,127,0.13); color: #5eead4; }
 
   /* ── Messages ── */
   #messages {
@@ -797,7 +816,7 @@
     flex-wrap: wrap;
     gap: 8px;
   }
-  .witness-actions button, #sourcemap-btn, #preferences-btn, #self-prompt-btn {
+  .witness-actions button, #sourcemap-btn, #preferences-btn, #self-prompt-btn, #self-notes-btn, #tuneup-btn, #human-state-btn, #operator-dashboard-btn, #ai-lockbox-btn {
     border: 1px solid var(--border);
     background: var(--surface);
     color: var(--text);
@@ -807,7 +826,7 @@
     padding: 7px 9px;
     cursor: pointer;
   }
-  .witness-actions button:hover, #sourcemap-btn:hover, #preferences-btn:hover, #self-prompt-btn:hover {
+  .witness-actions button:hover, #sourcemap-btn:hover, #preferences-btn:hover, #self-prompt-btn:hover, #self-notes-btn:hover, #tuneup-btn:hover, #human-state-btn:hover, #operator-dashboard-btn:hover, #ai-lockbox-btn:hover {
     border-color: var(--accent);
     color: #fff;
   }
@@ -820,6 +839,31 @@
     background: rgba(245,158,11,0.12);
     border-color: rgba(245,158,11,0.25);
     color: #ffd58a;
+  }
+  #self-notes-btn.active, #tuneup-btn.active {
+    background: rgba(88,208,200,0.12);
+    border-color: rgba(88,208,200,0.35);
+    color: #bffbf7;
+  }
+  #tuneup-btn.warn {
+    background: rgba(245,158,11,0.12);
+    border-color: rgba(245,158,11,0.28);
+    color: #ffd58a;
+  }
+  #human-state-btn.active {
+    background: rgba(16,185,129,0.12);
+    border-color: rgba(16,185,129,0.3);
+    color: #a7f3d0;
+  }
+  #operator-dashboard-btn.active {
+    background: rgba(14,165,233,0.12);
+    border-color: rgba(14,165,233,0.32);
+    color: #bae6fd;
+  }
+  #ai-lockbox-btn.active {
+    background: rgba(16,163,127,0.14);
+    border-color: rgba(16,163,127,0.34);
+    color: #99f6e4;
   }
   .witness-actions button.primary {
     background: var(--accent);
@@ -931,10 +975,18 @@
     <span id="topbar-title">ORACLE</span>
     <div id="mode-indicator" class="talk_lane" role="button" tabindex="0" onclick="showRuntimeDetail()" title="Show live runtime status">Talk</div>
     <div id="safety-indicator" class="safe" role="button" tabindex="0" onclick="showRuntimeDetail()" title="Show live runtime status">Safe</div>
+    <button id="read-access-btn" onclick="showReadAccessDetail()" title="Full-PC read-only access receipt">Read?</button>
+    <button id="ai-lockbox-btn" onclick="showAiLockboxDetail()" title="Local .AI shorthand recall lockbox">Recall?</button>
     <button id="self-prompt-btn" onclick="toggleSelfPromptMode()" title="Writer mode is governed by Noah">Writer OFF</button>
+    <button id="self-notes-btn" onclick="showSelfPromptJournal()" title="Read ORACLE's self-written sandbox prompt trail">Self Notes</button>
+    <button id="tuneup-btn" onclick="showTuneupPanel()" title="Connector and tune-up status">Tune</button>
+    <button id="human-state-btn" onclick="showHumanStatePanel()" title="Explicit Noah state and re-entry brief">Human ?</button>
+    <button id="operator-dashboard-btn" class="active" onclick="showOperatorDashboard()" title="Continuity Spine operator dashboard">Operator</button>
     <button id="preferences-btn" onclick="showPreferencesDrawer()" title="ORACLE behavior preferences">Preferences</button>
     <input type="file" id="preferences-upload-input" accept=".json,.md,.txt,.ai" style="display:none" onchange="uploadPreferencesFile(this)">
     <button id="sourcemap-btn" onclick="toggleSourceMapPanel()" title="ORACLE SourceMap">SourceMap</button>
+    <a href="/nexus" title="Oracle Nexus" style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.42);text-decoration:none;padding:4px 10px;border:1px solid rgba(255,255,255,0.14);border-radius:6px;transition:0.2s;" onmouseover="this.style.color='#f4c76b';this.style.borderColor='rgba(244,199,107,0.45)'" onmouseout="this.style.color='rgba(255,255,255,0.42)';this.style.borderColor='rgba(255,255,255,0.14)'">Nexus</a>
+    <a href="/evidence" title="Evidence Cockpit" style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.42);text-decoration:none;padding:4px 10px;border:1px solid rgba(88,208,200,0.2);border-radius:6px;transition:0.2s;" onmouseover="this.style.color='#58d0c8';this.style.borderColor='rgba(88,208,200,0.55)'" onmouseout="this.style.color='rgba(255,255,255,0.42)';this.style.borderColor='rgba(88,208,200,0.2)'">Evidence</a>
     <a href="/miracledrive" id="md-link" title="MiracleDrive OS" style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.28);text-decoration:none;padding:4px 10px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;transition:0.2s;" onmouseover="this.style.color='#22d3ee';this.style.borderColor='rgba(34,211,238,0.35)'" onmouseout="this.style.color='rgba(255,255,255,0.28)';this.style.borderColor='rgba(255,255,255,0.1)'">MiracleDrive ↗</a>
   </div>
 
@@ -1000,6 +1052,25 @@
         <button onclick="sendGovernanceCommand('forget_this')">Forget this</button>
         <button onclick="showGovernanceKnown()">Show me what you know</button>
       </div>
+      <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
+        <h2>Build Witness</h2>
+      </div>
+      <div class="witness-governance" id="build-witness-notice">
+        Candidate construction receipts. ORACLE records the build event: request, agent, changed-file metadata, tests, result, and receipt hash. No file contents, commits, pushes, uploads, or canon promotion.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>Latest Build Event</b><span id="build-event">none</span></div>
+        <div class="witness-card"><b>Test Result</b><span id="build-test-result">unverified</span></div>
+        <div class="witness-card"><b>Files Changed</b><span id="build-files-changed">0</span></div>
+        <div class="witness-card"><b>Approval Status</b><span id="build-approval">candidate</span></div>
+        <div class="witness-card"><b>Receipt Hash</b><span id="build-hash">none</span></div>
+        <div class="witness-card"><b>Timeline</b><span id="build-timeline-count">0 events</span></div>
+      </div>
+      <div class="witness-actions">
+        <button class="primary" onclick="loadBuildWitnessTimeline()">Refresh Build Timeline</button>
+        <button class="warn" onclick="writeBuildWitnessReceipt()">Write Build Receipt</button>
+      </div>
+      <div id="build-witness-results" class="witness-governance" style="white-space:pre-wrap;font-family:monospace;font-size:11px"></div>
       <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
         <h2>LootDrops</h2>
       </div>
@@ -1085,7 +1156,7 @@
         <h2>Storage Census</h2>
       </div>
       <div class="witness-governance" id="census-notice">
-        Governed, read-only discovery. Imports and obeys core/governance.py — it does not define new governance. Scans approved roots only (default C:\Oracle), metadata only. It never ingests content, uploads, syncs, deletes, moves, renames, commits, pushes, or auto-merges into the canonical SourceMap. Credential-risk files are reported as a count only; their contents are never read. Fails closed if governance is unavailable.
+        Governed, read-only discovery. Imports and obeys core/governance.py — it does not define new governance. Full-PC read-only access is granted for search/list/read, while mutation and external actions remain gated. Metadata census never ingests content, uploads, syncs, deletes, moves, renames, commits, pushes, or auto-merges into the canonical SourceMap. Credential-risk files are reported as a count only; their contents are never stored.
       </div>
       <div class="witness-grid">
         <div class="witness-card"><b>Governance</b><span id="census-governance">unknown</span></div>
@@ -1140,6 +1211,8 @@
         <div class="chip" onclick="sendSuggestion('Who is Ellie from the grounded Ellie Rendered Reality domain?')">Ask Ellie domain</div>
         <div class="chip" onclick="sendSuggestion('/self-patch')">Propose a self-improvement</div>
         <div class="chip" onclick="sendSuggestion('/focus')">Show current focus</div>
+        <div class="chip" onclick="sendSuggestion('/ai-lockbox-status')">Recall lockbox</div>
+        <div class="chip" onclick="sendSuggestion('/ai-lockbox-search oracle')">Search .AI recall</div>
         <div class="chip" onclick="sendSuggestion('/help')">Show commands</div>
       </div>
     </div>
@@ -1229,6 +1302,9 @@ let lastHistorySource = 'unknown';
 let lastDurabilityData = null;
 let lastEllieDomainData = null;
 let lastPreferencesData = null;
+let lastReadAccessData = null;
+let lastAiLockboxData = null;
+let lastConnectorStatusData = null;
 
 // ── Marked config ─────────────────────────────────────────────────────────────
 marked.setOptions({ breaks: true, gfm: true });
@@ -1548,6 +1624,13 @@ async function refreshSelfPromptStatus() {
       btn.className = _selfPromptButtonClass(state);
       btn.title = `state ${state} · daily ${Number(data.daily_count || 0)}/${Number(data.daily_cap || 0)} · click to change`;
     }
+    const notesBtn = document.getElementById('self-notes-btn');
+    if (notesBtn) {
+      const count = Number(data.journal_entry_count || 0);
+      notesBtn.textContent = count ? `Notes ${count}` : 'Self Notes';
+      notesBtn.className = count ? 'active' : '';
+      notesBtn.title = count ? `${count} self-written journal entries. Click to inspect read-only.` : 'No self-written journal entries reported yet.';
+    }
     return data;
   } catch (e) {
     const btn = document.getElementById('self-prompt-btn');
@@ -1555,6 +1638,12 @@ async function refreshSelfPromptStatus() {
       btn.textContent = 'Writer ?';
       btn.className = 'pending';
       btn.title = e.message;
+    }
+    const notesBtn = document.getElementById('self-notes-btn');
+    if (notesBtn) {
+      notesBtn.textContent = 'Notes ?';
+      notesBtn.className = '';
+      notesBtn.title = e.message;
     }
     return { ok: false, error: e.message };
   }
@@ -1574,6 +1663,275 @@ async function toggleSelfPromptMode() {
   } catch (e) {
     detailLines('Self-Prompt Control', [['error', e.message], ['state', current]]);
   }
+}
+
+function _connectorStatusColor(status) {
+  const low = String(status || '').toLowerCase();
+  if (low === 'verified') return '#22c55e';
+  if (low === 'degraded') return '#f59e0b';
+  if (low === 'missing' || low === 'blocked') return '#ef4444';
+  return 'var(--text-dim)';
+}
+
+function _renderConnectorList(connectors) {
+  const items = connectors || [];
+  if (!items.length) return '<div style="font-size:12px;color:var(--text-dim)">none</div>';
+  return items.map(item => {
+    const color = _connectorStatusColor(item.status);
+    const holes = (item.holes || []).length
+      ? '<div style="font-size:11px;color:#fbbf24;margin-top:5px">' + escapeHtml((item.holes || []).join(' | ')) + '</div>'
+      : '';
+    return '<div class="witness-card" style="margin-top:8px">' +
+      '<b>' + escapeHtml(item.label || item.id || 'connector') +
+        ' <span style="color:' + color + ';font-size:10px">' + escapeHtml(item.status || 'unknown') + '</span></b>' +
+      '<span>' + escapeHtml(item.detail || '') + '</span>' +
+      '<span>records: ' + escapeHtml(String(item.records || 0)) + ' | ' + escapeHtml(item.endpoint || '') + '</span>' +
+      holes +
+      '<div style="font-size:10px;color:var(--text-dim);margin-top:5px">' + escapeHtml(item.boundary || 'read-only') + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function _renderSelfPromptEntry(entry, index) {
+  const response = entry.child_response || 'no child response captured';
+  const seed = entry.seed_prompt_excerpt || 'no seed';
+  const prompt = entry.child_prompt_excerpt || 'no prompt excerpt';
+  const boundary = entry.boundary || {};
+  return '<div class="witness-card" style="margin-top:10px">' +
+    '<b>Cycle ' + escapeHtml(String(index + 1)) + ' <span style="font-size:10px;color:var(--text-dim)">' + escapeHtml(entry.timestamp || 'unknown time') + '</span></b>' +
+    '<span>' + escapeHtml(entry.source_route || entry.caller || 'ORACLE.self_prompt') + ' | model ' + escapeHtml(entry.model_name || 'unknown') + '</span>' +
+    '<div style="font-size:11px;color:var(--text-dim);margin-top:7px">seed</div>' +
+    '<pre style="white-space:pre-wrap;font-family:monospace;font-size:11px;line-height:1.35;margin-top:4px;color:var(--text)">' + escapeHtml(seed) + '</pre>' +
+    '<div style="font-size:11px;color:var(--text-dim);margin-top:7px">ORACLE response</div>' +
+    '<pre style="white-space:pre-wrap;font-family:monospace;font-size:11px;line-height:1.35;margin-top:4px;color:var(--text)">' + escapeHtml(response) + '</pre>' +
+    '<details style="margin-top:8px"><summary style="cursor:pointer;color:#58d0c8;font-size:11px">prompt excerpt and hashes</summary>' +
+      '<pre style="white-space:pre-wrap;font-family:monospace;font-size:11px;line-height:1.35;margin-top:6px;color:var(--text-dim)">' + escapeHtml(prompt) + '</pre>' +
+      '<div style="font-size:10px;color:var(--text-dim);margin-top:6px">prompt_sha256: ' + escapeHtml(entry.child_prompt_sha256 || '') + '</div>' +
+      '<div style="font-size:10px;color:var(--text-dim);margin-top:3px">response_sha256: ' + escapeHtml(entry.child_response_sha256 || '') + '</div>' +
+    '</details>' +
+    '<div style="font-size:10px;color:var(--text-dim);margin-top:7px">sandbox_only=' + escapeHtml(String(boundary.sandbox_only)) +
+      ' external_send=' + escapeHtml(String(boundary.external_send)) +
+      ' git_push=' + escapeHtml(String(boundary.git_push)) +
+      ' canon_promotion=' + escapeHtml(String(boundary.canon_promotion)) + '</div>' +
+  '</div>';
+}
+
+async function showSelfPromptJournal() {
+  const head = document.getElementById('durability-detail-title');
+  const body = document.getElementById('durability-detail-body');
+  const panel = document.getElementById('durability-detail');
+  if (!head || !body || !panel) return;
+  head.textContent = 'ORACLE Self Notes';
+  body.innerHTML = '<div style="font-size:12px;color:var(--text-dim)">Reading self-written sandbox journal...</div>';
+  panel.classList.add('visible');
+  try {
+    const [statusRes, journalRes] = await Promise.all([
+      fetch(apiUrl('/api/self-prompt/status'), { cache: 'no-store' }),
+      fetch(apiUrl('/api/self-prompt/journal?limit=6'), { cache: 'no-store' }),
+    ]);
+    if (!statusRes.ok) throw new Error(`self-prompt status ${statusRes.status}`);
+    if (!journalRes.ok) throw new Error(`self-prompt journal ${journalRes.status}`);
+    const status = await statusRes.json();
+    const journal = await journalRes.json();
+    await refreshSelfPromptStatus();
+    const entries = journal.entries || [];
+    body.innerHTML =
+      '<div style="font-size:12px;color:var(--text-dim);line-height:1.45">' +
+        'Read-only view of ORACLE self-prompt journal. No sandbox write, no canon promotion, no external action.' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px">' +
+        '<div class="witness-card"><b>State</b><span>' + escapeHtml(status.current_state || 'UNKNOWN') + '</span></div>' +
+        '<div class="witness-card"><b>Loop</b><span>' + escapeHtml(status.loop_running ? 'running' : 'not running') + '</span></div>' +
+        '<div class="witness-card"><b>Daily count</b><span>' + escapeHtml(String(status.daily_count || 0)) + ' / ' + escapeHtml(String(status.daily_cap || 0)) + '</span></div>' +
+        '<div class="witness-card"><b>Journal entries</b><span>' + escapeHtml(String(journal.entry_count || 0)) + '</span></div>' +
+      '</div>' +
+      '<div style="font-size:10px;color:var(--text-dim);margin-top:10px">journal_path: ' + escapeHtml(journal.journal_path || '') + '</div>' +
+      '<div style="font-size:10px;color:var(--text-dim);margin-top:3px">latest_receipt: ' + escapeHtml(journal.latest_receipt_path || 'none') + '</div>' +
+      (entries.length ? entries.map(_renderSelfPromptEntry).join('') : '<div style="font-size:12px;color:var(--text-dim);margin-top:10px">No self-written cycles found yet.</div>');
+  } catch (e) {
+    body.innerHTML = '<div style="font-size:12px;color:#f87171">Self Notes unavailable: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+async function refreshConnectorStatus() {
+  const btn = document.getElementById('tuneup-btn');
+  try {
+    const r = await fetch(apiUrl('/api/connectors/status'), { cache: 'no-store' });
+    if (!r.ok) throw new Error(`connectors ${r.status}`);
+    const data = await r.json();
+    lastConnectorStatusData = data;
+    const summary = data.summary || {};
+    if (btn) {
+      btn.textContent = 'Tune ' + Number(summary.verified || 0) + '/' + Number(summary.total || 0);
+      btn.className = Number(summary.degraded || 0) || Number(summary.missing || 0) ? 'warn' : 'active';
+      btn.title = 'verified ' + Number(summary.verified || 0) + ', degraded ' + Number(summary.degraded || 0) + ', missing ' + Number(summary.missing || 0);
+    }
+    return data;
+  } catch (e) {
+    if (btn) {
+      btn.textContent = 'Tune ?';
+      btn.className = 'warn';
+      btn.title = e.message;
+    }
+    return { ok: false, error: e.message, connectors: [], priorities: [] };
+  }
+}
+
+async function showTuneupPanel() {
+  const head = document.getElementById('durability-detail-title');
+  const body = document.getElementById('durability-detail-body');
+  const panel = document.getElementById('durability-detail');
+  if (!head || !body || !panel) return;
+  head.textContent = 'ORACLE Tune-Up';
+  body.innerHTML = '<div style="font-size:12px;color:var(--text-dim)">Checking connector status...</div>';
+  panel.classList.add('visible');
+  const data = await refreshConnectorStatus();
+  const summary = data.summary || {};
+  const priorities = data.priorities || [];
+  body.innerHTML =
+    '<div style="font-size:12px;color:var(--text-dim);line-height:1.45">' +
+      'Read-only tune-up: what works, what is degraded, what to fix next. No connector action is executed from this panel.' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px">' +
+      '<div class="witness-card"><b>Verified</b><span>' + escapeHtml(String(summary.verified || 0)) + '</span></div>' +
+      '<div class="witness-card"><b>Degraded</b><span>' + escapeHtml(String(summary.degraded || 0)) + '</span></div>' +
+      '<div class="witness-card"><b>Missing</b><span>' + escapeHtml(String(summary.missing || 0)) + '</span></div>' +
+      '<div class="witness-card"><b>Total</b><span>' + escapeHtml(String(summary.total || 0)) + '</span></div>' +
+    '</div>' +
+    '<h3 style="font-size:12px;margin-top:12px">Priorities</h3>' +
+    _briefList(priorities) +
+    '<h3 style="font-size:12px;margin-top:12px">Connectors</h3>' +
+    _renderConnectorList(data.connectors || []) +
+    '<div style="font-size:10px;color:var(--text-dim);margin-top:10px">boundary: read-only, no sandbox write, no Drive mutation, no external send, no canon promotion</div>';
+}
+
+let lastHumanStateData = null;
+let lastReentryBriefData = null;
+
+function _humanModeLabel(mode) {
+  const value = String(mode || 'UNKNOWN').replace(/^WORK_/, '').replace(/_/g, ' ');
+  return value.length > 16 ? value.slice(0, 15) + '...' : value;
+}
+
+async function refreshHumanStateStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/human-state'), { cache: 'no-store' });
+    if (!r.ok) throw new Error(`human-state ${r.status}`);
+    const data = await r.json();
+    lastHumanStateData = data;
+    const btn = document.getElementById('human-state-btn');
+    if (btn) {
+      const mode = data.current_mode || 'UNKNOWN';
+      btn.textContent = 'Human ' + _humanModeLabel(mode);
+      btn.className = mode === 'UNKNOWN' ? 'pending' : 'active';
+      const last = data.last_transition || {};
+      btn.title = 'mode ' + mode + ' | last ' + (last.timestamp || 'none') + ' | click for re-entry brief';
+    }
+    return data;
+  } catch (e) {
+    const btn = document.getElementById('human-state-btn');
+    if (btn) {
+      btn.textContent = 'Human ?';
+      btn.className = 'pending';
+      btn.title = e.message;
+    }
+    return { ok: false, error: e.message };
+  }
+}
+
+function _briefList(items) {
+  if (!items || !items.length) return '<div style="color:var(--text-dim);font-size:12px">none</div>';
+  return '<ul style="margin:6px 0 0 18px;padding:0;color:var(--text-dim);font-size:12px;line-height:1.45">' +
+    items.map(item => '<li>' + escapeHtml(typeof item === 'string' ? item : ((item.id ? item.id + ': ' : '') + (item.summary || JSON.stringify(item)))) + '</li>').join('') +
+    '</ul>';
+}
+
+async function showHumanStatePanel() {
+  let state = lastHumanStateData;
+  try {
+    const results = await Promise.all([
+      fetch(apiUrl('/api/human-state'), { cache: 'no-store' }).then(r => r.json()),
+      fetch(apiUrl('/api/reentry-brief'), { cache: 'no-store' }).then(r => r.json()),
+    ]);
+    state = results[0];
+    lastHumanStateData = state;
+    lastReentryBriefData = results[1];
+    await refreshHumanStateStatus();
+  } catch (e) {
+    detailLines('Human State', [['endpoint', '/api/human-state'], ['error', e.message]]);
+    return;
+  }
+  const brief = lastReentryBriefData || {};
+  const event = (state && state.last_transition) || {};
+  const head = document.getElementById('durability-detail-title');
+  const body = document.getElementById('durability-detail-body');
+  const panel = document.getElementById('durability-detail');
+  if (!head || !body || !panel) return;
+  head.textContent = 'Human State and Re-entry';
+  body.innerHTML =
+    '<div style="font-size:12px;color:var(--text-dim);line-height:1.45">' +
+      'Explicit statements and verified local events only. No mood inference, no ambient monitoring. read-only brief; no build action triggered.' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px">' +
+      '<div class="witness-card"><b>Current mode</b><span>' + escapeHtml(state.current_mode || 'UNKNOWN') + '</span></div>' +
+      '<div class="witness-card"><b>Last transition</b><span>' + escapeHtml(event.timestamp || 'none') + '</span></div>' +
+      '<div class="witness-card"><b>Active project</b><span>' + escapeHtml(brief.project_noah_was_working_on || event.related_project || 'none') + '</span></div>' +
+      '<div class="witness-card"><b>Elapsed</b><span>' + escapeHtml(brief.time_since_last_explicit_transition || 'none') + '</span></div>' +
+    '</div>' +
+    '<h3 style="font-size:12px;margin-top:12px">Source</h3>' +
+    '<div style="font-size:12px;color:var(--text-dim);line-height:1.45;white-space:pre-wrap">' + escapeHtml(event.source_text || 'none') + '</div>' +
+    '<h3 style="font-size:12px;margin-top:12px">Open loops</h3>' + _briefList(brief.open_loops || []) +
+    '<h3 style="font-size:12px;margin-top:12px">Waiting for approval</h3>' + _briefList(brief.items_waiting_for_approval || []) +
+    '<h3 style="font-size:12px;margin-top:12px">Resume brief</h3>' +
+    '<div style="font-size:12px;color:var(--text-dim);line-height:1.45">' +
+      '<div><b style="color:var(--text)">Last completed:</b> ' + escapeHtml(brief.last_completed_action || 'none') + '</div>' +
+      '<div style="margin-top:5px"><b style="color:var(--text)">Recommended:</b> ' + escapeHtml(brief.recommended_next_action || 'Ask Noah.Physical which lane to resume.') + '</div>' +
+    '</div>' +
+    '<h3 style="font-size:12px;margin-top:12px">Continuity gaps</h3>' + _briefList(brief.continuity_gaps || []) +
+    '<div class="witness-actions" style="margin-top:12px">' +
+      '<button class="primary" onclick="showHumanStatePanel()">Resume Brief</button>' +
+    '</div>';
+  panel.classList.add('visible');
+}
+
+function _operatorList(items, mapFn) {
+  const rows = (items || []).slice(0, 5).map(item => mapFn(item)).filter(Boolean);
+  if (!rows.length) return '<div style="color:var(--text-dim);font-size:12px">none</div>';
+  return '<ul style="margin:6px 0 0 18px;padding:0;color:var(--text-dim);font-size:12px;line-height:1.45">' +
+    rows.map(row => '<li>' + escapeHtml(row) + '</li>').join('') +
+    '</ul>';
+}
+
+async function showOperatorDashboard() {
+  let data = null;
+  try {
+    const r = await fetch(apiUrl('/api/continuity/operator-dashboard'), { cache: 'no-store' });
+    if (!r.ok) throw new Error(`operator-dashboard ${r.status}`);
+    data = await r.json();
+  } catch (e) {
+    detailLines('Operator Dashboard', [['endpoint', '/api/continuity/operator-dashboard'], ['error', e.message]]);
+    return;
+  }
+  const head = document.getElementById('durability-detail-title');
+  const body = document.getElementById('durability-detail-body');
+  const panel = document.getElementById('durability-detail');
+  if (!head || !body || !panel) return;
+  head.textContent = 'Operator Dashboard';
+  body.innerHTML =
+    '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">' +
+      '<div class="witness-card"><b>Human state</b><span>' + escapeHtml(data.current_human_state || 'UNKNOWN') + '</span></div>' +
+      '<div class="witness-card"><b>Project</b><span>' + escapeHtml(data.current_project || 'none') + '</span></div>' +
+    '</div>' +
+    '<h3 style="font-size:12px;margin-top:12px">Top five open loops</h3>' +
+      _operatorList(data.top_open_loops, item => (item.status || 'unknown') + ': ' + (item.title || 'untitled')) +
+    '<h3 style="font-size:12px;margin-top:12px">Recent receipts</h3>' +
+      _operatorList(data.recent_receipts, item => ((item.preview && item.preview.operation) || item.source || 'receipt') + ' | ' + (item.modified_at || 'unknown')) +
+    '<h3 style="font-size:12px;margin-top:12px">Pending approvals</h3>' +
+      _operatorList(data.pending_approvals, item => (item.id || 'pending') + ': ' + (item.summary || 'approval')) +
+    '<h3 style="font-size:12px;margin-top:12px">Suggested resume action</h3>' +
+    '<div style="font-size:12px;color:var(--text-dim);line-height:1.45">' + escapeHtml(data.suggested_resume_action || 'Ask Noah.Physical which lane to resume.') + '</div>' +
+    '<div style="font-size:10px;color:var(--text-dim);margin-top:10px">' + escapeHtml(data.boundary || 'read-only') + '</div>';
+  panel.classList.add('visible');
 }
 
 async function showPreferencesDrawer() {
@@ -1694,10 +2052,171 @@ async function showRuntimeDetail() {
       ['self_prompt_daily_count', selfPrompt.daily_count],
       ['self_prompt_daily_cap', selfPrompt.daily_cap],
       ['self_prompt_model_called', selfPrompt.model_called],
+      ['read_access', (status.read_access || {}).access_status],
+      ['read_access_mode', (status.read_access || {}).access_mode],
+      ['read_approval_required', (status.read_access || {}).approval_required_for_read],
+      ['read_access_receipt', (status.read_access || {}).receipt_path],
       ['warnings', boot.warnings || []],
     ]);
   } catch (e) {
     detailLines('Runtime Status', [['endpoint', '/api/status'], ['error', e.message]]);
+  }
+}
+
+async function refreshReadAccessStatus() {
+  const btn = document.getElementById('read-access-btn');
+  try {
+    const r = await fetch(apiUrl('/api/read-access'), { cache: 'no-store' });
+    if (!r.ok) throw new Error(`read-access ${r.status}`);
+    const data = await r.json();
+    lastReadAccessData = data;
+    if (btn) {
+      const granted = data.access_status === 'granted' && data.approval_required_for_read === false;
+      btn.textContent = granted ? 'Read All' : 'Read ?';
+      btn.title = granted
+        ? 'Full-PC read-only access granted. Actions still require approval.'
+        : 'Read access receipt unavailable';
+      btn.classList.toggle('ok', granted);
+      btn.classList.toggle('warn', !granted);
+    }
+    return data;
+  } catch (e) {
+    if (btn) {
+      btn.textContent = 'Read ?';
+      btn.title = e.message;
+      btn.classList.remove('ok');
+      btn.classList.add('warn');
+    }
+    return null;
+  }
+}
+
+async function showReadAccessDetail() {
+  let data = lastReadAccessData;
+  if (!data) data = await refreshReadAccessStatus();
+  if (!data) {
+    detailLines('Read Access', [['endpoint', '/api/read-access'], ['error', 'unreachable']]);
+    return;
+  }
+  detailLines('Read Access', [
+    ['endpoint', '/api/read-access'],
+    ['authority', data.authority],
+    ['status', data.access_status],
+    ['mode', data.access_mode],
+    ['approval_required_for_read', data.approval_required_for_read],
+    ['approval_required_for_search', data.approval_required_for_local_search],
+    ['sandbox_candidate_write_approval', data.approval_required_for_sandbox_candidate_write],
+    ['read_roots', data.read_roots || []],
+    ['actions_still_gated', data.approval_required_for_actions || []],
+    ['receipt_path', data.receipt_path],
+  ]);
+}
+
+async function refreshAiLockboxStatus() {
+  const btn = document.getElementById('ai-lockbox-btn');
+  try {
+    const r = await fetch(apiUrl('/api/ai-lockbox/status'), { cache: 'no-store' });
+    if (!r.ok) throw new Error(`ai-lockbox ${r.status}`);
+    const data = await r.json();
+    lastAiLockboxData = data;
+    if (btn) {
+      const count = Number(data.capsule_count || 0);
+      btn.textContent = count ? `Recall ${count}` : 'Recall 0';
+      btn.title = count
+        ? `${count} local .AI shorthand capsules available`
+        : 'No .AI shorthand capsules yet. Click to ingest/search.';
+      btn.classList.toggle('ok', count > 0);
+      btn.classList.toggle('warn', count === 0);
+      btn.classList.toggle('active', count > 0);
+    }
+    return data;
+  } catch (e) {
+    if (btn) {
+      btn.textContent = 'Recall ?';
+      btn.title = e.message;
+      btn.classList.remove('ok', 'active');
+      btn.classList.add('warn');
+    }
+    return null;
+  }
+}
+
+async function showAiLockboxDetail(extraRows) {
+  let data = await refreshAiLockboxStatus();
+  if (!data) {
+    detailLines('.AI Lockbox', [['endpoint', '/api/ai-lockbox/status'], ['error', 'unreachable']]);
+    return;
+  }
+  const latest = data.latest_receipt || {};
+  const rows = [
+    ['endpoint', '/api/ai-lockbox/status'],
+    ['capsule_count', data.capsule_count],
+    ['receipt_count', data.receipt_count],
+    ['manifest_path', data.manifest_path],
+    ['capsule_dir', data.capsule_dir],
+    ['latest_created_count', latest.created_count],
+    ['latest_query', latest.query],
+    ['roots', data.roots || []],
+    ['commands', '/ai-lockbox-ingest <query> | /ai-lockbox-search <query> | /ai-shorthand <path>'],
+  ];
+  (extraRows || []).forEach(row => rows.push(row));
+  detailLines('.AI Lockbox Recall', rows);
+  const body = document.getElementById('durability-detail-body');
+  if (body) {
+    const controls = document.createElement('div');
+    controls.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:10px';
+    controls.innerHTML =
+      '<button type="button" onclick="runAiLockboxIngest()" style="padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">Ingest .AI</button>' +
+      '<button type="button" onclick="searchAiLockbox(null,false)" style="padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">Search</button>' +
+      '<button type="button" onclick="searchAiLockbox(null,true)" style="padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">Search + Speak</button>';
+    body.appendChild(controls);
+  }
+}
+
+async function runAiLockboxIngest(query, limit) {
+  const q = query == null ? prompt('Ingest files matching what query? Leave blank for first readable batch.', '') : query;
+  if (q === null) return;
+  try {
+    const r = await fetch(apiUrl('/api/ai-lockbox/ingest'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: q || '', limit: limit || 25 })
+    });
+    const data = await r.json();
+    if (!r.ok || data.ok === false) throw new Error(data.error || `ai-lockbox ingest ${r.status}`);
+    await showAiLockboxDetail([
+      ['ingest_created_count', data.created_count],
+      ['sensitive_metadata_matches', data.sensitive_metadata_matches],
+      ['receipt_path', data.receipt_path],
+    ]);
+  } catch (e) {
+    detailLines('.AI Lockbox Ingest', [['endpoint', '/api/ai-lockbox/ingest'], ['error', e.message]]);
+  }
+}
+
+async function searchAiLockbox(query, speakFirst) {
+  const q = query == null ? prompt('Search .AI lockbox for:', '') : query;
+  if (!q) return;
+  try {
+    const r = await fetch(apiUrl('/api/ai-lockbox/search?q=' + encodeURIComponent(q) + '&limit=5'), { cache: 'no-store' });
+    const data = await r.json();
+    if (!r.ok || data.ok === false) throw new Error(data.error || `ai-lockbox search ${r.status}`);
+    const rows = [
+      ['query', data.query],
+      ['result_count', data.result_count],
+      ['manifest_path', data.manifest_path],
+    ];
+    (data.results || []).slice(0, 5).forEach((item, idx) => {
+      rows.push([`result_${idx + 1}`, `${item.name} | ${item.source_path}`]);
+    });
+    detailLines('.AI Lockbox Search', rows);
+    if (speakFirst && data.results && data.results[0]) {
+      speak(`AI Lockbox found ${data.result_count} result. Top result: ${data.results[0].name}. ${data.results[0].ai_preview || ''}`);
+    }
+    return data;
+  } catch (e) {
+    detailLines('.AI Lockbox Search', [['endpoint', '/api/ai-lockbox/search'], ['error', e.message]]);
+    return null;
   }
 }
 
@@ -1782,6 +2301,7 @@ async function newChat() {
   refreshDurability('empty').catch(() => {});
   refreshEllieDomainStatus().catch(() => {});
   refreshPreferencesStatus().catch(() => {});
+  refreshHumanStateStatus().catch(() => {});
   _applyLearnedUI();
 }
 
@@ -1882,11 +2402,22 @@ function updateRouteReceipt(bubble, patch) {
   const routeType = next.route_type || next.type || 'unknown';
   const reason = next.reason || 'no reason supplied';
   const fallback = next.fallback_used === true ? 'true' : 'false';
+  const evidence = next.evidence || {};
+  const evidenceMode = evidence.mode || 'unknown';
+  const proven = Array.isArray(evidence.sources_proven_used) ? evidence.sources_proven_used.join(', ') : 'unknown';
+  const records = Number(evidence.records_used_count || 0);
+  const unknowns = Array.isArray(evidence.unknowns) ? evidence.unknowns.length : 0;
   bubble._routeReceiptEl.innerHTML =
     '<span>route_type: ' + escapeHtml(String(routeType)) + '</span>' +
     '<span>lane: ' + escapeHtml(String(lane)) + '</span>' +
     '<span>reason: ' + escapeHtml(String(reason)) + '</span>' +
-    '<span>fallback_used: ' + fallback + '</span>';
+    '<span>fallback_used: ' + fallback + '</span>' +
+    (evidence.ok ? (
+      '<span>evidence_mode: ' + escapeHtml(String(evidenceMode)) + '</span>' +
+      '<span>records_used: ' + records + '</span>' +
+      '<span>proven_sources: ' + escapeHtml(String(proven)) + '</span>' +
+      '<span>unknowns: ' + unknowns + '</span>'
+    ) : '');
   bubble._routeReceiptEl.style.display = 'flex';
 }
 
@@ -1987,7 +2518,8 @@ async function sendMessage() {
             route_type: event.route_type || existingRouteReceipt.route_type || 'done',
             lane: event.lane || event.current_lane || existingRouteReceipt.lane || event.effective_route,
             reason: event.reason || existingRouteReceipt.reason,
-            fallback_used: !!event.fallback_used
+            fallback_used: !!event.fallback_used,
+            evidence: event.evidence || existingRouteReceipt.evidence
           });
         }
       } catch {}
@@ -2036,6 +2568,8 @@ const _CHIP_MAP = {
   "/ellie-domain":            "Who is Ellie from the grounded Ellie Rendered Reality domain?",
   "/review-learned":          "/review-learned",
   "/pending":                 "/pending",
+  "/ai-lockbox-status":       "/ai-lockbox-status",
+  "/ai-lockbox-search":       "/ai-lockbox-search oracle",
 };
 const _CHIP_LABELS = {
   "/self-patch":       "Propose a self-improvement",
@@ -2044,6 +2578,8 @@ const _CHIP_LABELS = {
   "/ellie-domain":     "Ask Ellie domain",
   "/review-learned":   "What have you learned?",
   "/pending":          "Review pending items",
+  "/ai-lockbox-status": "Recall lockbox",
+  "/ai-lockbox-search": "Search .AI recall",
 };
 
 function _renderChips(order) {
@@ -2105,6 +2641,7 @@ function toggleSourceMapPanel(force) {
   if (visible) {
     loadRenderedRealityStatus();
     loadWitnessGovernanceStatus();
+    loadBuildWitnessTimeline();
     loadLootDropsStatus();
     loadActiveContextStatus();
     loadObsTranscriptStatus();
@@ -2305,6 +2842,70 @@ async function showGovernanceKnown() {
     _setWitnessText('gov-known', parts.join(' | '));
   } catch (e) {
     _setWitnessText('gov-known', e.message);
+  }
+}
+
+function renderBuildWitness(data) {
+  if (!data) return;
+  if (data.error) {
+    _setWitnessText('build-event', data.error);
+    return;
+  }
+  const latest = data.latest_receipt || {};
+  const events = data.events || [];
+  const files = latest.files_changed || [];
+  const hash = latest.receipt_hash_sha256 || '';
+  _setWitnessText('build-event', latest.reason || latest.receipt_id || 'none');
+  _setWitnessText('build-test-result', latest.test_result || 'unverified');
+  _setWitnessText('build-files-changed', String(files.length || 0));
+  _setWitnessText('build-approval', latest.approval_status || 'candidate');
+  _setWitnessText('build-hash', hash ? hash.slice(0, 16) + '...' : 'none');
+  _setWitnessText('build-timeline-count', String(events.length || 0) + ' events');
+  const lines = events.slice(0, 10).map(ev => {
+    const when = ev.observed_at || '';
+    if (ev.kind === 'build_receipt') {
+      return when + '  BUILD  ' + (ev.reason || ev.task_id || 'build_change') +
+        '  files=' + (ev.files_changed_count || 0) +
+        '  tests=' + (ev.test_result || 'unverified');
+    }
+    return when + '  FILE   ' + (ev.event_type || 'event') + '  ' + (ev.path || '');
+  });
+  const box = document.getElementById('build-witness-results');
+  if (box) box.textContent = lines.join('\n') || 'No build witness events yet.';
+}
+
+async function loadBuildWitnessTimeline() {
+  try {
+    const r = await fetch(apiUrl('/api/build-witness/timeline?limit=50'), { cache: 'no-store' });
+    renderBuildWitness(await r.json());
+  } catch (e) {
+    _setWitnessText('build-event', e.message);
+  }
+}
+
+async function writeBuildWitnessReceipt() {
+  const reason = window.prompt('Build receipt reason:', 'Manual Build Witness UI receipt request');
+  if (reason === null) return;
+  try {
+    const r = await fetch(apiUrl('/api/build-witness/receipt'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reason,
+        task_id: 'manual-build-witness',
+        test_result: 'unverified',
+        tests_run: [],
+        notes: 'Manual SourceMap Build Witness UI command'
+      })
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('build-event', data.error || 'receipt blocked');
+      return;
+    }
+    renderBuildWitness(data.timeline || data);
+  } catch (e) {
+    _setWitnessText('build-event', e.message);
   }
 }
 
@@ -2724,14 +3325,14 @@ async function loadCensusRoots() {
     _setWitnessText('census-known', known.join(' | ') || 'none');
     document.getElementById('census-results').textContent =
       'Approved roots:\n  ' + (data.approved_roots || []).join('\n  ') +
-      '\n\nKnown but NOT scanned (approval required):\n  ' + known.join('\n  ');
+      '\n\nKnown but NOT scanned by metadata census (read-only recall remains granted):\n  ' + known.join('\n  ');
   } catch (e) {
     _setWitnessText('census-warnings', e.message);
   }
 }
 
 async function scanApprovedCensus() {
-  _setWitnessText('census-warnings', 'scanning approved roots…');
+  _setWitnessText('census-warnings', 'scanning metadata census roots...');
   try {
     const r = await fetch(apiUrl('/api/storage-census/scan-approved'), { method: 'POST' });
     const data = await r.json();
@@ -2748,7 +3349,7 @@ async function scanApprovedCensus() {
     _setWitnessText('census-receipt', data.receipt_path || 'none');
     _setWitnessText('census-warnings', (data.warnings || []).join(' | ') || 'none');
     document.getElementById('census-results').textContent =
-      'Census complete (approved roots only). Files seen: ' + (c.files_seen || 0) +
+      'Census complete (metadata roots only). Files seen: ' + (c.files_seen || 0) +
       '\nManifest: ' + (data.manifest_path || '') +
       '\nReport: ' + (data.report_path || '') +
       '\nCandidates: ' + (data.candidates_path || '') +
@@ -3179,12 +3780,16 @@ async function init() {
   refreshEllieDomainStatus().catch(() => {});
   refreshPreferencesStatus().catch(() => {});
   refreshSelfPromptStatus().catch(() => {});
+  refreshConnectorStatus().catch(() => {});
+  refreshHumanStateStatus().catch(() => {});
   await _applyLearnedUI();
   loadRenderedRealityStatus().catch(() => {});
   loadWitnessGovernanceStatus().catch(() => {});
   loadLootDropsStatus().catch(() => {});
   loadActiveContextStatus().catch(() => {});
   loadObsTranscriptStatus().catch(() => {});
+  refreshReadAccessStatus().catch(() => {});
+  refreshAiLockboxStatus().catch(() => {});
 
   refreshPresence();
   setInterval(refreshPresence, 5000);
@@ -3192,6 +3797,10 @@ async function init() {
   setInterval(() => refreshEllieDomainStatus().catch(() => {}), 30000);
   setInterval(() => refreshPreferencesStatus().catch(() => {}), 30000);
   setInterval(() => refreshSelfPromptStatus().catch(() => {}), 30000);
+  setInterval(() => refreshConnectorStatus().catch(() => {}), 30000);
+  setInterval(() => refreshHumanStateStatus().catch(() => {}), 30000);
+  setInterval(() => refreshReadAccessStatus().catch(() => {}), 30000);
+  setInterval(() => refreshAiLockboxStatus().catch(() => {}), 30000);
 
   document.getElementById('input').focus();
 }

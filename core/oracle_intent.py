@@ -8,6 +8,8 @@ capability broker plus honest defaults for verbs the broker does not track.
 """
 from __future__ import annotations
 
+import re
+
 # â”€â”€ Intent categories â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 CASUAL = (
     "hey oracle", "hi oracle", "hello oracle", "are you with me", "you with me",
@@ -70,6 +72,9 @@ COMPUTER_ACTION = (
 APPROVAL = (
     "i approve", "you have approval", "go ahead and", "approved, proceed",
     "permission granted", "you're approved", "you are approved",
+    "approval given", "approval granted", "noah approval given",
+    "noah hawkes approval given", "noah.physical approval given",
+    "noah physical approval given",
 )
 REFLECTION = (
     "reflect", "self-review", "self review", "what are you noticing",
@@ -78,13 +83,15 @@ REFLECTION = (
 )
 VOICE = (
     "use your voice", "talk to me out loud", "voice mode", "can you hear me",
-    "say it out loud", "push to talk", "push-to-talk", "speak to me", "out loud",
+    "say it out loud", "push to talk", "push-to-talk", "out loud",
 )
 
 # action phrase -> capability name
 _ACTION_CAP_MAP = (
     ("qr tattoo", "qr_scan"), ("scan the qr", "qr_scan"), ("scan qr", "qr_scan"),
-    ("scan my qr", "qr_scan"), ("scan my tattoo", "qr_scan"), ("scan", "qr_scan"),
+    ("scan my qr", "qr_scan"), ("scan my tattoo", "qr_scan"),
+    ("scan my documents", "local_file_read"), ("scan my files", "local_file_read"),
+    ("scan all drives", "local_file_read"), ("scan the drive", "local_file_read"),
     ("turn on the camera", "camera_capture"), ("use the camera", "camera_capture"),
     ("webcam", "camera_capture"),
     ("search the web", "web_access"), ("search online", "web_access"),
@@ -104,7 +111,7 @@ _ACTION_CAP_MAP = (
 
 # Capabilities ORACLE genuinely cannot perform from a free-chat turn (honest).
 CHAT_UNSUPPORTED = {
-    "qr_scan", "camera_capture", "external_send",
+    "camera_capture", "external_send",
     "command_exec", "git_write", "connector", "file_ingest",
 }
 
@@ -119,6 +126,19 @@ _SUBSTANTIVE = {
 
 def _has(low: str, phrases) -> bool:
     return any(p in low for p in phrases)
+
+
+def _has_phrase(low: str, phrase: str) -> bool:
+    needle = str(phrase or "").strip()
+    if not needle:
+        return False
+    if re.fullmatch(r"[\w+-]+", needle):
+        return re.search(rf"\b{re.escape(needle)}\b", low) is not None
+    return needle in low
+
+
+def _has_any_phrase(low: str, phrases) -> bool:
+    return any(_has_phrase(low, phrase) for phrase in phrases)
 
 
 def action_capability(message: str):
@@ -147,7 +167,7 @@ def classify_intent(message: str) -> list[str]:
         intents.append("strategic_planning")
     if _has(low, COMPUTER_ACTION):
         intents.append("computer_action_request")
-    if _has(low, IMPL):
+    if _has_any_phrase(low, IMPL):
         intents.append("implementation_intent")
     if _has(low, DEBUG):
         intents.append("debug_request")
@@ -227,12 +247,22 @@ def capability_registry() -> dict:
         multipart = False
 
     defaults = {
-        "qr_scan": ("missing", "no QR-scan capability implemented"),
+        "qr_scan": (
+            "available",
+            "local image QR decode is available for supplied PNG/JPG/BMP/WEBP/TIFF files; no live camera or physical-arm scan from chat",
+        ),
         "camera_capture": ("unverified", "camera route exists but not verified from chat"),
         "web_access": ("available", "read-only internet_recall lane; no browser control, login, forms, send, or canon promotion"),
         "external_send": ("missing", "no external send/relay from this runtime"),
         "command_exec": ("missing", "chat cannot run shell commands; use terminal/Claude Code"),
-        "local_file_read": ("stubbed", "bounded read via /show-file and MiracleDrive only"),
+        "full_pc_readonly": (
+            "available",
+            "Noah.Physical granted full-PC read-only search/list/metadata/supported text-docx preview; sensitive paths can be inventoried by metadata; no approval required for ordinary reads",
+        ),
+        "local_file_read": (
+            "available",
+            "full-PC read-only file_recall lane; no approval required for search/list/read previews; raw credential values are never auto-ingested or receipted",
+        ),
         "local_file_write": (
             "available",
             "sandbox-only filebase write lane; sandbox initiative does not require Noah approval; "
@@ -402,7 +432,7 @@ CAPABILITY_META = {
     "command_exec": {"lane": "build_lane", "requires_approval": True},
     "web_access": {"lane": "read_only", "requires_approval": False},
     "external_send": {"lane": "computer_control", "requires_approval": True},
-    "qr_scan": {"lane": "computer_control", "requires_approval": True},
+    "qr_scan": {"lane": "read_only", "requires_approval": False},
     "camera_capture": {"lane": "computer_control", "requires_approval": True},
     "connector": {"lane": "read_only", "requires_approval": False},
     "voice_io": {"lane": "read_only", "requires_approval": False},

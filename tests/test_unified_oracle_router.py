@@ -282,6 +282,43 @@ def test_bare_approval_resolves_single_pending_route(monkeypatch, tmp_path):
     assert router.load_pending_guard_approval() is None
 
 
+def test_noah_hawkes_approval_given_is_bound_approval_followup(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    guarded = router.write_route(router.classify_intent("commit all and manage them"))
+    pending = router.write_pending_guard_approval(guarded)
+
+    assert router.is_approval_followup("Noah Hawkes Approval given") is True
+
+    route = router.classify_intent("Noah Hawkes Approval given")
+    assert route["route_type"] == "approval_followup"
+    assert route["detected_lane"] == "guard_lane"
+    assert route["requires_approval"] is False
+
+    result = router.handle_guard_approval_followup(
+        "Noah Hawkes Approval given",
+        write_receipt=False,
+    )
+    assert result["approved"] is True
+    assert result["status"] == "approved_single_pending_route"
+    assert result["route_id"] == pending["route_id"]
+    assert router.load_pending_guard_approval() is None
+
+
+def test_noah_hawkes_approval_given_without_pending_fails_closed(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    result = router.handle_guard_approval_followup(
+        "Noah Hawkes Approval given",
+        write_receipt=False,
+    )
+
+    assert result["handled"] is True
+    assert result["approved"] is False
+    assert result["status"] == "no_pending_guard_route"
+    assert "no pending executable Guard action is bound" in result["response_text"]
+
+
 def test_ui_hides_companion_builder_split_and_shows_unified_controls():
     html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
 

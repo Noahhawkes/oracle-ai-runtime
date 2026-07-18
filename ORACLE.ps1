@@ -165,7 +165,7 @@ if (-not $runtimeUp -and $Start) {
   $bat = Join-Path $RepoRoot 'oracle_desktop.bat'
   if (Test-Path $bat) {
     Write-Host "  Canonical runtime down - launching oracle_desktop.bat ..." -ForegroundColor Yellow
-    Start-Process -FilePath $bat -WorkingDirectory $RepoRoot
+    Start-Process -FilePath $bat -WorkingDirectory $RepoRoot -WindowStyle Hidden
     for ($i = 0; $i -lt 15 -and -not $runtimeUp; $i++) {
       Start-Sleep -Seconds 1
       $runtimeUp = Test-Port -Port $CanonicalPort

@@ -642,7 +642,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "terminal_status",
-        "description": "Check ORACLE's terminal session — whether it's alive and what directory it's currently in.",
+        "description": "Check ORACLE's terminal session and write a terminal process census receipt.",
         "input_schema": {
             "type": "object",
             "properties": {},

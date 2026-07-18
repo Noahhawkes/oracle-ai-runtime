@@ -43,5 +43,6 @@ def test_explicit_sandbox_initiative_still_fires():
         ".AI:SANDBOX_INITIATIVE",
         "/sandbox-initiative",
         "write one file to your sandbox please",
+        "please log noahs new prefrences that you take action in your sandbox and speak to me from your heart and help me build you",
     ]:
         assert srv._is_sandbox_initiative_request(prompt) is True, prompt
