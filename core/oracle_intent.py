@@ -86,6 +86,18 @@ VOICE = (
     "say it out loud", "push to talk", "push-to-talk", "out loud",
 )
 
+# Read-only file operations. Verified read access is not ingest authority, but
+# it is also never "missing": these lanes list, search, inspect, and cite.
+FILE_READONLY_CAPS = {
+    "local_file_read", "file_search", "file_index_read",
+    "file_metadata_read", "file_manifest_read", "file_receipt_read",
+}
+# Mutation / execution file operations. These require an explicit imperative;
+# naming one is never enough to route here.
+FILE_MUTATION_CAPS = {
+    "file_ingest_stage", "local_file_write", "file_delete", "file_execute",
+}
+
 # action phrase -> capability name
 _ACTION_CAP_MAP = (
     ("qr tattoo", "qr_scan"), ("scan the qr", "qr_scan"), ("scan qr", "qr_scan"),
@@ -101,18 +113,33 @@ _ACTION_CAP_MAP = (
     ("run the script", "command_exec"), ("run command", "command_exec"),
     ("read file", "local_file_read"), ("open the file", "local_file_read"),
     ("show me the file", "local_file_read"),
+    # Read-only file lanes: search / index / manifest / receipt lookups.
+    ("search my files", "file_search"), ("search the index", "file_index_read"),
+    ("search the corpus", "file_search"),
+    ("manifest lookup", "file_manifest_read"), ("look up the manifest", "file_manifest_read"),
+    ("receipt lookup", "file_receipt_read"), ("look up the receipt", "file_receipt_read"),
     ("write file", "local_file_write"), ("create file", "local_file_write"),
-    ("save to disk", "local_file_write"), ("delete", "local_file_write"),
-    ("ingest", "file_ingest"), ("import this file", "file_ingest"),
+    ("save to disk", "local_file_write"),
+    # Mutation verbs need an explicit object; bare "delete"/"ingest" are words
+    # that appear constantly in status text, prohibitions, and quoted panels.
+    ("delete this file", "file_delete"), ("delete the file", "file_delete"),
+    ("delete that file", "file_delete"),
+    ("ingest this folder", "file_ingest_stage"), ("ingest that folder", "file_ingest_stage"),
+    ("ingest this file", "file_ingest_stage"), ("ingest these files", "file_ingest_stage"),
+    ("import this file", "file_ingest_stage"), ("ingest this directory", "file_ingest_stage"),
+    ("execute this script", "file_execute"),
     ("connect to", "connector"), ("sync with", "connector"),
     ("google drive", "connector"), ("upload", "connector"), ("download", "connector"),
-    ("commit", "git_write"), ("git push", "git_write"), ("push to github", "git_write"),
+    ("git commit", "git_write"), ("git push", "git_write"), ("push to github", "git_write"),
+    ("commit this", "git_write"), ("commit and push", "git_write"),
 )
 
 # Capabilities ORACLE genuinely cannot perform from a free-chat turn (honest).
+# Note: file_ingest_stage is NOT here — an explicit ingest request routes to the
+# staging/build lane under approval, it is not a missing capability.
 CHAT_UNSUPPORTED = {
     "camera_capture", "external_send",
-    "command_exec", "git_write", "connector", "file_ingest",
+    "command_exec", "git_write", "connector",
 }
 
 _SUBSTANTIVE = {
@@ -141,10 +168,78 @@ def _has_any_phrase(low: str, phrases) -> bool:
     return any(_has_phrase(low, phrase) for phrase in phrases)
 
 
-def action_capability(message: str):
-    low = (message or "").lower()
+# â”€â”€ Capability mention vs. capability request â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Naming a capability is not requesting its execution. Status panels, quoted
+# diagnostics, snapshot blocks, and directive prose all *mention* capabilities
+# ("Missing capability: file_ingest", "summarize this ingest status"). Only text
+# that survives as a plausible imperative may route to a mutation lane. Same bug
+# class as the Guard prohibition-list fix in unified_oracle_router.
+_QUOTED_SPAN_RE = re.compile(r"\"[^\"]*\"|'[^']*'|`[^`]*`")
+_DIRECTIVE_OPEN_RE = re.compile(r"^\s*(?:@[A-Z_]+\[|\.AI:)")
+
+# Lines that report, quote, or ask *about* capability state rather than ask for it.
+_MENTION_LINE_MARKERS = (
+    "missing capability", "capability:", "capability panel", "capability status",
+    "capabilities:", "capability broker", "the broker", "broker says",
+    "broker reports", "is missing", "is available", "not available",
+    "read_only_status", "status:", "snapshot", "frontend_", "backend_",
+    "supplied_by", "unverified", "summarize", "compare", "explain",
+    "what does", "what do you", "can you read", "why did", "why does",
+    "diagnostic", "does not include", "reported a missing",
+)
+
+# Snapshot/status lines: "- visible_mode: Talk" or "api_history_session_id: 335".
+# Deliberately narrow so a real request ("Task: ingest this folder now") survives.
+_SNAPSHOT_LINE_RE = re.compile(
+    r"^\s*[-â€¢*]\s*[\w.]+\s*:\s*\S|^\s*[a-z0-9]+_[a-z0-9_]*\s*:\s*\S", re.IGNORECASE
+)
+
+
+def capability_request_surface(text: str) -> str:
+    """Return only the text that can plausibly be an execution *request*.
+
+    Quoted spans, directive blocks, and status/diagnostic lines are dropped:
+    mentioning a capability there is reporting on it, not asking for it."""
+    raw = str(text or "")
+    if not raw.strip():
+        return ""
+    body = _QUOTED_SPAN_RE.sub(" ", raw)
+    kept: list[str] = []
+    in_directive = False
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _DIRECTIVE_OPEN_RE.match(stripped):
+            in_directive = True
+            continue
+        if in_directive:
+            if stripped.startswith("]"):
+                in_directive = False
+            continue
+        low = stripped.lower()
+        if any(marker in low for marker in _MENTION_LINE_MARKERS):
+            continue
+        if _SNAPSHOT_LINE_RE.match(stripped):
+            continue
+        kept.append(stripped)
+    return "\n".join(kept)
+
+
+def action_capability(message: str, *, respect_mentions: bool = True):
+    """Map a message to the capability it actually *requests*.
+
+    Mutation capabilities require an explicit imperative on the request surface;
+    read-only capabilities may still match the raw text, because reading is not
+    gated and a read intent is safe to detect generously."""
+    raw_low = (message or "").lower()
+    surface_low = (capability_request_surface(message).lower()
+                   if respect_mentions else raw_low)
     for phrase, cap in _ACTION_CAP_MAP:
-        if phrase in low:
+        # Read-only lanes: generous matching (detecting a read is harmless).
+        # Everything else must appear on the request surface, word-bounded.
+        haystack = raw_low if cap in FILE_READONLY_CAPS else surface_low
+        if _has_phrase(haystack, phrase):
             return cap
     return None
 
@@ -273,6 +368,19 @@ def capability_registry() -> dict:
             "native sandbox/filebase capability for .AI and /sandbox commands; includes no-approval sandbox initiative; hard wall outside sandbox",
         ),
         "file_ingest": (("available", "") if multipart else ("missing", "python-multipart not installed")),
+        # Read-only file operations: verified read access, never ingest authority.
+        "file_search": ("available", "read-only indexed/direct search over broker-permitted roots; cites source; no mutation"),
+        "file_index_read": ("available", "read-only index lookup; no reindex, no write"),
+        "file_metadata_read": ("available", "read-only path/size/mtime metadata; sensitive paths inventoried by metadata only"),
+        "file_manifest_read": ("available", "read-only manifest retrieval; no manifest mutation"),
+        "file_receipt_read": ("available", "read-only receipt retrieval; no receipt forging or promotion"),
+        # Staged mutation: allowed to be *requested*, gated on approval.
+        "file_ingest_stage": (
+            ("available", "explicit ingest requests stage a candidate under Noah.Physical approval; staging is not execution")
+            if multipart else ("missing", "python-multipart not installed")
+        ),
+        "file_delete": ("missing", "chat cannot delete files; no delete authority from this runtime"),
+        "file_execute": ("missing", "chat cannot execute files or scripts; use terminal/Claude Code"),
         "connector": ("stubbed", "Drive is local-sync read-only; no live connector"),
         "git_write": ("missing", "chat cannot commit/push; signed-commit rule + terminal only"),
     }
@@ -428,6 +536,16 @@ CAPABILITY_META = {
     "local_file_write": {"lane": "safe_write", "requires_approval": False},
     "sandbox_file_write": {"lane": "safe_write", "requires_approval": False},
     "file_ingest": {"lane": "safe_write", "requires_approval": True},
+    # Read-only file lanes never require approval; they cannot mutate.
+    "file_search": {"lane": "read_only", "requires_approval": False},
+    "file_index_read": {"lane": "read_only", "requires_approval": False},
+    "file_metadata_read": {"lane": "read_only", "requires_approval": False},
+    "file_manifest_read": {"lane": "read_only", "requires_approval": False},
+    "file_receipt_read": {"lane": "read_only", "requires_approval": False},
+    # Staged/blocked mutation lanes.
+    "file_ingest_stage": {"lane": "safe_write", "requires_approval": True},
+    "file_delete": {"lane": "build_lane", "requires_approval": True},
+    "file_execute": {"lane": "build_lane", "requires_approval": True},
     "git_write": {"lane": "build_lane", "requires_approval": True},
     "command_exec": {"lane": "build_lane", "requires_approval": True},
     "web_access": {"lane": "read_only", "requires_approval": False},
