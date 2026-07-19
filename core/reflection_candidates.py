@@ -28,7 +28,6 @@ Two hard boundaries, both from Noah's own doctrine:
 
 from __future__ import annotations
 
-import difflib
 import re
 from typing import Any, Optional
 
@@ -36,6 +35,21 @@ try:  # pragma: no cover - import shape differs between callers
     import action_candidates as _ac
 except Exception:  # pragma: no cover
     from . import action_candidates as _ac  # type: ignore
+
+# Anti-amplification machinery is shared with prompt_learning_loop. Defined once
+# in candidate_drift so the two producers cannot quietly diverge from each other.
+try:  # pragma: no cover
+    from candidate_drift import (  # noqa: F401
+        DRIFT_LOOKBACK, DRIFT_THRESHOLD, clip, drift_score, normalize,
+    )
+except Exception:  # pragma: no cover
+    from .candidate_drift import (  # type: ignore  # noqa: F401
+        DRIFT_LOOKBACK, DRIFT_THRESHOLD, clip, drift_score, normalize,
+    )
+
+# Local aliases keep the original call sites intact.
+_normalize = normalize
+_clip = clip
 
 
 # ── Reflection field parsing ──────────────────────────────────────────────────
@@ -67,9 +81,7 @@ _OUTSIDE_SANDBOX_MARKERS = (
 MAX_TITLE = 120
 MAX_TEXT = 1200
 
-# Similarity at or above this is treated as self-amplification, not new thought.
-DRIFT_THRESHOLD = 0.88
-DRIFT_LOOKBACK = 8
+# DRIFT_THRESHOLD / DRIFT_LOOKBACK are imported from candidate_drift above.
 
 
 def parse_reflection(text: str) -> dict[str, str]:
@@ -93,15 +105,6 @@ def parse_reflection(text: str) -> dict[str, str]:
     return {k: " ".join(v).strip() for k, v in fields.items() if v}
 
 
-def _normalize(text: str) -> str:
-    return " ".join(str(text or "").lower().split())
-
-
-def _clip(text: str, limit: int) -> str:
-    body = " ".join(str(text or "").split())
-    return body if len(body) <= limit else body[: limit - 1].rstrip() + "…"
-
-
 def assess_risk(parsed: dict[str, str]) -> str:
     """Sandbox-only reflection is low risk. Anything naming an outside-sandbox
     mutation is high, so it can never be approved absent-mindedly."""
@@ -111,24 +114,6 @@ def assess_risk(parsed: dict[str, str]) -> str:
     if any(marker in surface for marker in _OUTSIDE_SANDBOX_MARKERS):
         return "high"
     return "low"
-
-
-def drift_score(text: str, prior_texts: list[str]) -> tuple[float, str]:
-    """Highest similarity between this proposal and recent ones.
-
-    Returns (score, matched_text). Score 0.0 when there is nothing to compare."""
-    needle = _normalize(text)
-    if not needle:
-        return 0.0, ""
-    best, matched = 0.0, ""
-    for prior in prior_texts:
-        candidate = _normalize(prior)
-        if not candidate:
-            continue
-        ratio = difflib.SequenceMatcher(None, needle, candidate).ratio()
-        if ratio > best:
-            best, matched = ratio, prior
-    return best, matched
 
 
 def _recent_proposal_texts(limit: int = DRIFT_LOOKBACK) -> list[str]:

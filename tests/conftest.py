@@ -20,18 +20,34 @@ for _p in (ROOT, CORE):
 
 
 @pytest.fixture(autouse=True)
-def isolate_action_candidate_store(tmp_path, monkeypatch):
-    """Redirect the action-candidate store to a per-test temp file.
+def isolate_candidate_stores(tmp_path, monkeypatch):
+    """Redirect every candidate store to per-test temp files.
 
-    Without this, any test that runs a self-prompt cycle submits a real
-    candidate into Memory/action_candidates.json and it surfaces in Noah's
-    live approval queue. Tests that need their own path simply monkeypatch
-    CANDIDATES_FILE again -- this only sets a safe default.
+    Without this, any test that runs a self-prompt cycle or ingests a prompt
+    writes a real candidate into Memory/ and it surfaces in Noah's live
+    approval queue. Tests that need their own path simply monkeypatch the
+    path again; this only sets a safe default.
+
+    Every new candidate producer must be added here. The failure is silent:
+    tests pass while quietly polluting durable memory.
     """
     try:
         import action_candidates as _ac
+        monkeypatch.setattr(
+            _ac, "CANDIDATES_FILE", tmp_path / "action_candidates.json", raising=False
+        )
     except Exception:
-        return
-    monkeypatch.setattr(
-        _ac, "CANDIDATES_FILE", tmp_path / "action_candidates.json", raising=False
-    )
+        pass
+
+    try:
+        import prompt_learning_loop as _pll
+        monkeypatch.setattr(
+            _pll, "CANDIDATES_FILE", tmp_path / "prompt_learning_candidates.json",
+            raising=False,
+        )
+        monkeypatch.setattr(
+            _pll, "EVENTS_FILE", tmp_path / "prompt_learning_events.jsonl",
+            raising=False,
+        )
+    except Exception:
+        pass

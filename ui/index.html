@@ -1109,6 +1109,29 @@
         <button onclick="showActiveContextDiff()">Show Context Diff</button>
       </div>
       <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
+        <h2>Live Runtime Mirror</h2>
+      </div>
+      <div class="witness-governance" id="live-mirror-notice">
+        Every reading below carries its own age, read live at refresh. The capability panel is a
+        snapshot from its last smoke run and can be hours old; this is not. When a number here
+        disagrees with the capability panel, this one is current and that one is stale.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>OBS</b><span id="lm-obs">reading…</span></div>
+        <div class="witness-card"><b>OBS Scene</b><span id="lm-obs-scene">unknown</span></div>
+        <div class="witness-card"><b>OBS Sources</b><span id="lm-obs-sources">unknown</span></div>
+        <div class="witness-card"><b>Self-Prompt State</b><span id="lm-selfprompt">reading…</span></div>
+        <div class="witness-card"><b>Open Loops</b><span id="lm-loops">reading…</span></div>
+        <div class="witness-card"><b>Receipts (24h)</b><span id="lm-receipts">reading…</span></div>
+        <div class="witness-card"><b>Evidence Quality</b><span id="lm-evidence">reading…</span></div>
+        <div class="witness-card"><b>Runtime PID</b><span id="lm-pid">reading…</span></div>
+        <div class="witness-card"><b>Mirror Read At</b><span id="lm-readat">never</span></div>
+      </div>
+      <div class="witness-actions">
+        <button class="primary" onclick="refreshLiveMirror()">Refresh live mirror</button>
+      </div>
+
+      <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
         <h2>Captain's Log Transcript</h2>
       </div>
       <div class="witness-governance" id="obs-transcript-notice">
@@ -1610,6 +1633,104 @@ function _selfPromptButtonLabel(state) {
   if (low === 'MANUAL_ONCE') return 'Writer Once';
   if (low === 'SAFE_SLEEP') return 'Writer Sleep';
   return 'Writer OFF';
+}
+
+// ── Live Runtime Mirror ───────────────────────────────────────────────────────
+// The capability panel is a snapshot from its last smoke run. On 2026-07-18 it
+// showed OBS as ConnectionRefused for twelve hours while OBS was recording fine,
+// and reported a candidate count that matched neither the live queue nor the
+// real store. Three different numbers, one of them shown as truth.
+//
+// The fix is not a fresher cache. It is showing the age of every reading, so a
+// stale number can never impersonate a current one.
+function _lmAge(iso) {
+  if (!iso) return 'age unknown';
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return 'age unknown';
+  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (secs < 60) return `${secs}s ago`;
+  if (secs < 3600) return `${Math.round(secs / 60)}m ago`;
+  return `${Math.round(secs / 3600)}h ago`;
+}
+
+function _lmSet(id, text, stale) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = stale ? '#ff9a4d' : '';
+}
+
+function _lmDuration(secs) {
+  const s = Math.max(0, Math.round(Number(secs) || 0));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+
+async function refreshLiveMirror() {
+  const readAt = new Date();
+
+  // OBS: read live rather than trusting the smoke snapshot.
+  try {
+    const r = await fetch(apiUrl('/api/context/obs'));
+    const d = await r.json();
+    if (d && d.available) {
+      const rec = d.recording
+        ? `RECORDING ${_lmDuration(d.recording_duration_seconds)}`
+        : 'connected, not recording';
+      _lmSet('lm-obs', `${rec} · read ${_lmAge(d.observed_at)}`, false);
+      _lmSet('lm-obs-scene', String(d.scene || 'unknown'), false);
+      const vis = (d.sources || []).filter(s => s && s.visible).map(s => String(s.name).trim());
+      _lmSet('lm-obs-sources', vis.length ? vis.join(', ') : 'none visible', false);
+    } else {
+      const why = (d && d.last_obs_error) ? String(d.last_obs_error) : 'not reachable';
+      _lmSet('lm-obs', `unavailable: ${why}`, true);
+      _lmSet('lm-obs-scene', 'UNKNOWN', true);
+      _lmSet('lm-obs-sources', 'UNKNOWN', true);
+    }
+  } catch (e) {
+    _lmSet('lm-obs', `read failed: ${e.message}`, true);
+  }
+
+  // Self-prompt: her thinking loop is either on or it is not.
+  try {
+    const r = await fetch(apiUrl('/api/self-prompt/status'));
+    const d = await r.json();
+    const state = String(d.current_state || 'OFF');
+    _lmSet('lm-selfprompt', `${state} · ${Number(d.daily_count || 0)}/${Number(d.daily_cap || 0)} today`,
+           state === 'OFF');
+  } catch (e) {
+    _lmSet('lm-selfprompt', `read failed: ${e.message}`, true);
+  }
+
+  // Continuity health: open loops, receipts, evidence ratio.
+  try {
+    const r = await fetch(apiUrl('/api/continuity/health'));
+    const d = await r.json();
+    const loops = d.open_loop_pressure || {};
+    const by = loops.by_status || {};
+    const waiting = Number(by.waiting || 0);
+    _lmSet('lm-loops', `${Number(loops.total || 0)} total · ${waiting} waiting`, waiting > 10);
+    const rd = d.receipt_density_24h || {};
+    _lmSet('lm-receipts', `${Number(rd.count || 0)} in 24h`, false);
+    const eq = d.evidence_quality || {};
+    const ratio = Number(eq.ratio || 0);
+    _lmSet('lm-evidence',
+           `${Math.round(ratio * 100)}% receipted (${Number(eq.objects_with_receipts_or_external_evidence || 0)}/${Number(eq.objects_total || 0)})`,
+           ratio < 0.9);
+  } catch (e) {
+    _lmSet('lm-loops', `read failed: ${e.message}`, true);
+  }
+
+  // Runtime identity: which process is actually answering.
+  try {
+    const r = await fetch(apiUrl('/api/diagnostics/runtime'));
+    const d = await r.json();
+    _lmSet('lm-pid', `${d.pid || 'unknown'} · ${String(d.active_runtime_command || '').slice(0, 48)}`, false);
+  } catch (e) {
+    _lmSet('lm-pid', `read failed: ${e.message}`, true);
+  }
+
+  _lmSet('lm-readat', readAt.toLocaleTimeString(), false);
 }
 
 async function refreshSelfPromptStatus() {
@@ -3792,6 +3913,8 @@ async function init() {
   refreshAiLockboxStatus().catch(() => {});
 
   refreshPresence();
+  refreshLiveMirror().catch(() => {});
+  setInterval(() => refreshLiveMirror().catch(() => {}), 20000);
   setInterval(refreshPresence, 5000);
   setInterval(() => refreshDurability(lastHistorySource).catch(() => {}), 15000);
   setInterval(() => refreshEllieDomainStatus().catch(() => {}), 30000);

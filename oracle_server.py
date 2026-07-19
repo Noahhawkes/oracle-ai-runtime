@@ -2052,6 +2052,46 @@ def _sandbox_filebase_ready_response() -> str:
     )
 
 
+def _file_ingest_staging_response() -> str:
+    return (
+        "FILE INGEST STAGING READY\n"
+        "capability: file_ingest_stage (explicit request, not a missing capability)\n"
+        "lane: safe_write -> staged candidate\n"
+        "approval: Noah.Physical approval required before any durable ingest\n"
+        "boundary: staging is not execution; no overwrite, delete, execute, upload,\n"
+        "  Drive mutation, Git write, or canon promotion\n"
+        "receipts: a staging receipt is written; nothing is promoted to canon\n\n"
+        "Read access is not ingest authority. If you only need to look, these\n"
+        "read-only lanes need no approval:\n"
+        "  file_search, file_index_read, file_metadata_read,\n"
+        "  file_manifest_read, file_receipt_read\n\n"
+        "Name the exact root or file to stage and I will preserve UNKNOWN where\n"
+        "no verification receipt exists."
+    )
+
+
+def _capability_status_response(cap: str, status: str, detail: str = "") -> str:
+    """Report live broker truth instead of falsely claiming a capability is
+    missing. Frontend claims must mirror backend receipts."""
+    lines = [
+        "CAPABILITY STATUS (live broker)",
+        f"capability: {cap}",
+        f"status: {status}",
+    ]
+    if detail:
+        lines.append(f"evidence: {detail}")
+    lines += [
+        "",
+        "The broker reports this capability as available, but that does not prove",
+        "unrestricted ingest or mutation authority. I can use verified read/search/",
+        "index routes, and I preserve UNKNOWN where no receipt exists.",
+        "",
+        "Mutation (write, overwrite, delete, execute, upload, Drive/Git change,",
+        "canon promotion) still requires Noah.Physical approval.",
+    ]
+    return "\n".join(lines)
+
+
 def _is_sandbox_initiative_request(user_text: str) -> bool:
     lower = (user_text or "").strip().lower()
     if not lower:
@@ -2280,6 +2320,16 @@ def _self_prompt_grounding() -> str:
             if events:
                 lines.append("- files being written or created right now (creation witness):")
                 lines.extend(events)
+    except Exception:
+        pass
+    # what Noah approved — the loop closing. Her own proposals, once approved,
+    # become the ground she reasons from next (Autonomy Gate Step 3).
+    try:
+        from reflection_candidates import approved_candidate_context
+
+        approved_ctx = approved_candidate_context(limit=5)
+        if approved_ctx:
+            lines.append(approved_ctx)
     except Exception:
         pass
     # her own last thoughts, fed forward — reflection accumulates across pulses
@@ -2762,6 +2812,24 @@ async def _self_prompt_write_cycle(
     receipt_path = write_result.get("receipt_path") or state_before.get("last_receipt_path")
     write_path = write_result.get("final_path") or state_before.get("last_write_path")
     wrote_content = bool(write_result.get("content_written", True))
+
+    # Autonomy Gate Step 3 -- close the Recursive Prompt Layer. Her reflection
+    # becomes a governed proposal, born pending. Nothing executes here; a
+    # producer failure must never break her ability to think.
+    candidate_result: dict[str, Any] = {"ok": True, "action": "skipped"}
+    try:
+        from reflection_candidates import submit_reflection_candidate
+
+        candidate_result = await asyncio.to_thread(
+            submit_reflection_candidate,
+            child_response,
+            receipt_path=str(receipt_path or ""),
+            source_route=source_route,
+            session_id=str(_session_id),
+        )
+    except Exception as exc:
+        candidate_result = {"ok": False, "action": "error",
+                            "error": f"{type(exc).__name__}: {exc}"}
     updated_state = _self_prompt_state_payload(
         final_state,
         caller=caller,
@@ -2782,6 +2850,10 @@ async def _self_prompt_write_cycle(
     updated_state["content_written"] = wrote_content
     updated_state["deduped"] = bool(write_result.get("deduped", False))
     updated_state["novelty_status"] = write_result.get("novelty_status")
+    # Proposal outcome is part of the receipt: submitted / quarantined / skipped.
+    updated_state["candidate_action"] = candidate_result.get("action")
+    updated_state["candidate_id"] = (candidate_result.get("candidate") or {}).get("id")
+    updated_state["candidate_drift_score"] = candidate_result.get("drift_score")
     transition = await asyncio.to_thread(
         sandbox_emit_state,
         _SELF_PROMPT_CONTROL_KEY,
@@ -3257,7 +3329,30 @@ def _oracle_intent_dispatch(user_text: str):
                 "qr_scan_error",
             )
 
+    # An explicit staged ingest is a real, approvable request -- not a missing
+    # capability. Read access is not ingest authority, and naming ingest is not
+    # requesting it.
+    if cap == "file_ingest_stage" and "action_request" in intents:
+        update_agenda(last_user_intent="file_ingest_stage_request",
+                      last_system_action="reported staged ingest lane readiness")
+        return (_file_ingest_staging_response(), "file_ingest_staging_ready")
+
     if "unsupported_capability_request" in intents:
+        # Frontend claims must mirror backend receipts: never report a
+        # capability as missing while the broker reports it available.
+        _cap_status, _cap_detail = "missing", ""
+        try:
+            from oracle_intent import capability_registry
+            _entry = capability_registry().get(cap) or {}
+            _cap_status = str(_entry.get("status") or "missing")
+            _cap_detail = str(_entry.get("detail") or "")
+        except Exception:
+            pass
+        if _cap_status == "available":
+            update_agenda(last_user_intent="capability_status_question",
+                          last_system_action=f"reported live broker status for {cap}")
+            return (_capability_status_response(cap, _cap_status, _cap_detail),
+                    "capability_status_truth")
         update_agenda(last_user_intent="unsupported_capability_request",
                       last_system_action=f"declined: missing {cap}")
         return (f"I cannot do that from this runtime yet. Missing capability: {cap}.",
