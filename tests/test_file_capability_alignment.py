@@ -21,6 +21,7 @@ os.environ.setdefault("ORACLE_SKIP_SERVER_BOOT", "1")
 
 import oracle_intent as oi  # noqa: E402
 import oracle_server as srv  # noqa: E402
+import unified_oracle_router as router  # noqa: E402
 
 
 # 1. Quoted / reported "file_ingest" text must not trigger unsupported routing.
@@ -180,3 +181,47 @@ def test_mention_of_delete_in_a_prohibition_is_not_a_delete_request():
     cap = oi.action_capability(prohibition)
     assert cap not in oi.FILE_MUTATION_CAPS
     assert cap != "file_delete"
+
+
+def test_file_sandbox_match_prompt_routes_as_status_readback():
+    prompt = (
+        ".AI:ORACLE_FILE_SANDBOX_MATCH_TEST\n"
+        "mode_request: builder_if_available\n"
+        "No execution. No write. No sandbox mutation. No external send. No Git. No Drive edit. No canon promotion.\n\n"
+        "ORACLE, answer on screen only from your current runtime/status/receipts if available. "
+        "If you cannot verify a field, say UNKNOWN.\n"
+        "Report exactly these fields:\n"
+        "1. current_mode\n"
+        "2. file_read_scope_or_roots\n"
+        "3. ai_lockbox_capsule_count\n"
+        "4. sandbox_self_prompt_journal_path\n"
+        "5. latest_self_prompt_novelty_status\n"
+        "6. whether recent self-prompt content was written or suppressed\n"
+        "7. one sentence explaining whether this matches read-only broad files plus sandbox-only writes\n"
+        "End with MATCH_TEST_DONE.\n"
+    )
+
+    intents = oi.classify_intent(prompt)
+    assert "state_query" in intents
+    assert "strategic_planning" not in intents
+    assert "implementation_intent" not in intents
+    assert oi.action_capability(prompt) is None
+
+    route = router.classify_intent(prompt)
+    assert route["route_type"] == "diagnostic_status"
+    assert route["detected_lane"] == "talk_lane"
+    assert srv._oracle_intent_dispatch(prompt) is None
+
+
+def test_file_sandbox_match_response_reads_status_fields():
+    response = srv._file_sandbox_match_status_response(
+        {"detected_lane": "talk_lane", "requires_approval": False}
+    )
+
+    assert "ORACLE_FILE_SANDBOX_MATCH_TEST" in response
+    assert "file_read_scope_or_roots:" in response
+    assert "ai_lockbox_capsule_count:" in response
+    assert "sandbox_self_prompt_journal_path:" in response
+    assert "latest_self_prompt_novelty_status:" in response
+    assert "sandbox_mutation_by_this_request: false" in response
+    assert response.strip().endswith("MATCH_TEST_DONE")

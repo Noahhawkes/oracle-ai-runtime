@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import os
 import socket
-import subprocess
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,36 +33,24 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _git(args: list[str]) -> str:
-    try:
-        return subprocess.check_output(
-            ["git", *args], cwd=ROOT, text=True,
-            stderr=subprocess.DEVNULL, timeout=8,
-        ).strip()
-    except Exception:
-        return ""
-
-
 def _git_state() -> dict[str, Any]:
-    status = _git(["status", "--porcelain"])
-    # Parse by splitting off the status field rather than slicing a fixed width:
-    # the helper strips the whole output, which can eat the first line's leading
-    # space and shift a fixed-index slice. Paths here are space-free.
-    changed = []
-    for line in status.splitlines():
-        if not line.strip() or ".claude/worktrees" in line:
-            continue
-        parts = line.split(maxsplit=1)
-        if len(parts) == 2:
-            changed.append(parts[1])
-    recent = _git(["log", "--oneline", "-5"]).splitlines()
-    return {
-        "branch": _git(["rev-parse", "--abbrev-ref", "HEAD"]) or "UNKNOWN",
-        "commit": _git(["rev-parse", "--short", "HEAD"]) or "UNKNOWN",
-        "working_tree": "clean" if not changed else "modified",
-        "changed_files": changed[:15],
-        "recent_commits": recent,
-    }
+    try:
+        from git_state_reader import read_git_snapshot
+        return read_git_snapshot(ROOT)
+    except Exception as exc:
+        return {
+            "branch": "UNKNOWN",
+            "commit": "UNKNOWN",
+            "head_sha": "UNKNOWN",
+            "working_tree": "unknown",
+            "changed_files": [],
+            "changed_file_count": None,
+            "recent_commits": [],
+            "dirty": "UNKNOWN",
+            "source": "git_files_no_subprocess",
+            "subprocess_used": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
 
 def _port_open(port: int | None = None, host: str = "127.0.0.1") -> bool:

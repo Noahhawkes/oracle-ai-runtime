@@ -68,7 +68,7 @@
     {
       "preference_id": "pref_build_with_me_sandbox_text",
       "created_at": "2026-07-15T03:45:07.085425Z",
-      "updated_at": "2026-07-16T21:53:26.633924Z",
+      "updated_at": "2026-07-25T14:18:34.425991Z",
       "source": "Noah.Physical",
       "scope": "global",
       "category": "routing",
@@ -78,9 +78,9 @@
       "canon_status": "preference",
       "promotion_status": "not_applicable",
       "requires_safety_override": false,
-      "receipt_id": "prefrec_87d8a0ec67fb",
+      "receipt_id": "prefrec_4f88e960d335",
       "last_action": "persona_router_detected_preference"
     }
   ],
-  "updated_at": "2026-07-16T21:53:26.633924Z"
+  "updated_at": "2026-07-25T14:18:34.425991Z"
 }

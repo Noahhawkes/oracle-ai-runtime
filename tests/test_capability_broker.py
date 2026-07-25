@@ -28,6 +28,8 @@ def test_capability_broker_exposes_required_components_without_smoke():
         "SOV1 vision",
         "SOV1 actuation",
         "local file access",
+        "QR scan",
+        "sandbox candidate writes",
         "Git access",
         "GitHub access",
         "Google Drive local sync",

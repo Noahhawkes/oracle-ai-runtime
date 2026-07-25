@@ -44,6 +44,20 @@ def test_response_evidence_does_not_invent_record_usage():
     assert any("not yet instrumented" in item for item in evidence["unknowns"])
 
 
+def test_response_evidence_marks_sandbox_write_boundary():
+    evidence = ec.response_evidence(
+        "write to sandbox",
+        mode="companion",
+        effective_route="sandbox_initiative_write",
+        route_type="sandbox_initiative_write",
+    )
+
+    assert evidence["boundaries"]["read_only"] is False
+    assert evidence["boundaries"]["sandbox_touched"] is True
+    assert evidence["boundaries"]["external_send"] is False
+    assert evidence["boundaries"]["canon_promotion"] is False
+
+
 def test_evidence_cockpit_api_and_page():
     import oracle_server as srv  # noqa: E402
 

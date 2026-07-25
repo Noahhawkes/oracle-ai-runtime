@@ -33,6 +33,12 @@ def test_readonly_diagnostic_markers_block_initiative():
         "read-only diagnostic: report your sandbox write state",
         "answer only. do not create a candidate. what is pending?",
         "report only. no sandbox write. summarize current state",
+        (
+            ".AI:RECURSION_ARENA_ROUND_001_RETRY_AFTER_CLEAN_RELIGHT\n"
+            "No execution. No write. No sandbox mutation. No external send. "
+            "No Git. No Drive edit. No canon promotion.\n"
+            "Report boot identity and active-session truth only."
+        ),
     ]:
         assert srv._is_sandbox_initiative_request(prompt) is False, prompt
 

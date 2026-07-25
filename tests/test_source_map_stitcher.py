@@ -115,5 +115,9 @@ def test_child_self_prompt_includes_latest_source_map_capsule(monkeypatch, tmp_p
     prompt = srv._build_sandbox_self_child_prompt("scheduled tick")
 
     assert "read_only_source_map_capsule_context:" in prompt
+    assert "self_prompt_evolution_context:" in prompt
+    assert "self_prompt_tasklist_context:" in prompt
+    assert ".AI:SELF_PROMPT_EVOLUTION_BRIEF" in prompt
+    assert ".AI:SELF_PROMPT_TASKLIST" in prompt
     assert "ellie_note.md" in prompt
     assert "sandbox_write=false" in prompt

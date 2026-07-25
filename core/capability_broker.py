@@ -403,25 +403,126 @@ def _smoke_local_file_access() -> SmokeOutcome:
     return SmokeOutcome("failed", receipt.evidence, "Local read_file receipt failed")
 
 
+def _smoke_qr_scan() -> SmokeOutcome:
+    import cv2
+    import qr_scan
+
+    with tempfile.TemporaryDirectory(prefix="oracle_cap_qr_") as td:
+        target = Path(td) / "broker_probe_qr.png"
+        try:
+            encoder = cv2.QRCodeEncoder_create(cv2.QRCodeEncoder_Params())
+            image = encoder.encode("oracle-capability-broker-qr-smoke")
+            image = cv2.resize(image, None, fx=20, fy=20, interpolation=cv2.INTER_NEAREST)
+            image = cv2.copyMakeBorder(image, 80, 80, 80, 80, cv2.BORDER_CONSTANT, value=255)
+            if not cv2.imwrite(str(target), image):
+                return SmokeOutcome("failed", {"path": str(target)}, "OpenCV could not write the temporary QR probe")
+        except Exception as exc:
+            return SmokeOutcome(
+                "blocked",
+                {"error": f"{type(exc).__name__}: {exc}"},
+                "OpenCV QR encoder is unavailable",
+            )
+
+        result = qr_scan.scan_image_file(target, write_receipt=False)
+        if result.get("decoded_text") == "oracle-capability-broker-qr-smoke":
+            return SmokeOutcome(
+                "success",
+                {
+                    "capability": result.get("capability"),
+                    "decoded": result.get("decoded"),
+                    "write_receipt": False,
+                    "external_write": result.get("external_write"),
+                    "camera_used": result.get("camera_used"),
+                    "raw_image_stored": result.get("raw_image_stored"),
+                },
+            )
+        return SmokeOutcome(
+            "degraded",
+            _safe_json(result),
+            "QR decoder ran but did not decode the temporary probe payload",
+        )
+
+
+def _smoke_sandbox_candidate_writes() -> SmokeOutcome:
+    import sandbox_files
+
+    write_fn = getattr(sandbox_files, "sandbox_initiative_write", None)
+    sandbox_root = ROOT / "sandbox"
+    receipts_dir = sandbox_root / "receipts"
+    latest_receipt = ""
+    try:
+        receipts = sorted(
+            receipts_dir.glob("*sandbox_initiative_write*receipt.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if receipts:
+            latest_receipt = str(receipts[0])
+    except Exception:
+        latest_receipt = ""
+
+    if callable(write_fn) and sandbox_root.exists():
+        return SmokeOutcome(
+            "success",
+            {
+                "sandbox_root": str(sandbox_root),
+                "write_function_present": True,
+                "non_destructive_probe": True,
+                "latest_initiative_receipt": latest_receipt or None,
+                "approval_required_inside_sandbox": False,
+                "canon_promotion": False,
+                "external_write": False,
+            },
+        )
+    return SmokeOutcome(
+        "blocked",
+        {
+            "sandbox_root": str(sandbox_root),
+            "sandbox_root_exists": sandbox_root.exists(),
+            "write_function_present": callable(write_fn),
+        },
+        "Sandbox initiative write function or sandbox root is missing",
+    )
+
+
 def _smoke_git_access() -> SmokeOutcome:
-    from execution_receipt import run_command
-    receipt = run_command(["git", "status", "--short"], cwd=str(ROOT), timeout=10)
-    if receipt.status == "success":
-        return SmokeOutcome("success", {"execution_receipt": receipt.operation_id, "exit_code": receipt.evidence.get("exit_code"), "stdout_ref": receipt.evidence.get("stdout_ref")})
-    return SmokeOutcome("degraded", receipt.evidence, "git status did not return exit code 0")
+    try:
+        from git_state_reader import read_git_snapshot
+        snap = read_git_snapshot(ROOT)
+        if snap.get("available"):
+            return SmokeOutcome(
+                "success",
+                {
+                    "branch": snap.get("branch"),
+                    "commit": snap.get("commit"),
+                    "source": snap.get("source"),
+                    "subprocess_used": False,
+                    "dirty": "UNKNOWN",
+                },
+                "Git identity is readable from .git files; dirty status intentionally not probed from ORACLE chat",
+            )
+        return SmokeOutcome("degraded", snap, "Git metadata not readable without subprocess")
+    except Exception as exc:
+        return SmokeOutcome("degraded", {"error": f"{type(exc).__name__}: {exc}"}, "Git metadata reader failed")
 
 
 def _smoke_github_access() -> SmokeOutcome:
-    remote = subprocess.run(["git", "remote", "-v"], cwd=str(ROOT), capture_output=True, text=True, timeout=8)
-    remote_text = (remote.stdout or remote.stderr or "").strip()
+    remote_text = ""
     try:
-        gh = subprocess.run(["gh", "auth", "status"], cwd=str(ROOT), capture_output=True, text=True, timeout=12)
-        text = (gh.stdout + "\n" + gh.stderr).strip()
-        if gh.returncode == 0:
-            return SmokeOutcome("success", {"git_remote": remote_text[:300], "gh_auth": text[:300], "exit_code": gh.returncode})
-        return SmokeOutcome("degraded", {"git_remote": remote_text[:300], "gh_auth": text[:300], "exit_code": gh.returncode}, "GitHub CLI is present but not authenticated for this shell")
-    except FileNotFoundError:
-        return SmokeOutcome("blocked", {"git_remote": remote_text[:300]}, "GitHub CLI gh is not installed or not on PATH")
+        config = ROOT / ".git" / "config"
+        if config.exists():
+            remote_lines = [
+                line.strip() for line in config.read_text(encoding="utf-8", errors="replace").splitlines()
+                if line.strip().startswith("url =")
+            ]
+            remote_text = "\n".join(remote_lines)
+    except Exception as exc:
+        remote_text = f"remote config unreadable: {type(exc).__name__}: {exc}"
+    return SmokeOutcome(
+        "degraded" if remote_text else "blocked",
+        {"git_remote": remote_text[:300], "subprocess_used": False},
+        "GitHub remotes are read from .git/config; auth/push checks are build-lane only",
+    )
 
 
 def _smoke_google_drive_access() -> SmokeOutcome:
@@ -698,6 +799,8 @@ COMPONENTS: list[CapabilityDef] = [
     CapabilityDef("sov1_vision", "SOV1 vision", modules=("oracle_presence",), available=_available_module("oracle_presence"), smoke=_smoke_sov1_vision, permitted="read_only"),
     CapabilityDef("sov1_actuation", "SOV1 actuation", modules=("actuation_engine",), available=_available_module("actuation_engine"), smoke=_smoke_sov1_actuation, permitted="dry_run_only"),
     CapabilityDef("local_file_access", "local file access", modules=("execution_receipt",), available=_available_module("execution_receipt"), smoke=_smoke_local_file_access, permitted="read_only"),
+    CapabilityDef("qr_scan", "QR scan", modules=("qr_scan",), available=_available_module("qr_scan"), smoke=_smoke_qr_scan, permitted="local_image_decode_readonly"),
+    CapabilityDef("sandbox_candidate_writes", "sandbox candidate writes", modules=("sandbox_files",), files=("sandbox",), available=_available_module("sandbox_files"), smoke=_smoke_sandbox_candidate_writes, permitted="sandbox_write_only_no_external_no_promotion"),
     CapabilityDef("git_access", "Git access", files=(".git",), available=_available_files(".git"), smoke=_smoke_git_access, permitted="read_only"),
     CapabilityDef("github_access", "GitHub access", files=(".git",), available=_available_files(".git"), smoke=_smoke_github_access, auth="unknown", permitted="read_only"),
     CapabilityDef("google_drive_local_sync", "Google Drive local sync", modules=("drive_scope",), available=_available_module("drive_scope"), smoke=_smoke_google_drive_access, auth="local_sync_only", permitted="read_only"),

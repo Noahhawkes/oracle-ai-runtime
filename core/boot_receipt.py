@@ -195,15 +195,20 @@ def inspect_cognition() -> dict[str, Any]:
 
 def _git_value(args: list[str]) -> str:
     try:
-        return subprocess.check_output(
-            ["git", *args],
-            cwd=RATIFIED_RUNTIME_ROOT,
-            text=True,
-            stderr=subprocess.DEVNULL,
-            timeout=4,
-        ).strip()
+        from git_state_reader import read_git_snapshot
+        snap = read_git_snapshot(RATIFIED_RUNTIME_ROOT)
+        key = " ".join(args)
+        if key in ("branch --show-current", "rev-parse --abbrev-ref HEAD"):
+            return str(snap.get("branch") or "UNKNOWN")
+        if key == "rev-parse HEAD":
+            return str(snap.get("head_sha") or "UNKNOWN")
+        if key == "rev-parse --short HEAD":
+            return str(snap.get("commit") or "UNKNOWN")
+        if key in ("status --short", "status --porcelain"):
+            return ""
     except Exception:
-        return "UNKNOWN"
+        pass
+    return "UNKNOWN"
 
 
 def _retrieval_status() -> dict[str, Any]:
@@ -286,8 +291,7 @@ def create_boot_receipt() -> dict[str, Any]:
         warnings.append(str(retrieval["warning"]))
 
     git_status = _git_value(["status", "--short"])
-    if git_status:
-        warnings.append("dirty Git worktree")
+    warnings.append("Git dirty status not checked during boot; git subprocess disabled for hot path")
 
     warnings.append("media witness not implemented")
 
@@ -328,8 +332,10 @@ def create_boot_receipt() -> dict[str, Any]:
         "git": {
             "branch": _git_value(["branch", "--show-current"]),
             "head": _git_value(["rev-parse", "HEAD"]),
-            "dirty": bool(git_status),
+            "dirty": "UNKNOWN",
             "status_short": git_status.splitlines()[:80],
+            "source": "git_files_no_subprocess",
+            "subprocess_used": False,
         },
         "warnings": sorted(set(warnings)),
         "stops": [],

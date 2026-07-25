@@ -86,7 +86,8 @@ APPROVAL_FOLLOWUP_RE = re.compile(
 BUILD_TERMS = (
     "build", "implement", "fix", "patch", "edit", "write file", "update ui",
     "create module", "add module", "run test", "run tests", "pytest", "api route",
-    "endpoint", "refactor", "code", "coding", "scaffold", "compile",
+    "endpoint", "refactor", "code", "coding", "scaffold", "compile", "wire up",
+    "wire in",
 )
 FORCE_TALK_PREFIX = "/talk"
 FORCE_LEARN_PREFIX = "/learn"
@@ -102,6 +103,7 @@ QUESTION_OR_TALK_TERMS = (
     "how do", "can you talk", "talk to me", "speak to me", "explain",
     "in your own words", "tell me about", "tell me what", "recall",
     "remember when", "what do you remember", "memory question",
+    "talk lane only", "simple question",
 )
 LIVE_CAPTURE_TERMS = (
     "capture current live transmission state",
@@ -188,9 +190,20 @@ EXISTING_APPROVAL_STATUS_FIELDS = (
 )
 DIAGNOSTIC_STATUS_MARKERS = (
     "diagnostic only",
+    "diagnostic test",
+    "backend diagnostic test",
+    "oracle backend diagnostic test",
+    "answer only from current runtime",
+    "read-only diagnostic",
     "smoke test receipt only",
     "report only",
     "status only",
+    "report exactly",
+    "answer on screen only from your current runtime",
+    "current runtime/status/receipts",
+    "read-only match test",
+    "match test done",
+    ".ai:recursion arena",
     "do not execute",
     "do not touch external systems",
     "do not ask for approval",
@@ -213,6 +226,12 @@ DIAGNOSTIC_NEGATED_ACTION_RE = re.compile(
     r"\b(?:do\s+not|don't|no)\s+"
     r"(?:execute|touch|ask|restart|write|mutate|patch|commit|push|send|publish|delete|promote|upload|call|control|external)\b"
     r"[^.\n;]*",
+    re.IGNORECASE,
+)
+DIAGNOSTIC_ACTION_QUESTION_RE = re.compile(
+    r"\b(?:should|did|does|can|could|would)\s+(?:you|oracle|a|the)?\s*"
+    r"(?:write|sandbox\s+write|send|push|commit|mutate|execute|promote)\b"
+    r"[^.\n;?]*",
     re.IGNORECASE,
 )
 DIAGNOSTIC_ACTION_PATTERNS = (
@@ -313,7 +332,8 @@ def is_existing_approval_receipt_status_request(user_message: str) -> bool:
 
 
 def _diagnostic_action_surface(lower: str) -> str:
-    return DIAGNOSTIC_NEGATED_ACTION_RE.sub(" ", lower)
+    surface = DIAGNOSTIC_NEGATED_ACTION_RE.sub(" ", lower)
+    return DIAGNOSTIC_ACTION_QUESTION_RE.sub(" ", surface)
 
 
 def _contains_unnegated_diagnostic_action(lower: str) -> bool:
@@ -419,6 +439,9 @@ RUNTIME_STATUS_FIELDS = (
     "self prompt enabled", "background loop status", "last route type",
     "last operation type", "autonomous task", "safest next step",
     "session id", "runtime root", "cognition mode", "network boundary",
+    "current mode", "file read scope or roots", "ai lockbox capsule count",
+    "sandbox self prompt journal path", "latest self prompt novelty status",
+    "recent self prompt content",
 )
 
 
@@ -457,22 +480,48 @@ def is_diagnostic_status_request(user_message: str) -> bool:
 # ("not within my scope") that contradict the live registry (CLAIM != SOURCE).
 CAPABILITY_SCOPE_PHRASES = (
     "your scope", "my scope", "scope of interaction", "within scope",
-    "out of scope", "in your scope",
+    "out of scope", "in your scope", "capability scope",
 )
 CAPABILITY_ABILITY_PHRASES = (
     "do you support", "are you able", "do you have the ability",
     "are you capable", "is it possible for you", "can oracle",
     "list capabilities", "list your capabilities", "which capabilities",
 )
+CAPABILITY_RUNTIME_TRUTH_PHRASES = (
+    "route to", "routing to", "route for", "builder lane", "build lane",
+    "built in your backend", "in your backend", "backend feature",
+    "available feature", "available features", "known feature",
+    "known features", "known but not approved", "not approved feature",
+    "not approved features", "staged bridge", "staged relay",
+    "what do you have", "what other things do you have",
+    "what features", "which features", "what is available",
+    "what is enabled", "what is degraded", "what is blocked",
+    "what remains blocked", "what remains gated", "is available",
+    "are available", "available without approval",
+    "available without noah approval", "approval required",
+    "requires approval", "require approval", "available degraded",
+    "degraded staged", "staged blocked",
+    "used to be able", "used to prompt", "used to route",
+    "prompt claude", "prompt codex", "prompt chatgpt",
+    "talk to claude", "talk to codex", "talk to chatgpt",
+    "type to claude", "type to codex", "type to chatgpt",
+)
 CAPABILITY_HELPFUL_RE = re.compile(r"\bwould\b.{0,120}\bbe\s+(helpful|useful|beneficial|worth)\b")
 CAPABILITY_SUBJECT_TERMS = (
     "thread injection", "thread inject", "inject a thread", "injection update",
     "claude", "chatgpt", "chat gpt", "codex", "copilot", "gemini", "grok",
-    "bridge", "relay", "github", "stt", "tts", "speech to text",
+    "bridge", "relay", "github", "git hub", "git write", "git_write",
+    "stt", "tts", "speech to text",
     "text to speech", "ollama", "obs", "vision", "camera", "webcam",
-    "google drive", "miracledrive", "internet recall", "federation",
+    "qr scan", "qr code", "scan qr", "qr_scan", "google drive",
+    "miracledrive", "internet recall", "sandbox candidate writes",
+    "sandbox candidate writing", "sandbox writes", "sandbox write",
+    "sandbox writing", "sandbox initiative", "federation",
     "pattern buffer", "approval queue", "execution receipt",
+    "external send", "external_send", "command exec", "command_exec",
+    "desktop actuation", "desktop_actuation",
     "background watcher", "replication", "capability", "capabilities",
+    "feature", "features", "builder lane", "build lane",
 )
 CAPABILITY_INVENTORY_ASKS = (
     "list capabilities", "list your capabilities", "what are your capabilities",
@@ -488,8 +537,14 @@ CAPABILITY_SUBJECT_COMPONENT_HINTS = (
     ("chat gpt", ("chatgpt relay",)),
     ("codex", ("codex bridge",)),
     ("github", ("github access",)),
+    ("git hub", ("github access",)),
+    ("git write", ("git access", "github access")),
     ("speech to text", ("stt",)),
     ("stt", ("stt",)),
+    ("qr scan", ("qr scan",)),
+    ("qr code", ("qr scan",)),
+    ("scan qr", ("qr scan",)),
+    ("qr_scan", ("qr scan",)),
     ("text to speech", ("tts",)),
     ("tts", ("tts",)),
     ("ollama", ("ollama",)),
@@ -500,12 +555,28 @@ CAPABILITY_SUBJECT_COMPONENT_HINTS = (
     ("google drive", ("google drive local sync",)),
     ("miracledrive", ("miracledrive index",)),
     ("internet recall", ("internet recall",)),
+    ("sandbox candidate writes", ("sandbox candidate writes",)),
+    ("sandbox candidate writing", ("sandbox candidate writes",)),
+    ("sandbox writes", ("sandbox candidate writes",)),
+    ("sandbox write", ("sandbox candidate writes",)),
+    ("sandbox writing", ("sandbox candidate writes",)),
+    ("sandbox initiative", ("sandbox candidate writes",)),
     ("federation", ("federation pattern buffer",)),
     ("pattern buffer", ("federation pattern buffer",)),
     ("approval queue", ("approval queue",)),
     ("execution receipt", ("execution receipts",)),
+    ("external send", ("external_send",)),
+    ("command exec", ("command_exec",)),
+    ("desktop actuation", ("desktop_actuation",)),
     ("background watcher", ("background watchers",)),
     ("replication", ("replication workers",)),
+)
+CONTROL_GATE_HINTS = (
+    ("external send", "external_send", "blocked_control_gate", "external send/upload/post/email is not callable from ORACLE chat"),
+    ("command exec", "command_exec", "blocked_control_gate", "shell/command execution is not callable from ORACLE chat"),
+    ("desktop actuation", "desktop_actuation", "blocked_control_gate", "mouse/keyboard/desktop control is not callable from ORACLE chat"),
+    ("drive edit or sync", "drive_edit_or_sync", "blocked_control_gate", "Drive mutation/sync is not callable from ORACLE chat"),
+    ("git write", "git_write", "build_lane_scoped_approval", "git commit/push is a build-lane action, not an ORACLE chat action"),
 )
 
 
@@ -519,7 +590,8 @@ def is_capability_scope_request(user_message: str) -> bool:
     if not lower:
         return False
     norm = lower.replace("_", " ").replace("-", " ")
-    if _contains_any(norm, GUARD_TERMS):
+    guard_surface = _guard_action_surface(user_message).lower().replace("_", " ").replace("-", " ")
+    if _contains_any(guard_surface, GUARD_TERMS):
         return False
     if _contains_any(norm, CAPABILITY_INVENTORY_ASKS):
         return True
@@ -529,6 +601,8 @@ def is_capability_scope_request(user_message: str) -> bool:
     if _contains_any(norm, CAPABILITY_SCOPE_PHRASES):
         return True
     if _contains_any(norm, CAPABILITY_ABILITY_PHRASES):
+        return True
+    if _contains_any(norm, CAPABILITY_RUNTIME_TRUTH_PHRASES):
         return True
     if CAPABILITY_HELPFUL_RE.search(norm):
         return True
@@ -573,9 +647,17 @@ def capability_scope_response(route: dict[str, Any], user_text: str = "") -> str
 
     def _line(st: Any) -> str:
         state = str(getattr(st, "current_status", "") or "unknown")
+        permitted = str(getattr(st, "permitted", "") or "unknown")
+        auth = str(getattr(st, "authenticated", "") or "unknown")
+        callable_web = "yes" if bool(getattr(st, "callable_from_oracle_web", False)) else "no"
+        callable_core = "yes" if bool(getattr(st, "callable_from_oracle_core", False)) else "no"
         blocker = str(getattr(st, "blocker", "") or "").strip()
         extra = f" — {blocker}" if (blocker and state != "verified") else ""
-        return f"  - {getattr(st, 'component', '?')}: {state}{extra}"
+        return (
+            f"  - {getattr(st, 'component', '?')}: {state}; "
+            f"permitted={permitted}; authenticated={auth}; "
+            f"callable_web={callable_web}; callable_core={callable_core}{extra}"
+        )
 
     if matched:
         lines.append("capability truth for what you asked about:")
@@ -584,11 +666,35 @@ def capability_scope_response(route: dict[str, Any], user_text: str = "") -> str
         lines.append("no single registered capability named — full registry:")
         lines.extend(_line(st) for st in statuses)
 
+    requested_control_gates: list[tuple[str, str, str]] = []
+    for phrase, name, state, detail in CONTROL_GATE_HINTS:
+        if phrase in norm and name not in by_name:
+            requested_control_gates.append((name, state, detail))
+    if requested_control_gates:
+        lines.append("requested control gates not registered as callable broker capabilities:")
+        for name, state, detail in requested_control_gates:
+            lines.append(
+                f"  - {name}: {state}; "
+                f"permitted=not_callable_from_oracle_chat; {detail}"
+            )
+
     if any(t in norm for t in ("thread injection", "thread inject", "injection update")):
         lines.append(
             "note: 'thread injection' is not a registered capability name; it is served by "
             "the Claude Code bridge / Codex bridge / ChatGPT relay lanes above plus "
             "thread_capture and thread_continuity_ingest on intake. It is in scope."
+        )
+    if any(t in norm for t in ("claude", "codex", "chatgpt", "chat gpt", "bridge", "relay", "builder lane")):
+        lines.append(
+            "bridge law: present/degraded/staged is not missing. ORACLE may report the "
+            "bridge truth and stage relay material when permitted, but live send/execution "
+            "is still separate from capability existence."
+        )
+    if "sandbox candidate writes" in matched or any(t in norm for t in ("sandbox write", "sandbox writes", "sandbox candidate", "sandbox initiative")):
+        lines.append(
+            "sandbox law: ORACLE sandbox-only candidate writes do not require Noah approval. "
+            "Outside-sandbox mutation, external send, execution, git commit/push, Drive sync, "
+            "and canon promotion still require explicit scoped approval."
         )
 
     verified = sum(1 for s in statuses if getattr(s, "current_status", "") == "verified")
@@ -660,17 +766,17 @@ def classify_intent(user_message: str) -> dict[str, Any]:
         confidence = "high"
         route_type = "approval_followup"
         action_type = "approval_binding"
-    elif is_diagnostic_status_request(user_message):
-        lane = "talk_lane"
-        reason = "diagnostic_status: read-only report/status prompt, no execution requested"
-        confidence = "high"
-        route_type = "diagnostic_status"
-        action_type = "read_only_status"
     elif is_capability_scope_request(user_message):
         lane = "talk_lane"
         reason = "capability_scope: question about ORACLE's own abilities answers from the capability broker, never the model"
         confidence = "high"
         route_type = "capability_scope"
+        action_type = "read_only_status"
+    elif is_diagnostic_status_request(user_message):
+        lane = "talk_lane"
+        reason = "diagnostic_status: read-only report/status prompt, no execution requested"
+        confidence = "high"
+        route_type = "diagnostic_status"
         action_type = "read_only_status"
     elif _starts_with_build_directive_marker(lower):
         lane = "build_lane"
@@ -714,7 +820,7 @@ def classify_intent(user_message: str) -> dict[str, Any]:
         reason = "implementation request for SourceMap tooling"
         confidence = "high"
         action_type = "build_request"
-    elif _contains_any(lower, CAPTURE_TERMS):
+    elif _contains_any(lower, CAPTURE_TERMS) and not _contains_any(lower, BUILD_TERMS):
         lane = "capture_lane"
         reason = "artifact, receipt, continuity, or memory capture request"
         confidence = "high"

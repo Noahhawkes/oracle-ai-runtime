@@ -102,3 +102,6 @@ noah_exocortex/
 
 # RedInk sovereign custody store (local-only, not committed)
 custody/
+
+# Ellie/Drakin extracted manuscripts (unpublished novels; regenerable via tools/extract_ellie_corpus.py)
+data/domains/ellie/extracted/

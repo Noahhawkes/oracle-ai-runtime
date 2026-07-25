@@ -25,6 +25,7 @@ STATE = (
 )
 IMPL = (
     "patch", "implement", "py_compile", "compile", "run command", "refactor",
+    "create module",
     "wire up", "wire in", "add a route", "add an endpoint", "build the", "fix the",
     "write the code", "edit ", "create file", "commit", "push", "run the tests",
     "add a test", "hook up", "integrate", "rewrite", "stage the build",
@@ -59,6 +60,45 @@ PLANNING = (
     "you choose", "recommended next step", "recommended next action", "what should i do next", "what should you do next",
     "continue self prompt", "continue the self prompt", "self prompt", "self-prompt",
     "write to sandbox", "sandbox write", "sandbox-only write",
+)
+TALK_ONLY_MARKERS = (
+    "talk lane only",
+    "simple question",
+    "not a build order",
+    "not strategic planning",
+    "not a build request",
+)
+DIAGNOSTIC_TALK_MARKERS = (
+    "diagnostic test",
+    "backend diagnostic test",
+    "oracle backend diagnostic test",
+    "answer only from current runtime",
+    "read-only diagnostic",
+    "diagnostic only",
+    "report only",
+    "status only",
+)
+READ_ONLY_BOUNDARY_MARKERS = (
+    "no sandbox write",
+    "no sandbox mutation",
+    "no external action",
+    "no canon promotion",
+    "do not execute",
+    "do not write",
+    "do not mutate",
+    "do not touch external systems",
+)
+DIAGNOSTIC_QUESTION_MARKERS = (
+    "what live subsystem state",
+    "what can you not prove",
+    "what can you not verify",
+    "what do you remember",
+    "what do you know",
+    "from receipts",
+    "did a sandbox write occur",
+    "answer only",
+    "if unknown",
+    "do not invent",
 )
 DEBUG = (
     "debug", "why did", "traceback", "stack trace", "stack-trace", "failing",
@@ -244,6 +284,49 @@ def action_capability(message: str, *, respect_mentions: bool = True):
     return None
 
 
+_STATUS_ONLY_MARKERS = (
+    "report exactly",
+    "answer on screen only from your current runtime",
+    "current runtime/status/receipts",
+    "if you cannot verify",
+    "match_test_done",
+    "no execution",
+    "no write",
+    "no sandbox mutation",
+    "read-only match test",
+)
+
+_STATUS_FIELD_MARKERS = (
+    "current_mode",
+    "file_read_scope_or_roots",
+    "ai_lockbox_capsule_count",
+    "sandbox_self_prompt_journal_path",
+    "latest_self_prompt_novelty_status",
+)
+
+
+def _is_read_only_status_request(message: str, low: str) -> bool:
+    """True for receipt/status readbacks that mention action words as facts."""
+    surface = capability_request_surface(message).strip()
+    if surface:
+        return False
+    norm = low.replace("-", "_")
+    marker_hits = sum(1 for marker in _STATUS_ONLY_MARKERS if marker in low)
+    field_hits = sum(1 for marker in _STATUS_FIELD_MARKERS if marker in norm)
+    return marker_hits >= 2 or field_hits >= 2
+
+
+def _is_talk_only_override(low: str) -> bool:
+    return any(marker in low for marker in TALK_ONLY_MARKERS)
+
+
+def _is_diagnostic_talk_request(low: str) -> bool:
+    has_diagnostic = any(marker in low for marker in DIAGNOSTIC_TALK_MARKERS)
+    boundary_hits = sum(1 for marker in READ_ONLY_BOUNDARY_MARKERS if marker in low)
+    question_hits = sum(1 for marker in DIAGNOSTIC_QUESTION_MARKERS if marker in low)
+    return bool(has_diagnostic and (boundary_hits >= 1 or question_hits >= 1))
+
+
 def classify_intent(message: str) -> list[str]:
     """Return one or more intent categories. Multiple substantive intents add
     'mixed_intent'. implementation_intent and identity are never swallowed."""
@@ -252,17 +335,22 @@ def classify_intent(message: str) -> list[str]:
     if not low:
         return ["casual_talk"]
 
+    status_only = _is_read_only_status_request(message, low)
+    talk_only = _is_talk_only_override(low)
+    diagnostic_talk = _is_diagnostic_talk_request(low)
+    suppress_planning = status_only or talk_only or diagnostic_talk
+
     if _has(low, IDENTITY):
         intents.append("identity_continuity_query")
     if _has(low, VOICE):
         intents.append("voice_request")
     if _has(low, REFLECTION):
         intents.append("reflection_request")
-    if _has(low, PLANNING):
+    if _has(low, PLANNING) and not suppress_planning:
         intents.append("strategic_planning")
     if _has(low, COMPUTER_ACTION):
         intents.append("computer_action_request")
-    if _has_any_phrase(low, IMPL):
+    if _has_any_phrase(low, IMPL) and not status_only:
         intents.append("implementation_intent")
     if _has(low, DEBUG):
         intents.append("debug_request")
@@ -280,10 +368,16 @@ def classify_intent(message: str) -> list[str]:
         intents.append("unsupported_capability_request" if cap in CHAT_UNSUPPORTED
                        else "action_request")
 
+    if (status_only or diagnostic_talk) and "state_query" not in intents:
+        intents.append("state_query")
+
     # state_query must not swallow implementation / planning / identity
     if _has(low, STATE) and not ({"implementation_intent", "strategic_planning",
                                   "identity_continuity_query"} & set(intents)):
         intents.append("state_query")
+
+    if talk_only and "casual_talk" not in intents and "presence_check" not in intents:
+        intents.append("casual_talk")
 
     if _has(low, PRESENCE):
         intents.append("presence_check")

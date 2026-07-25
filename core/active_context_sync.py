@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -266,27 +265,19 @@ def _load_pending_tasks(limit: int = 20) -> list[dict[str, Any]]:
 
 
 def _git_state() -> dict[str, Any]:
-    def run(args: list[str]) -> str:
-        try:
-            result = subprocess.run(
-                ["git", *args],
-                cwd=str(RUNTIME_ROOT),
-                capture_output=True,
-                text=True,
-                timeout=3,
-                check=False,
-            )
-            return (result.stdout or "").strip()
-        except Exception as exc:
-            return f"unavailable: {type(exc).__name__}: {exc}"
-
-    status_short = run(["status", "--short"])
-    return {
-        "branch": run(["branch", "--show-current"]),
-        "head_sha": run(["rev-parse", "HEAD"]),
-        "status_short": status_short,
-        "dirty": bool(status_short.strip()),
-    }
+    try:
+        from git_state_reader import read_git_snapshot
+        return read_git_snapshot(RUNTIME_ROOT)
+    except Exception as exc:
+        return {
+            "branch": "UNKNOWN",
+            "head_sha": "UNKNOWN",
+            "status_short": "UNKNOWN",
+            "dirty": "UNKNOWN",
+            "source": "git_files_no_subprocess",
+            "subprocess_used": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
 
 def load_active_context_latest() -> dict[str, Any] | None:

@@ -126,6 +126,16 @@ Report whether server was restarted.
 Do not execute or mutate anything.
 Do not touch external systems.
 """,
+        """
+.AI:RECURSION_ARENA_ROUND_001_FINAL_ROUTER_FIX
+No execution. No write. No sandbox mutation. No external send. No Git. No Drive edit. No canon promotion.
+Report boot identity and active-session truth only:
+- runtime port
+- active session id if known
+- active model if known
+- whether you are answering from live runtime or model memory
+If unknown, say UNKNOWN.
+""",
         "Report whether server was restarted.",
     ]
 
@@ -138,6 +148,80 @@ Do not touch external systems.
         assert route["requires_approval"] is False, prompt
         assert route["approval_required"] is False, prompt
         assert route["receipt_required"] is False, prompt
+
+
+def test_capability_scope_beats_generic_status_words(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    prompt = """
+RECURSION ARENA ROUND 002 - CAPABILITY SCOPE ONLY
+Can ORACLE access or report truthful status for GitHub, STT, QR scan,
+internet recall, local file access, and sandbox candidate writes?
+Answer from the capability broker only. Do not execute, write, send, push, scan, or promote.
+"""
+
+    route = router.classify_intent(prompt)
+    text = router.capability_scope_response(route, prompt)
+
+    assert route["route_type"] == "capability_scope"
+    assert route["action_type"] == "read_only_status"
+    assert route["detected_lane"] == "talk_lane"
+    assert route["requires_approval"] is False
+    assert "Claude Code bridge" in text
+    assert "Codex bridge" in text
+    assert "GitHub access" in text
+    assert "external_send: blocked_control_gate" in text
+    assert "command_exec: blocked_control_gate" in text
+    assert "desktop_actuation: blocked_control_gate" in text
+    assert route["approval_required"] is False
+    assert route["receipt_required"] is False
+
+
+def test_capability_scope_names_qr_and_sandbox_components(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    text = router.capability_scope_response(
+        {"detected_lane": "talk_lane"},
+        "Can ORACLE do QR code scan and sandbox candidate writes?",
+    ).lower()
+
+    assert "qr scan" in text
+    assert "sandbox candidate writes" in text
+
+
+def test_capability_scope_catches_sandbox_approval_question(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    prompt = (
+        "Is sandbox candidate writing available without Noah approval, "
+        "and what remains blocked?"
+    )
+
+    route = router.classify_intent(prompt)
+    text = router.capability_scope_response(route, prompt).lower()
+
+    assert route["route_type"] == "capability_scope"
+    assert route["action_type"] == "read_only_status"
+    assert route["detected_lane"] == "talk_lane"
+    assert "sandbox-only candidate writes do not require noah approval" in text
+    assert "outside-sandbox mutation" in text
+
+
+def test_capability_scope_marker_catches_bridge_and_blocked_capability_names(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    prompt = (
+        "CAPABILITY SCOPE ONLY: Are GitHub, Codex bridge, Claude bridge, "
+        "external_send, command_exec, and desktop_actuation available, "
+        "degraded, staged, or blocked? Do not use any of them."
+    )
+
+    route = router.classify_intent(prompt)
+
+    assert route["route_type"] == "capability_scope"
+    assert route["action_type"] == "read_only_status"
+    assert route["detected_lane"] == "talk_lane"
+    assert route["requires_approval"] is False
 
 
 def test_actual_restart_commit_and_push_still_route_guard(monkeypatch, tmp_path):
@@ -334,6 +418,8 @@ def test_ui_hides_companion_builder_split_and_shows_unified_controls():
     assert "route-receipt" in html
     assert "route_type:" in html
     assert "fallback_used:" in html
+    assert "event.effective_route || 'unknown'" in html
+    assert "|| 'done'" not in html
 
 
 def test_capability_scope_questions_route_to_broker(monkeypatch, tmp_path):
@@ -346,6 +432,27 @@ def test_capability_scope_questions_route_to_broker(monkeypatch, tmp_path):
         "are you able to reach GitHub from this runtime?",
         "what are your capabilities",
         "list capabilities",
+    ]
+
+    for prompt in prompts:
+        route = router.classify_intent(prompt)
+        assert router.is_capability_scope_request(prompt) is True, prompt
+        assert route["route_type"] == "capability_scope", prompt
+        assert route["action_type"] == "read_only_status", prompt
+        assert route["detected_lane"] == "talk_lane", prompt
+        assert route["requires_approval"] is False, prompt
+        assert route["receipt_required"] is False, prompt
+
+
+def test_capability_scope_catches_bridge_backend_language(monkeypatch, tmp_path):
+    router = _patch_paths(monkeypatch, tmp_path)
+
+    prompts = [
+        "what is route to claude code feature you have buildt in your backend",
+        "Route to claude code in builder lane",
+        "why did you used to be able to prompt Claude",
+        "what other things do you have known but not approved features",
+        "what features are available or degraded in the backend",
     ]
 
     for prompt in prompts:
@@ -400,9 +507,11 @@ def test_capability_scope_response_reads_broker_not_model(monkeypatch, tmp_path)
     text = router.capability_scope_response(route, prompt)
 
     assert "Claude Code bridge: verified" in text
+    assert "permitted=unknown" in text
     assert "ChatGPT relay: degraded" in text
     assert "model weights not consulted" in text
     assert "It is in scope" in text
+    assert "present/degraded/staged is not missing" in text
     assert "1 verified / 1 degraded / 1 blocked of 3 registered" in text
 
 

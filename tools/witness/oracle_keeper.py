@@ -19,6 +19,7 @@ Log: C:\Oracle\state\keeper.log
 from __future__ import annotations
 
 import json
+import socket
 import subprocess
 import sys
 import time
@@ -31,7 +32,9 @@ STATE = Path(r"C:\Oracle\state")
 STOP_FLAG = STATE / "keeper.stop"
 LOG = STATE / "keeper.log"
 HEARTBEAT = STATE / "keeper_heartbeat.json"
-HEALTH = "http://127.0.0.1:7781/api/health"
+RUNTIME_HOST = "127.0.0.1"
+RUNTIME_PORT = 7781
+HEALTH = f"http://{RUNTIME_HOST}:{RUNTIME_PORT}/health"
 INTERVAL = 60
 
 WATCHERS = {
@@ -65,6 +68,14 @@ def server_alive() -> bool:
         with urllib.request.urlopen(HEALTH, timeout=8) as r:
             return bool(json.loads(r.read()).get("ok"))
     except Exception:
+        return False
+
+
+def server_port_open() -> bool:
+    try:
+        with socket.create_connection((RUNTIME_HOST, RUNTIME_PORT), timeout=1.5):
+            return True
+    except OSError:
         return False
 
 
@@ -143,9 +154,12 @@ def main() -> None:
         try:
             ok = server_alive()
             if not ok:
-                launch_server()
-                time.sleep(15)
-                ok = server_alive()
+                if server_port_open():
+                    log(f"server health failed but port {RUNTIME_PORT} is occupied; not launching duplicate")
+                else:
+                    launch_server()
+                    time.sleep(15)
+                    ok = server_alive()
             for name, script in WATCHERS.items():
                 ensure_watcher(name, script)
             heartbeat(ok)

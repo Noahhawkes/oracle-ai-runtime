@@ -86,6 +86,17 @@ def test_ui_exposes_self_prompt_writer_controls():
     assert "api/self-prompt/disable" in html
 
 
+def test_chat_send_has_visible_timeout_recovery():
+    html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+
+    assert "const CHAT_REQUEST_TIMEOUT_MS = 45000;" in html
+    assert "new AbortController()" in html
+    assert "signal: chatController.signal" in html
+    assert "ORACLE backend did not answer /chat" in html
+    assert "setDurabilityChip('dur-save-state', 'chat blocked', 'warn')" in html
+    assert "clearTimeout(chatTimeout)" in html
+
+
 def test_cards_are_pure_reads(tmp_path):
     _isolate(tmp_path)
     # project_states.json must be unchanged by reading cards.

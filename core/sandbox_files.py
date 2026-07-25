@@ -1088,7 +1088,13 @@ def sandbox_self_prompt_write(
     existing_text = ""
     if target.exists() and target.is_file():
         existing_text = target.read_text(encoding=TEXT_ENCODING, errors="replace")
-    def _suppressed(novelty_status: str, similarity: float | None = None) -> dict[str, Any]:
+    def _suppressed(
+        novelty_status: str,
+        similarity: float | None = None,
+        *,
+        deduped: bool = True,
+        quality_decision: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         payload = {
             "ok": True,
             "operation_type": "sandbox_self_prompt_write",
@@ -1108,12 +1114,16 @@ def sandbox_self_prompt_write(
             "model_called": bool(model_called),
             "model_name": model_name,
             "model_error": model_error,
-            "deduped": True,
+            "deduped": deduped,
             "content_written": False,
             "novelty_status": novelty_status,
         }
         if similarity is not None:
             payload["similarity_to_recent"] = round(similarity, 3)
+        if quality_decision is not None:
+            payload["quality_decision"] = quality_decision
+            payload["quality_score"] = quality_decision.get("score")
+            payload["purpose_lane"] = quality_decision.get("purpose_lane")
         return payload
 
     if f"child_response_sha256={response_hash}" in existing_text:
@@ -1130,6 +1140,30 @@ def sandbox_self_prompt_write(
         )
         if highest_similarity >= _NOVELTY_SIMILARITY_THRESHOLD:
             return _suppressed("near_duplicate_suppressed", highest_similarity)
+
+    try:
+        from sandbox_quality_governor import assess_sandbox_response
+
+        quality = assess_sandbox_response(
+            response_text,
+            recent_responses=_recent_journal_responses(existing_text),
+            seed_text=seed_excerpt,
+        ).to_dict()
+    except Exception as exc:
+        quality = {
+            "should_write": True,
+            "score": None,
+            "purpose_lane": "unknown",
+            "reasons": ["quality_governor_unavailable"],
+            "blockers": [f"{type(exc).__name__}: {exc}"],
+            "schema_version": "sandbox_quality_governor.unavailable",
+        }
+    if quality.get("should_write") is False:
+        return _suppressed(
+            "quality_gate_suppressed",
+            deduped=False,
+            quality_decision=quality,
+        )
 
     header = ""
     if not existing_text:
@@ -1164,8 +1198,14 @@ def sandbox_self_prompt_write(
         f"model_called={str(bool(model_called)).lower()}",
         f"model_name={model_name or 'none'}",
         f"model_error={model_error or 'none'}",
+        f"quality_score={quality.get('score')}",
+        f"purpose_lane={quality.get('purpose_lane')}",
+        f"quality_schema_version={quality.get('schema_version')}",
         f"child_prompt_sha256={prompt_hash}",
         f"child_response_sha256={response_hash}",
+        "",
+        "quality_decision:",
+        json.dumps(quality, sort_keys=True, ensure_ascii=True),
         "",
         "seed_prompt_excerpt:",
         seed_excerpt or "sandbox self-prompt requested",
@@ -1224,6 +1264,9 @@ def sandbox_self_prompt_write(
             "deduped": False,
             "content_written": True,
             "novelty_status": "new_response_appended",
+            "quality_decision": quality,
+            "quality_score": quality.get("score"),
+            "purpose_lane": quality.get("purpose_lane"),
         },
     )
     return {
@@ -1249,6 +1292,9 @@ def sandbox_self_prompt_write(
         "deduped": False,
         "content_written": True,
         "novelty_status": "new_response_appended",
+        "quality_decision": quality,
+        "quality_score": quality.get("score"),
+        "purpose_lane": quality.get("purpose_lane"),
     }
 
 

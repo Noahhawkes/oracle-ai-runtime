@@ -29,6 +29,16 @@ BOUNDARIES = {
     "canon_promotion": False,
     "raw_content_stored": False,
 }
+SANDBOX_ROUTE_TYPES = {
+    "sandbox_initiative_write",
+    "sandbox_self_prompt",
+    "sandbox_write",
+    "sandbox_append",
+    "sandbox_edit",
+    "sandbox_journal_tick",
+    "sandbox_append_journal",
+    "sandbox_reflection_receipt",
+}
 
 
 def _utc_now() -> str:
@@ -270,6 +280,18 @@ def _response_mode(user_text: str, *, mode: str | None, effective_route: str | N
     return "talk"
 
 
+def _boundaries_for_route(*, effective_route: str | None, route_type: str | None) -> dict[str, bool]:
+    boundaries = BOUNDARIES.copy()
+    route_names = {
+        str(effective_route or "").strip().lower(),
+        str(route_type or "").strip().lower(),
+    }
+    if route_names & SANDBOX_ROUTE_TYPES:
+        boundaries["read_only"] = False
+        boundaries["sandbox_touched"] = True
+    return boundaries
+
+
 def response_evidence(
     user_text: str,
     *,
@@ -326,7 +348,7 @@ def response_evidence(
         "contradictions": [],
         "unknowns": unknowns,
         "confidence": "route_level",
-        "boundaries": BOUNDARIES.copy(),
+        "boundaries": _boundaries_for_route(effective_route=effective_route, route_type=route_type),
     }
 
 

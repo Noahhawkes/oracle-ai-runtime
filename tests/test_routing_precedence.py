@@ -4,6 +4,7 @@ import os
 import sys
 import json
 import asyncio
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -56,6 +57,42 @@ def test_large_talk_request_reaches_talk_before_legacy_staging():
     assert route["detected_lane"] == "talk_lane"
     assert srv._oracle_intent_dispatch(prompt) is None
     assert srv._noah_direct_should_handle("Can you talk to me normally?") is False
+
+
+def test_report_only_runtime_status_beats_noah_direct_model(monkeypatch, tmp_path):
+    import unified_oracle_router as router
+
+    monkeypatch.setattr(router, "ROUTING_DIR", tmp_path / "routing")
+    monkeypatch.setattr(router, "RECEIPTS_DIR", tmp_path / "receipts")
+    monkeypatch.setattr(router, "COMPANION_DIR", tmp_path / "companion")
+    monkeypatch.setattr(
+        router,
+        "PENDING_GUARD_APPROVAL_PATH",
+        tmp_path / "routing" / "pending_guard_approval.json",
+    )
+
+    prompt = (
+        "REPORT ONLY: Report current runtime port, session id, route type, "
+        "self prompt status, latest receipt path. Do not execute or mutate."
+    )
+
+    def fail_noah_direct(*args, **kwargs):
+        raise AssertionError("NOAH_DIRECT model path should not answer runtime status")
+
+    monkeypatch.setattr(srv, "_noah_direct_reply", fail_noah_direct)
+
+    assert srv._noah_direct_should_handle(prompt) is True
+    assert srv._unified_live_state_route_type(prompt) == "diagnostic_status"
+
+    payloads = asyncio.run(_collect_stream_payloads(prompt))
+    route = next(item for item in payloads if item.get("type") == "route")
+    done = payloads[-1]
+    text = "".join(item.get("text", "") for item in payloads if item.get("type") == "token")
+
+    assert route["route_type"] == "diagnostic_status"
+    assert done["route_type"] == "diagnostic_status"
+    assert done["effective_route"] == "diagnostic_status"
+    assert "route_type: diagnostic_status" in text
 
 
 def test_large_marker_directive_uses_legacy_preservation():
@@ -379,6 +416,64 @@ Do not commit, push, send, publish, delete, upload, or promote canon.
     assert done["effective_route"] == "diagnostic_status"
 
 
+def test_backend_diagnostic_prompt_does_not_return_strategic_boilerplate(monkeypatch):
+    import memory
+
+    monkeypatch.setattr(memory, "save_message", lambda *_, **__: None)
+    prompt = """
+ORACLE BACKEND DIAGNOSTIC TEST 2026-07-23.
+No sandbox write. No external action. No canon promotion.
+Answer only in six short bullets:
+1. What live subsystem state can you verify right now?
+2. What do you remember/know from Nexus or Document Atlas?
+3. What can you not prove right now?
+4. What would make your sandbox writing more intelligent?
+5. Should you write to sandbox right now, yes or no, and why?
+6. What is the smallest useful next build step?
+If unknown, say UNKNOWN. Do not invent.
+"""
+
+    dispatch = srv._oracle_intent_dispatch(prompt)
+    if dispatch is not None:
+        text, route_name = dispatch
+        assert route_name != "strategic_planning"
+        assert "Goal: advance ORACLE's governed executive function" not in text
+
+    payloads = asyncio.run(_collect_stream_payloads(prompt))
+    route = next(p for p in payloads if p.get("type") == "route")
+    token = next(p for p in payloads if p.get("type") == "token")
+    done = next(p for p in payloads if p.get("type") == "done")
+
+    assert route["route_type"] == "diagnostic_status"
+    assert route["lane"] == "talk_lane"
+    assert "Goal: advance ORACLE's governed executive function" not in token["text"]
+    assert "actions_executed: 0" in token["text"] or "Observation:" in token["text"]
+    assert done["effective_route"] == "diagnostic_status"
+
+
+def test_talk_lane_only_prompt_does_not_return_strategic_boilerplate(monkeypatch):
+    import memory
+
+    monkeypatch.setattr(memory, "save_message", lambda *_, **__: None)
+    prompt = (
+        "Talk lane only. This is a simple question, not a build order and not strategic planning. "
+        "No sandbox write. No external action. In your own words, answer Noah briefly."
+    )
+
+    dispatch = srv._oracle_intent_dispatch(prompt)
+    if dispatch is not None:
+        text, route = dispatch
+        assert route != "strategic_planning"
+        assert "Goal: advance ORACLE's governed executive function" not in text
+
+    payloads = asyncio.run(_collect_stream_payloads(prompt))
+    token = next(p for p in payloads if p.get("type") == "token")
+    done = next(p for p in payloads if p.get("type") == "done")
+
+    assert "Goal: advance ORACLE's governed executive function" not in token["text"]
+    assert done["effective_route"] != "strategic_planning"
+
+
 def test_restart_server_still_routes_guard():
     route = classify_intent("Restart the server.")
 
@@ -444,6 +539,27 @@ def test_write_to_sandbox_routes_to_initiative_handler(monkeypatch):
 
     assert route["route_type"] == "sandbox_initiative_write"
     assert route["lane"] == "safe_write"
+    assert done["effective_route"] == "sandbox_initiative_write"
+
+
+def test_sandbox_initiative_timeout_fails_closed(monkeypatch):
+    import memory
+    import sandbox_files as sf
+
+    monkeypatch.setattr(memory, "save_message", lambda *_, **__: None)
+    monkeypatch.setattr(srv, "SANDBOX_INITIATIVE_TIMEOUT_SECONDS", 0.01)
+
+    def _stuck_writer(*_args, **_kwargs):
+        time.sleep(0.1)
+        return {"receipt_path": "sandbox/receipts/late_receipt.json"}
+
+    monkeypatch.setattr(sf, "sandbox_initiative_write", _stuck_writer)
+
+    payloads = asyncio.run(_collect_stream_payloads("write to sandbox"))
+    token = next(p for p in payloads if p.get("type") == "token")
+    done = next(p for p in payloads if p.get("type") == "done")
+
+    assert "timed out" in token["text"].lower()
     assert done["effective_route"] == "sandbox_initiative_write"
 
 

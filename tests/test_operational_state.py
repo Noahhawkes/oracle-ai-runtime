@@ -25,7 +25,8 @@ def test_verified_git_facts_are_live():
     v = s["verified"]
     assert v["branch"] and v["branch"] != "UNKNOWN"
     assert v["commit"] and v["commit"] != "UNKNOWN"
-    assert v["working_tree"] in ("clean", "modified")
+    assert v["working_tree"] in ("clean", "modified", "unknown")
+    assert v.get("subprocess_used") is False
     assert isinstance(v["recent_commits"], list)
     # freshness: observed_at is recent (within a minute)
     obs = datetime.fromisoformat(s["observed_at"])
