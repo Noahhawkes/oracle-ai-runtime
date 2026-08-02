@@ -1,0 +1,78 @@
+{
+  "schema_version": "oracle.jupiter_station_contradiction_ledger.v1",
+  "status": "forensic_working_ledger",
+  "canon_promotion": false,
+  "authority": "Noah.Physical",
+  "generated_from": [
+    "docs/world_bible/star_trek_narrative_cohesion_audit.md",
+    "docs/world_bible/noah_avalon_jupiter_station_world_bible.md",
+    "docs/jupiter_station_2397_canon_registry.md",
+    "data/canon_registry/jupiter_station_2397.json",
+    "GitHub issue #12"
+  ],
+  "contradictions": [
+    {
+      "id": "CL-001",
+      "subject": "Voyager entry year",
+      "active_value": "2371",
+      "conflicting_values": ["2373"],
+      "verdict": "2371_active_2373_demoted",
+      "open": true,
+      "next_action": "Classify remaining Drive and transcript occurrences without rewriting raw sources"
+    },
+    {
+      "id": "CL-002",
+      "subject": "Jupiter Station active era",
+      "active_value": "2397",
+      "conflicting_values": ["2481"],
+      "verdict": "2397_active_2481_demoted_unless_restored",
+      "open": true,
+      "next_action": "Determine whether 2481 is an alternate branch, future sketch, or discarded draft"
+    },
+    {
+      "id": "CL-003",
+      "subject": "Hawkes age and command legitimacy",
+      "active_value": "calendar_age_about_42_in_2397_plus_temporal_acceleration_service_credit",
+      "conflicting_values": ["unqualified_age_44_framing", "ordinary_calendar_only_objection"],
+      "verdict": "service_credit_required",
+      "open": true,
+      "next_action": "Verify the rule against T0/T1 sources and separate author age from character age"
+    },
+    {
+      "id": "CL-004",
+      "subject": "USS Avalon registry lineage",
+      "active_value": "Sovereign_lineage_Avalon_with_refit_continuity",
+      "conflicting_values": ["NCC-75154", "NCC-2376-A"],
+      "verdict": "exact_registry_unresolved",
+      "open": true,
+      "next_action": "Locate each registry value in a source artifact and classify vessel, era, branch, and refit meaning"
+    },
+    {
+      "id": "CL-005",
+      "subject": "Q indexing boundary",
+      "active_value": "custody_and_indexing_gap_not_power_superiority",
+      "conflicting_values": ["Hawkes_stronger_than_Q"],
+      "verdict": "power_scaling_demoted",
+      "open": true,
+      "next_action": "Transcribe and classify all T0/T1 Q encounter material"
+    },
+    {
+      "id": "CL-006",
+      "subject": "Tangly custody",
+      "active_value": "working_T3_night_shift_AI_science_officer_boundary",
+      "conflicting_values": ["effectively_blank_Drive_addendum"],
+      "verdict": "source_custody_gap_open",
+      "open": true,
+      "next_action": "Locate source packet or create an approved source-backed replacement addendum"
+    },
+    {
+      "id": "CL-007",
+      "subject": "Analog origin archive",
+      "active_value": "provenance_evidence_only",
+      "conflicting_values": ["line_level_canon_without_transcription"],
+      "verdict": "T1_transcription_required",
+      "open": true,
+      "next_action": "Hash, manifest, OCR, and manually verify the reported 46 images"
+    }
+  ]
+}
