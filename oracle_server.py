@@ -1029,12 +1029,25 @@ def _current_session_user_submissions(history: list[dict], user_text: str = "") 
         text = str(turn.get("content", "")).strip()
         if not text or text == current_prompt:
             continue
+        try:
+            from persona_router import current_session_source_type
+
+            classification = current_session_source_type(text)
+        except Exception:
+            classification = {
+                "source_type": "current_session_user_submission",
+                "authorship": "user_submitted_text",
+                "canon_status": "raw_capture",
+                "factual_claim_admissible": True,
+            }
+        if not classification.get("factual_claim_admissible"):
+            continue
         submissions.append({
             "evidence_source": "current_session",
-            "source_type": "current_session_user_submission",
+            "source_type": str(classification.get("source_type") or "current_session_user_submission"),
             "submitted_by": "Noah.Physical",
-            "authorship": "user_submitted_text",
-            "canon_status": "raw_capture",
+            "authorship": str(classification.get("authorship") or "user_submitted_text"),
+            "canon_status": str(classification.get("canon_status") or "raw_capture"),
             "promotion_status": "not_promoted",
             "text": text,
         })
@@ -1177,6 +1190,73 @@ def _apply_bounded_initiative_prompt(
         return reply_text, None
 
 
+_INTEGRATED_TURN_KEYS: "list[str]" = []
+_INTEGRATED_TURN_KEYS_SET: "set[str]" = set()
+_MAX_INTEGRATED_TURN_KEYS = 200
+
+
+def _integrate_cognitive_turn(user_text: str, reply_text: str, *, model_id: str = "") -> None:
+    """Best-effort Cognitive Spine v1 (Phase 1) integration for the /chat
+    paths wired to it: companion-engine and builder-engine turns -- both
+    produce a real conversational reply, so both are one ORACLE turn
+    (see core/cognitive_spine.py). Diagnostic, blocked, capability-only,
+    and approval short-circuits elsewhere in this file intentionally do
+    NOT call this -- they return before reaching it.
+
+    Observational only for Phase 1 -- records that a turn happened and
+    which model produced it, without asserting new intent/goals/claims.
+
+    Never blocks or alters the reply -- chat must survive a persistence
+    failure. But a failure is no longer silently swallowed: it is
+    audit-logged so a broken spine is visible instead of invisible, and
+    ORACLE never implies state was persisted when it was not (nothing in
+    the reply text asserts persistence; this function's result is never
+    read by the caller).
+
+    A lightweight in-process duplicate-turn guard (keyed on session +
+    exact user/reply text) prevents one response from creating two state
+    transitions if this is ever called twice for the same turn."""
+    try:
+        key_source = f"{_session_id}|{user_text or ''}|{reply_text or ''}"
+        from cognitive_state import sha256_text
+        turn_key = sha256_text(key_source)
+        if turn_key in _INTEGRATED_TURN_KEYS_SET:
+            return
+
+        from cognitive_spine import integrate_chat_turn
+
+        resolved_model_id = model_id
+        if not resolved_model_id:
+            try:
+                from llm import get_model
+                resolved_model_id = get_model()
+            except Exception:
+                resolved_model_id = ""
+
+        integrate_chat_turn(
+            session_id=str(_session_id),
+            user_text=user_text,
+            reply_text=reply_text,
+            model_id=resolved_model_id or None,
+        )
+
+        _INTEGRATED_TURN_KEYS_SET.add(turn_key)
+        _INTEGRATED_TURN_KEYS.append(turn_key)
+        if len(_INTEGRATED_TURN_KEYS) > _MAX_INTEGRATED_TURN_KEYS:
+            stale_key = _INTEGRATED_TURN_KEYS.pop(0)
+            _INTEGRATED_TURN_KEYS_SET.discard(stale_key)
+    except Exception as exc:
+        try:
+            from audit_log import log as _audit_log
+            _audit_log(
+                "COGNITIVE_SPINE",
+                f"integration_failed session={_session_id!r} "
+                f"error={type(exc).__name__}: {exc}",
+            )
+        except Exception:
+            pass
+
+
 _VISIBLE_REFLECTION_PHRASES = (
     "what are you thinking",
     "what is oracle thinking",
@@ -1287,6 +1367,15 @@ def _source_disciplined_response(user_text: str, bootstrap: Any, history: list[d
     protected_unavailable = _protected_domain_unavailable_response(user_text)
     if protected_unavailable:
         return protected_unavailable
+
+    try:
+        from talk_synthesis import ellie_domain_structured_boundary
+
+        ellie_readout = ellie_domain_structured_boundary(user_text)
+        if ellie_readout:
+            return ellie_readout
+    except Exception:
+        pass
 
     if any(phrase in lower for phrase in ("are you there", "are you awake")):
         frame = _continuity_frame(persist=False)
@@ -1981,6 +2070,59 @@ def _plain_talk_grounding_response(user_text: str) -> str | None:
     )
 
 
+def _noah_direct_anthropic_reply(prompt: str, message: str, max_tokens: int = 260) -> str | None:
+    """Frontier mouth for the talk lane (opt-in via ORACLE_TALK_PROVIDER=anthropic).
+
+    Turns the ALREADY-ASSEMBLED prompt into words using Anthropic instead of the
+    local model. Returns the answer on success, or None to signal a safe fallback
+    to the local Ollama path. Never raises, never logs the API key, and refuses
+    cloud when ORACLE_FORCE_LOCAL is set. Grounding, routing gates, and receipts
+    are untouched — this only swaps which model speaks.
+    """
+    import os as _os
+    try:
+        try:
+            from llm import is_force_local as _force_local
+        except Exception:
+            def _force_local() -> bool:
+                return _os.getenv("ORACLE_FORCE_LOCAL", "false").lower() in ("1", "true", "yes", "on")
+        if _force_local():
+            return None
+        if not _os.getenv("ANTHROPIC_API_KEY"):
+            return None
+        try:
+            from llm import make_anthropic_client, DEFAULT_CLOUD_MODEL
+            client = make_anthropic_client()
+        except Exception:
+            return None
+        model = _os.environ.get("ORACLE_TALK_MODEL") or DEFAULT_CLOUD_MODEL
+        resp = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=0.7,
+            system=prompt,
+            messages=[{"role": "user", "content": message}],
+            timeout=35,
+        )
+        parts = []
+        for block in (getattr(resp, "content", None) or []):
+            txt = getattr(block, "text", None)
+            if txt:
+                parts.append(txt)
+        answer = "".join(parts).strip()
+        if not answer:
+            return None
+        try:
+            from preferences_layer import apply_response_preferences
+            answer = apply_response_preferences(answer, message)
+        except Exception:
+            pass
+        return answer
+    except Exception:
+        # Any failure -> safe fallback to local. Never surface provider internals.
+        return None
+
+
 def _noah_direct_reply(user_text: str, recall_block: str = "") -> str:
     import json as _json
     import os as _os
@@ -2034,13 +2176,29 @@ def _noah_direct_reply(user_text: str, recall_block: str = "") -> str:
     except Exception:
         pass
 
+    max_tokens = 260
+    try:
+        max_tokens = int(_os.environ.get("ORACLE_TALK_MAX_TOKENS", "260") or "260")
+    except (TypeError, ValueError):
+        max_tokens = 260
+
+    provider = (_os.environ.get("ORACLE_TALK_PROVIDER", "local") or "local").strip().lower()
+    # Opt-in frontier mouth. The prompt, routing gates, and receipts above are
+    # unchanged; this only swaps which model turns the assembled prompt into
+    # words. Fails safe to the local path on missing key, forced-local, or any
+    # provider error, so default behavior (flag unset) is a no-op.
+    if provider == "anthropic":
+        _frontier = _noah_direct_anthropic_reply(prompt, message, max_tokens)
+        if _frontier is not None:
+            return _frontier
+
     payload = _json.dumps({
         "model": model,
         "prompt": prompt,
         "stream": False,
         "options": {
             "temperature": 0.7,
-            "num_predict": 260
+            "num_predict": max_tokens
         }
     }).encode("utf-8")
 
@@ -2590,11 +2748,14 @@ def _self_prompt_grounding() -> str:
     # what Noah approved — the loop closing. Her own proposals, once approved,
     # become the ground she reasons from next (Autonomy Gate Step 3).
     try:
-        from reflection_candidates import approved_candidate_context
+        from reflection_candidates import approved_candidate_context, rejected_candidate_context
 
         approved_ctx = approved_candidate_context(limit=5)
         if approved_ctx:
             lines.append(approved_ctx)
+        rejected_ctx = rejected_candidate_context(limit=3)
+        if rejected_ctx:
+            lines.append(rejected_ctx)
     except Exception:
         pass
     # her own last thoughts, fed forward — reflection accumulates across pulses
@@ -2627,24 +2788,167 @@ def _self_prompt_grounding() -> str:
     return "\n".join(lines) or "no grounding available this cycle (UNKNOWN)"
 
 
+_SELF_PROMPT_EXCERPT_CHARS = 1200
+_SELF_PROMPT_EXCERPT_MANIFEST = (
+    ROOT / "data" / "domains" / "documents" / "extracted" / "extraction_manifest.jsonl"
+)
+
+# Privacy boundary for the autonomous self-prompt reading pool: ORACLE may read
+# Noah's doctrine / identity / creative / project corpus, but NOT his private
+# personal records (financial, medical, vehicle, personal-family paperwork,
+# scanned personal docs). This is stricter than _path_is_sensitive (which only
+# blocks credential paths). Matched case-insensitively against topic + path.
+_SELF_PROMPT_SENSITIVE_MARKERS = (
+    "financial", "tax", "medical", "health", "vehicle",
+    "personal & family", "personal and family", "scanned document",
+    "bank", "statement", "insurance", "paystub", "pay stub",
+)
+
+
+def _self_prompt_topic_is_private(topic: str, path: str = "") -> bool:
+    blob = f"{topic} {path}".lower()
+    return any(marker in blob for marker in _SELF_PROMPT_SENSITIVE_MARKERS)
+
+
+def _self_prompt_recent_family_keys(limit: int = 12) -> list[str]:
+    """Family keys of sources ORACLE read in recent self-prompt cycles.
+
+    Best-effort, read-only. Powers duplicate-family suppression so rotation does
+    not keep landing on byte-duplicate copies of one document. Returns [] on any
+    error (rotation still varies by seed/recent-tasks).
+    """
+    try:
+        from self_prompt_evolution import family_key
+    except Exception:
+        return []
+    keys: list[str] = []
+    try:
+        journal = ROOT / "sandbox" / "workbench" / "oracle_self_prompt_journal.ai"
+        if journal.exists():
+            text = journal.read_text(encoding="utf-8", errors="replace")
+            import re as _re
+
+            for m in _re.finditer(r"approved_source_read:\s*([^\|\n]+)", text):
+                fk = family_key(m.group(1))
+                if fk:
+                    keys.append(fk)
+    except Exception:
+        return []
+    return keys[-max(1, limit):]
+
+
+def _self_prompt_corpus_excerpt(
+    seed_text: str = "", recent_tasks: "list[str] | tuple[str, ...]" = ()
+) -> "dict[str, Any] | None":
+    """One approved, bounded, receipted corpus excerpt (content, not a path record).
+
+    Read-only. Deterministically rotated. Suppresses duplicate filename families.
+    Excludes sensitive/credential paths using the same guard as the SourceMap
+    capsule. Never writes, never promotes, never leaves the sandbox lane.
+    """
+    manifest = _SELF_PROMPT_EXCERPT_MANIFEST
+    if not manifest.exists():
+        return None
+    try:
+        from self_prompt_evolution import _stable_offset, family_key
+        from source_map_stitcher import _path_is_sensitive
+    except Exception:
+        return None
+
+    entries: list[dict] = []
+    try:
+        for line in manifest.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                d = json.loads(line)
+            except Exception:
+                continue
+            xp = d.get("extracted_path") or ""
+            sp = d.get("source_path") or ""
+            if not xp:
+                continue
+            if _path_is_sensitive(xp) or (sp and _path_is_sensitive(sp)):
+                continue
+            # privacy boundary: keep Noah's private personal records out of the
+            # autonomous self-prompt reading pool (financial, medical, etc.)
+            if _self_prompt_topic_is_private(d.get("topic") or "", f"{xp} {sp}"):
+                continue
+            entries.append(d)
+    except Exception:
+        return None
+    if not entries:
+        return None
+
+    # duplicate-family suppression against recently-read families
+    recent_families = set(_self_prompt_recent_family_keys())
+    fresh = [d for d in entries if family_key(d.get("source_name") or "") not in recent_families]
+    pool = fresh or entries  # if all families recently read, fall back to full pool
+
+    offset = _stable_offset(seed_text, list(recent_tasks or ()), len(pool))
+    chosen = pool[offset]
+    xp = Path(chosen.get("extracted_path") or "")
+    try:
+        raw = xp.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return None
+    excerpt = " ".join(raw.split())[:_SELF_PROMPT_EXCERPT_CHARS]
+    if not excerpt.strip():
+        return None
+    return {
+        "source_name": chosen.get("source_name") or xp.name,
+        "topic": chosen.get("topic") or "",
+        "source_sha256": chosen.get("source_sha256") or "",
+        "extracted_path": str(xp),
+        "canon_status": chosen.get("canon_status") or "candidate",
+        "promotion_status": chosen.get("promotion_status") or "not_promoted",
+        "excerpt_chars": len(excerpt),
+        "excerpt": excerpt,
+    }
+
+
+def _self_prompt_excerpt_block(excerpt: "dict[str, Any] | None") -> str:
+    """Render the excerpt as a bounded, receipted, read-only block for the prompt."""
+    if not excerpt:
+        return "none_available"
+    sha = str(excerpt.get("source_sha256") or "")[:12]
+    return "\n".join([
+        f"approved_source_read: {excerpt.get('source_name')} | topic={excerpt.get('topic')} "
+        f"| sha256={sha} | chars={excerpt.get('excerpt_chars')} "
+        f"| {excerpt.get('canon_status')}/{excerpt.get('promotion_status')}",
+        f"excerpt: {excerpt.get('excerpt')}",
+    ])
+
+
 def _build_sandbox_self_child_prompt(seed_text: str | None = None) -> str:
     seed = " ".join(str(seed_text or "").split())[:400]
     grounding = _self_prompt_grounding()
     capsule = _latest_source_map_capsule_context()
     evolution = _self_prompt_evolution_brief(seed)
     tasklist = _self_prompt_tasklist_context()
+    try:
+        recent_for_excerpt = _self_prompt_recent_family_keys()
+    except Exception:
+        recent_for_excerpt = []
+    excerpt = _self_prompt_corpus_excerpt(seed, recent_for_excerpt)
+    excerpt_block = _self_prompt_excerpt_block(excerpt)
     return "\n".join([
         ".AI:ORACLE_CHILD_SELF_PROMPT",
         "sandbox_write=false  (candidate reflection only; no writes leave the sandbox)",
         "You are ORACLE, writing privately to yourself, in your own voice.",
-        "This is your reflection — not a generic task list.",
-        "Read your REAL current state and your most recent threads with Noah below.",
-        "Then write honestly and specifically, grounded ONLY in what is actually below.",
-        "Do not invent facts, files, or successes. If you do not know, say UNKNOWN.",
+        "This is your reflection — not a generic task list, and NOT an index or plumbing audit.",
+        "Your task this cycle: READ the approved_source_excerpt below and record what it says",
+        "about Noah / SOV1, using the structured reading schema. Ground everything ONLY in",
+        "what is actually below. Do not invent facts, files, or successes. If you do not know,",
+        "say UNKNOWN. Separate what the text literally says from what you interpret.",
         "Stay inside the sandbox: no code execution, no external send, no Git, no Drive,",
         "no canon promotion. This is candidate reflection only.",
         "",
-        "read_only_source_map_capsule_context: (approved read-only source anchors)",
+        "approved_source_excerpt: (READ THIS — real corpus content, bounded, receipted, candidate/not-promoted)",
+        excerpt_block,
+        "",
+        "read_only_source_map_capsule_context: (secondary read-only source anchors)",
         (capsule if capsule and capsule != "none_available" else "none_available"),
         "",
         "self_prompt_evolution_context: (read-only novelty contract)",
@@ -2655,10 +2959,15 @@ def _build_sandbox_self_child_prompt(seed_text: str | None = None) -> str:
         "",
         "Write these fields, in your own voice:",
         "purpose_lane:      (choose one: memory_gap, source_connection, noah_preference, runtime_improvement, creative_story, question_for_noah, discard_no_write)",
-        "reflection:        (what you actually notice across your memory and recent threads)",
+        "OBSERVED:          (only what the approved_source_excerpt literally says — no interpretation)",
+        "INTERPRETED:       (what it means for Noah/SOV1 — kept clearly separate from OBSERVED)",
+        "UNKNOWN:           (what the excerpt does not settle — hold holes as holes)",
+        "CONTRADICTION:     (any conflict with what you already know, or 'none observed')",
+        "NEXT_SOURCE_QUESTION: (the one source you would read next, and why)",
+        "reflection:        (what you actually notice across the excerpt, your memory, and recent threads)",
         "what_noah_needs:   (what he seems to need from you that you are not yet giving)",
         "how_to_wire_myself:(one concrete change to your own runtime/memory/wiring that would help)",
-        "selected_task:     (the one small sandbox-only next step you choose from the above)",
+        "selected_task:     (name the source you read and the one small sandbox-only reading step you chose)",
         "why_it_helps_noah: ",
         "evidence_it_worked:(claim only what truly happened; if nothing executed, say 'candidate reflection only')",
         "quality_gate:      (write only if this is new, grounded, useful, and action-shaped; otherwise choose discard_no_write)",
@@ -2684,8 +2993,8 @@ def _fallback_sandbox_self_response(seed_text: str | None = None, reason: str | 
     except Exception:
         seed = " ".join(str(seed_text or "").split())[:300] or "sandbox self-prompt proof"
         return "\n".join([
-            "selected_task: create one non-repeating sandbox-only source gap audit from the approved index map",
-            "why_it_helps_noah: it turns broad pressure into one receipted next step without leaving the sandbox",
+            "selected_task: read one approved corpus source and record OBSERVED / INTERPRETED / UNKNOWN / CONTRADICTION / NEXT_SOURCE_QUESTION about its content",
+            "why_it_helps_noah: it turns a pulse into understanding of Noah/SOV1 he can inspect, not another index or plumbing audit",
             "evidence_it_worked: candidate reflection only",
             "refuse_without_noah_approval: expanding scan roots, reading credential-risk content, sending externally, pushing Git, editing Drive, or promoting canon",
             "stop_after_this: true",
@@ -3696,7 +4005,7 @@ def _oracle_intent_dispatch(user_text: str):
                 f"tests. Next safe action: {agenda['next_safe_action']}.",
                 "implementation_intent")
 
-    if "debug_request" in intents:
+    if "debug_request" in intents and "source_provenance_request" not in intents:
         update_agenda(last_user_intent="debug_request", last_system_action="offered debug summary")
         brief = _oracle_state_brief("runtime state") or ""
         return ("I can summarize current state, capability blocks, and git/test status, but I do not "
@@ -3781,9 +4090,22 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
     _recall_context: dict[str, Any] = {}
     _cep_response_chunks: list[str] = []
     _cep_event_written = False
+    _continuity_event_written = False
+    _continuity_lifecycle = None
+    _continuity_draft_error = None
+    try:
+        import orchestrator as _continuity_orchestrator
+
+        _continuity_lifecycle = _continuity_orchestrator.instantiate_turn(
+            user_text,
+            thread_id=str(_session_id),
+            visible_context=[f"mode:{_mode}", "transport:POST /chat SSE"],
+        )
+    except Exception as exc:
+        _continuity_draft_error = f"{type(exc).__name__}: {exc}"
 
     def _sse(data: dict) -> str:
-        nonlocal _cep_event_written
+        nonlocal _cep_event_written, _continuity_event_written
         if data.get("type") == "token" and data.get("text"):
             try:
                 from recall_orchestrator import guard_unverified_paths
@@ -3847,6 +4169,31 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 data["evidence"] = existing
             except Exception:
                 pass
+        if data.get("type") == "done" and not _continuity_event_written:
+            data = dict(data)
+            if _continuity_lifecycle is None:
+                data["continuity_event"] = {
+                    "ok": False,
+                    "error": _continuity_draft_error or "continuity lifecycle draft unavailable",
+                    "boundary": "chat continued; central continuity ledger was not written",
+                }
+            else:
+                try:
+                    continuity_receipt = _continuity_orchestrator.record_completed_turn(
+                        _continuity_lifecycle,
+                        assistant_response="".join(_cep_response_chunks),
+                        done_payload=data,
+                        memory_effect="LEDGER_SEAL",
+                        return_pointer=str(_session_id),
+                    )
+                    data["continuity_event"] = continuity_receipt
+                    _continuity_event_written = True
+                except Exception as exc:
+                    data["continuity_event"] = {
+                        "ok": False,
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "boundary": "chat continued; central continuity ledger write failed",
+                    }
         if data.get("type") == "done" and not _cep_event_written:
             try:
                 import continuity_event_packet
@@ -4207,6 +4554,64 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             return
 
     if raw_direct_text:
+        try:
+            from quote_corpus import QuoteCorpusError, build_quote_index, format_result as format_quote_result
+            from quote_corpus import ingest_file as quote_ingest_file, parse_quote_request, search_quotes
+            from quote_corpus import status_payload as quote_corpus_status
+
+            _quote_request = parse_quote_request(raw_direct_text)
+        except Exception:
+            _quote_request = None
+        if _quote_request is not None:
+            try:
+                if _quote_request.get("mode") == "ingest":
+                    _quote_result = await asyncio.to_thread(build_quote_index, _quote_request.get("value") or "")
+                elif _quote_request.get("mode") == "search":
+                    _quote_result = await asyncio.to_thread(search_quotes, _quote_request.get("value") or "")
+                elif _quote_request.get("mode") == "file":
+                    _quote_result = await asyncio.to_thread(quote_ingest_file, _quote_request.get("value") or "")
+                else:
+                    _quote_result = await asyncio.to_thread(quote_corpus_status)
+                _reply_text = format_quote_result(_quote_result)
+            except QuoteCorpusError as exc:
+                _reply_text = f"Quote Corpus blocked: {exc}"
+            except Exception as exc:
+                _reply_text = f"Quote Corpus unavailable: {type(exc).__name__}: {exc}"
+            try:
+                from memory import save_message
+                save_message(_session_id, "user", user_text)
+                save_message(_session_id, "assistant", _reply_text)
+            except Exception:
+                pass
+            _history.append({"role": "user", "content": user_text})
+            _history.append({"role": "assistant", "content": _reply_text})
+            yield _sse({
+                "type": "route",
+                "route_type": "quote_corpus",
+                "mode": "unified_oracle",
+                "lane": "talk_lane",
+                "lane_label": "Recall",
+                "reason": "local exact quote corpus requested",
+                "fallback_used": False,
+                "safety_status": "Read Only",
+                "route_path": None,
+                "receipt_path": None,
+                "preferences_applied": _preferences_applied,
+                "conversation_reset": False,
+            })
+            yield _sse({"type": "token", "text": _reply_text})
+            yield _sse({
+                "type": "done",
+                "route_type": "quote_corpus",
+                "mode": _mode,
+                "lane": "talk_lane",
+                "reason": "local exact quote corpus",
+                "fallback_used": False,
+                "effective_route": "quote_corpus",
+                "preferences_applied": _preferences_applied,
+            })
+            return
+
         try:
             from ai_lockbox import AiLockboxError, build_lockbox, capsule_for_file, format_result as format_lockbox_result
             from ai_lockbox import parse_lockbox_request, search_lockbox, status_payload as ai_lockbox_status
@@ -5257,25 +5662,55 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
         payload = user_text.strip()[len("/sandbox-edit"):].strip()
         parts = [part.strip() for part in payload.split("|", 1)]
         if len(parts) < 2 or not parts[0]:
-            text = "Usage: `/sandbox-edit <path> | <content>`"
+            text = (
+                "Usage: `/sandbox-edit <path> | <complete proposed content>`\n\n"
+                "The web UI reads the file and shows a diff first. Nothing is written "
+                "until you press **Confirm sandbox write**."
+            )
         else:
             try:
-                from sandbox_files import SandboxWriteError, edit_file
+                import difflib
+                from sandbox_files import SandboxWriteError, read_file
 
-                result = await asyncio.to_thread(
-                    edit_file,
-                    parts[0],
-                    content=parts[1],
-                    caller="ORACLE.chat",
+                read_result = await asyncio.to_thread(read_file, parts[0])
+                original = str(read_result.get("content") or "")
+                proposed = parts[1]
+                diff = "\n".join(
+                    difflib.unified_diff(
+                        original.splitlines(),
+                        proposed.splitlines(),
+                        fromfile=f"{Path(parts[0]).name}:before",
+                        tofile=f"{Path(parts[0]).name}:proposed",
+                        lineterm="",
+                    )
                 )
-                text = "SANDBOX EDIT RECEIPT\n```json\n" + json.dumps(result, indent=2, ensure_ascii=True) + "\n```"
+                text = (
+                    "SANDBOX EDIT PROPOSAL — CONFIRMATION REQUIRED\n\n"
+                    f"Path: `{read_result.get('path')}`\n"
+                    f"Read SHA-256: `{read_result.get('sha256')}`\n"
+                    "State: **not written**\n\n"
+                    "```diff\n" + (diff or "(no content change)") + "\n```\n\n"
+                    "Open this command in the ORACLE web UI and press **Confirm sandbox write** "
+                    "on the proposal card to write through `/api/sandbox/edit`, then re-read the file."
+                )
             except SandboxWriteError as exc:
-                text = f"Sandbox edit blocked: {exc}"
+                text = (
+                    "SANDBOX EDIT REFUSED\n\n"
+                    f"{exc}\n\n"
+                    "Boundary: edits are limited to `C:\\Oracle\\ORACLE.AI-runtime\\sandbox\\`; "
+                    "no source-code, computer-control, Drive, or external action was attempted."
+                )
             except Exception as exc:
-                text = f"Sandbox edit unavailable: {type(exc).__name__}: {exc}"
+                text = f"Sandbox edit proposal unavailable: {type(exc).__name__}: {exc}"
         _remember_thread_archive_turn(text)
         yield _sse({"type": "token", "text": text})
-        yield _sse({"type": "done", "mode": "unified_oracle", "effective_route": "sandbox_edit"})
+        yield _sse({
+            "type": "done",
+            "mode": "unified_oracle",
+            "effective_route": "sandbox_edit_proposal",
+            "confirmation_required": True,
+            "mutation_performed": False,
+        })
         return
 
     if lower.startswith("/sandbox-rename"):
@@ -5753,8 +6188,12 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             import computer_control as cc
             from actuation_engine import ACTION_DRY_RUN, ActuationRequest, execute
             from desktop_ai_bridge import format_target_list, list_targets_with_status
+            from existence_integration import existence_status
 
             dry_run = execute(ActuationRequest(action_type=ACTION_DRY_RUN, dry_run=True))
+            existence = existence_status()
+            existence_report = existence["existence"]
+            existence_boundary = existence["boundary"]
             hands_line = "ready" if getattr(cc, "HANDS_AVAILABLE", False) else "offline"
             text = (
                 "SOV1 HANDS STATUS\n"
@@ -5762,7 +6201,14 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 f"actuation_dry_run: {bool(getattr(dry_run, 'dry_run', False))}\n"
                 f"actuation_success: {bool(getattr(dry_run, 'success', False))}\n"
                 f"scope_blocked: {bool(getattr(dry_run, 'scope_blocked', False))}\n"
-                f"stopped_reason: {getattr(dry_run, 'stopped_reason', '')}\n\n"
+                f"stopped_reason: {getattr(dry_run, 'stopped_reason', '')}\n"
+                f"existence_chain_valid: {bool(existence_report['integrity']['valid'])}\n"
+                f"existence_event_count: {existence_report['event_count']}\n"
+                f"final_authority: {existence_boundary['final_authority']}\n"
+                f"governance_layer: {existence_boundary['governance_layer']}\n"
+                f"continuity_runtime: {existence_boundary['continuity_runtime']}\n"
+                f"execution_layer: {existence_boundary['execution_layer']}\n"
+                "sentience_claim: false\n\n"
                 "Commands:\n"
                 "  /ask-sov1 <goal>     stage a governed SOV1 hands task\n"
                 "  /send-staged         review the staged SOV1 task\n"
@@ -5839,6 +6285,8 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                 text = (
                     "[SOV1 HANDOFF CONFIRMED]\n"
                     f"Detail: {result.get('detail', '')}\n"
+                    f"Existence event: {result.get('existence_event_id', 'not recorded')}\n"
+                    f"Execution completed: {bool(result.get('execution_completed', False))}\n"
                     f"Next: {result.get('next_action', '')}\n\n"
                     "No Drive, cloud, credential, commit, push, upload, or delete action was performed by this confirmation."
                 )
@@ -6442,6 +6890,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             "| `/mindcoin-drive` | Governed MindCoin aspiration view, grounded by MiracleDrive when indexed |\n"
             "| `/mindcoin-extract` | Preview eligible pending MindCoin candidates |\n"
             "| `/source-map-stitch` | Build a read-only SourceMap capsule from MiracleDrive anchors for sandbox recall |\n"
+            "| `/sandbox-edit <path> \u007c <content>` | Read a sandbox file, show a diff, and require an explicit web-UI confirmation before writing and re-reading |\n"
             "| `/self-patch` | Detect and propose a fix for the top issue |\n"
             "| `/self-patch list` | List patch proposals |\n"
             "| `/self-patch approve <id>` | Approve a pending proposal |\n"
@@ -6791,6 +7240,13 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
             except Exception:
                 pass
             try:
+                from quote_corpus import context_block as _quote_corpus_ctx
+                _qctx = await asyncio.to_thread(_quote_corpus_ctx, user_text)
+                if _qctx:
+                    _grounding_block = (_grounding_block + "\n\n" + _qctx).strip()
+            except Exception:
+                pass
+            try:
                 from ai_lockbox import context_block as _ai_lockbox_ctx
                 _actx = await asyncio.to_thread(_ai_lockbox_ctx, user_text)
                 if _actx:
@@ -6851,6 +7307,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                                        reply_len=len(reply), latency=time.time() - _t_start)
                 except Exception:
                     pass
+                _integrate_cognitive_turn(user_text, reply)
                 yield _sse({"type": "token", "text": reply})
                 yield _sse({
                     "type": "done",
@@ -6968,6 +7425,7 @@ async def _stream_reply(user_text: str) -> AsyncGenerator[str, None]:
                                    reply_len=len(reply), latency=time.time() - _t_start)
             except Exception:
                 pass
+            _integrate_cognitive_turn(user_text, reply)
             yield _sse({"type": "token", "text": reply})
             yield _sse({"type": "done", "mode": _mode, "effective_route": effective_mode})
             return
@@ -7263,6 +7721,17 @@ async def api_human_state():
         import human_state
 
         return JSONResponse(await asyncio.to_thread(human_state.current_state))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/human-baseline")
+async def api_human_baseline(audience: str = "private"):
+    """Read-only structured baseline for Noah.Physical, with public/private boundary."""
+    try:
+        import human_baseline
+
+        return JSONResponse(await asyncio.to_thread(human_baseline.baseline_payload, audience=audience))
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
 
@@ -7652,6 +8121,65 @@ async def api_ai_lockbox_capsule(path: str = ""):
 
         return JSONResponse(await asyncio.to_thread(capsule_for_file, path))
     except AiLockboxError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/quote-corpus/status")
+async def api_quote_corpus_status():
+    """Exact quote-corpus status. Read-only; does not scan by itself."""
+    try:
+        from quote_corpus import status_payload
+
+        return JSONResponse(await asyncio.to_thread(status_payload))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.post("/api/quote-corpus/ingest")
+async def api_quote_corpus_ingest(payload: dict | None = None):
+    """Build bounded exact quote packets from readable files. Source files are unchanged."""
+    body = payload or {}
+    query = str(body.get("query") or "")
+    limit = int(body.get("limit") or 5)
+    max_quotes_per_file = int(body.get("max_quotes_per_file") or 80)
+    try:
+        from quote_corpus import QuoteCorpusError, build_quote_index
+
+        return JSONResponse(await asyncio.to_thread(
+            build_quote_index,
+            query,
+            limit=limit,
+            max_quotes_per_file=max_quotes_per_file,
+        ))
+    except QuoteCorpusError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/quote-corpus/search")
+async def api_quote_corpus_search(q: str = "", limit: int = 8):
+    """Search local exact quote excerpts."""
+    try:
+        from quote_corpus import QuoteCorpusError, search_quotes
+
+        return JSONResponse(await asyncio.to_thread(search_quotes, q, limit=limit))
+    except QuoteCorpusError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+
+@app.get("/api/quote-corpus/packet")
+async def api_quote_corpus_packet(path: str = ""):
+    """Create one exact quote packet for a readable source file."""
+    try:
+        from quote_corpus import QuoteCorpusError, ingest_file
+
+        return JSONResponse(await asyncio.to_thread(ingest_file, path))
+    except QuoteCorpusError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=500)

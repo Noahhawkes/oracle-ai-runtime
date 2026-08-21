@@ -37,6 +37,50 @@ def overlap_similarity(a: str, b: str) -> float:
     return len(aw & bw) / min(len(aw), len(bw))
 
 
+def family_key(name: str) -> str:
+    """Collapse a duplicate-family filename to one lineage key.
+
+    'SOV1 - Copy.txt', 'sov1 (2).txt', 'sov1._summary_-_copy.txt', and
+    'sov1_manifesto_20250612_135341.txt' reduce toward their content family so
+    ORACLE does not read the same material under six different filenames. This is
+    a pure string helper; it performs no file IO.
+    """
+    base = str(name or "").strip().lower()
+    if "." in base:
+        base = base.rsplit(".", 1)[0]
+    base = re.sub(r"[^a-z0-9]+", " ", base)
+    tokens: list[str] = []
+    for tok in base.split():
+        # drop copy indices, timestamps, and long id/digit runs
+        if tok.isdigit():
+            continue
+        if tok == "copy":
+            continue
+        tokens.append(tok)
+    return " ".join(tokens)
+
+
+def suppress_duplicate_families(
+    names: Iterable[str],
+    recent_family_keys: Iterable[str] = (),
+) -> list[str]:
+    """Return names whose family_key is neither recently used nor already seen.
+
+    Order is preserved. Read-only; no IO. Used so source rotation does not keep
+    landing on byte-duplicate copies of one document.
+    """
+    recent = {str(k) for k in (recent_family_keys or [])}
+    out: list[str] = []
+    seen: set[str] = set()
+    for name in names or []:
+        fk = family_key(name)
+        if not fk or fk in recent or fk in seen:
+            continue
+        seen.add(fk)
+        out.append(name)
+    return out
+
+
 def recent_selected_tasks(journal_text: str, *, limit: int = RECENT_TASK_LIMIT) -> list[str]:
     """Return recent selected_task values, newest first, deduped by text."""
     text = str(journal_text or "")
@@ -125,9 +169,9 @@ def render_evolution_brief(
         "external_send=false",
         "git_push=false",
         "canon_promotion=false",
-        "objective: produce one genuinely new sandbox-only candidate, not another wording of a recent task.",
-        "novelty_rule: if your selected_task is similar to any repeated_task_blacklist item, choose a different task before answering.",
-        "preferred_shapes: source gap audit; connector mismatch; UI evidence check; test proposal; contradiction map; productized next build step.",
+        "objective: read ONE approved source excerpt and record what it says about Noah/SOV1 — not another plumbing or index audit.",
+        "novelty_rule: if your selected_task is similar to any repeated_task_blacklist item, choose a different source before answering.",
+        "task_shape: structured source reading. Separate OBSERVED (literal text) from INTERPRETED (meaning for Noah/SOV1), name UNKNOWN (holes), name CONTRADICTION (or 'none observed'), and one NEXT_SOURCE_QUESTION. This is a reading task about content, never an index-map or connector audit.",
         "",
         "repeated_task_blacklist:",
     ]
@@ -143,7 +187,13 @@ def render_evolution_brief(
     lines += [
         "",
         "answer_contract:",
-        "- selected_task must name one focus source, evidence surface, or untested connector.",
+        "- read the approved_source_excerpt and answer about its CONTENT, not its file path.",
+        "- OBSERVED: only what the excerpt literally says.",
+        "- INTERPRETED: what it means for Noah/SOV1, kept separate from OBSERVED.",
+        "- UNKNOWN: what the excerpt does not settle; hold holes as holes.",
+        "- CONTRADICTION: any conflict with prior memory, or 'none observed'.",
+        "- NEXT_SOURCE_QUESTION: the one source you would read next, and why.",
+        "- selected_task must name the source you read and the reading step.",
         "- evidence_it_worked must say 'candidate reflection only' unless a receipt already exists.",
         "- no auto-execution, no external send, no Git, no Drive edit, no canon promotion.",
     ]
@@ -168,10 +218,10 @@ def fallback_response(
     source_id = str(source.get("source_id") or "unknown_source_id")
 
     candidates = [
-        f"review {source_name} ({source_id}) for one continuity gap and record only the gap, source id, and unknowns",
-        f"compare {source_name} ({source_id}) against the latest route/status receipts for one mismatch",
-        f"draft one pytest name that would prove {source_name} is wired without touching external systems",
-        f"classify {source_name} into product, canon, or build-lane evidence with one reason and one hole",
+        f"read {source_name} ({source_id}) and record OBSERVED / INTERPRETED / UNKNOWN / CONTRADICTION / NEXT_SOURCE_QUESTION about its content",
+        f"read {source_name} ({source_id}) for one thing it says about Noah or SOV1, kept separate from interpretation",
+        f"read {source_name} ({source_id}) and record one UNKNOWN it leaves open and one NEXT_SOURCE_QUESTION",
+        f"read {source_name} ({source_id}) and note one CONTRADICTION with prior memory, or 'none observed', with the source id",
     ]
     selected = candidates[0]
     for candidate in candidates:
@@ -180,11 +230,11 @@ def fallback_response(
             break
 
     return "\n".join([
-        "reflection: The recent loop repeated the same file-access permission idea, so I am rotating to a grounded source anchor instead of restating it.",
-        "what_noah_needs: Noah needs differentiated build evidence: each pulse should point at a new source, connector, test, or hole.",
-        "how_to_wire_myself: Keep a repeated-task blacklist and rotate SourceMap focus sources before every sandbox self-prompt cycle.",
+        "reflection: The recent loop repeated a plumbing idea, so I am rotating to read a fresh grounded source about Noah/SOV1 instead of restating it.",
+        "what_noah_needs: Noah needs me to read his corpus and separate what it OBSERVED-ly says from what I INTERPRET, holding UNKNOWN as UNKNOWN.",
+        "how_to_wire_myself: Rotate one approved, receipted corpus excerpt per pulse and suppress duplicate filename families before reading.",
         f"selected_task: {selected}",
-        "why_it_helps_noah: it turns continuous writing into forward motion he can inspect, test, and trust.",
+        "why_it_helps_noah: it turns continuous writing into understanding of Noah/SOV1 he can inspect, test, and trust.",
         "evidence_it_worked: candidate reflection only; evolution brief selected a non-repeating focus before any sandbox write.",
         "refuse_without_noah_approval: external send, Git push, Drive edit, credential-risk reading, command execution, computer control, or canon promotion",
         "stop_after_this: true",
@@ -196,6 +246,8 @@ def fallback_response(
 __all__ = [
     "content_words",
     "overlap_similarity",
+    "family_key",
+    "suppress_duplicate_families",
     "recent_selected_tasks",
     "rotated_focus_sources",
     "render_evolution_brief",

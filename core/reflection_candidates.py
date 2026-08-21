@@ -116,12 +116,19 @@ def assess_risk(parsed: dict[str, str]) -> str:
     return "low"
 
 
+_DRIFT_STATUSES = frozenset({"pending", "approved", "rejected", "quarantined"})
+
+
 def _recent_proposal_texts(limit: int = DRIFT_LOOKBACK) -> list[str]:
     try:
-        active = _ac.list_active()
+        candidates = _ac.list_candidates()
     except Exception:
         return []
-    recent = sorted(active, key=lambda c: str(c.get("created_at") or ""), reverse=True)
+    recent = sorted(
+        (c for c in candidates if c.get("status") in _DRIFT_STATUSES),
+        key=lambda c: str(c.get("updated_at") or c.get("created_at") or ""),
+        reverse=True,
+    )
     texts: list[str] = []
     for cand in recent[:limit]:
         texts.append(f"{cand.get('title', '')} {cand.get('description', '')}")
@@ -247,4 +254,34 @@ def approved_candidate_context(limit: int = 5) -> str:
     lines = ["- proposals Noah has approved (these are yours to build on):"]
     for cand in approved[:limit]:
         lines.append(f"    approved: {_clip(cand.get('title', ''), 160)}")
+    return "\n".join(lines)
+
+
+def rejected_candidate_context(limit: int = 5) -> str:
+    """Summarize recently rejected or quarantined proposals so the prompt builder
+    avoids re-proposing ideas Noah already declined."""
+    try:
+        all_candidates = _ac.list_candidates()
+    except Exception:
+        return ""
+    rejected = [
+        c for c in all_candidates
+        if c.get("status") in ("rejected", "quarantined")
+    ]
+    if not rejected:
+        return ""
+    rejected = sorted(
+        rejected,
+        key=lambda c: str(c.get("updated_at") or c.get("created_at") or ""),
+        reverse=True,
+    )
+    lines = [
+        "- proposals Noah rejected or quarantined (do not resubmit unless genuinely new):"
+    ]
+    for cand in rejected[:limit]:
+        reason = str(cand.get("rejection_reason") or "").strip()
+        suffix = f"  reason: {_clip(reason, 120)}" if reason else ""
+        lines.append(
+            f"    {cand.get('status')}: {_clip(cand.get('title', ''), 160)}{suffix}"
+        )
     return "\n".join(lines)

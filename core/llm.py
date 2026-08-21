@@ -132,7 +132,22 @@ def make_client():
             "API independence violated: ORACLE_FORCE_LOCAL=true blocks cloud model clients."
         )
 
-    # Cloud mode — anthropic is optional; only imported here
+    # Cloud mode — delegate to the shared, independence-respecting factory.
+    return make_anthropic_client()
+
+
+def make_anthropic_client():
+    """Return an Anthropic SDK client for opt-in frontier paths, or raise clearly.
+
+    Independence-respecting: refuses when ORACLE_FORCE_LOCAL=true. Requires the
+    anthropic package and ANTHROPIC_API_KEY. Lets a single lane (e.g. the
+    talk-lane mouth) opt into cloud WITHOUT flipping the global LOCAL_MODE
+    default. Never logs or returns the key.
+    """
+    if is_force_local():
+        raise RuntimeError(
+            "API independence violated: ORACLE_FORCE_LOCAL=true blocks cloud model clients."
+        )
     try:
         import anthropic
     except ImportError:

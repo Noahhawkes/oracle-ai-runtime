@@ -158,9 +158,11 @@ def test_web_guard_approval_followup_bypasses_companion_model(tmp_path, monkeypa
 def test_web_ask_sov1_stages_local_handoff_without_model(tmp_path, monkeypatch):
     os.environ["ORACLE_SKIP_SERVER_BOOT"] = "1"
     import desktop_ai_bridge as bridge
+    import existence_integration as integration
     import oracle_server
 
     monkeypatch.setattr(bridge, "STAGED_PROMPT_FILE", tmp_path / "desktop_ai_staged_prompt.json")
+    monkeypatch.setattr(integration, "EXISTENCE_DATABASE_PATH", tmp_path / "existence.db")
     monkeypatch.setattr(oracle_server, "_mode", "companion")
     monkeypatch.setattr(oracle_server, "_no_route", False)
     monkeypatch.setattr(oracle_server, "_history", [])
@@ -189,9 +191,11 @@ def test_web_ask_sov1_stages_local_handoff_without_model(tmp_path, monkeypatch):
 def test_web_send_staged_confirms_sov1_handoff_only(tmp_path, monkeypatch):
     os.environ["ORACLE_SKIP_SERVER_BOOT"] = "1"
     import desktop_ai_bridge as bridge
+    import existence_integration as integration
     import oracle_server
 
     monkeypatch.setattr(bridge, "STAGED_PROMPT_FILE", tmp_path / "desktop_ai_staged_prompt.json")
+    monkeypatch.setattr(integration, "EXISTENCE_DATABASE_PATH", tmp_path / "existence.db")
     monkeypatch.setattr(oracle_server, "_mode", "companion")
     monkeypatch.setattr(oracle_server, "_no_route", False)
     monkeypatch.setattr(oracle_server, "_history", [])

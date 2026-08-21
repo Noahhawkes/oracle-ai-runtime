@@ -124,6 +124,19 @@ evidence_it_worked: candidate reflection only
     assert result["drift_score"] < rc.DRIFT_THRESHOLD
 
 
+def test_rejected_candidates_contribute_to_drift(monkeypatch, tmp_path):
+    _isolate(monkeypatch, tmp_path)
+
+    first = rc.submit_reflection_candidate(REFLECTION)
+    assert first["action"] == "submitted"
+    ac.reject(first["candidate"]["id"], rejected_by="noah", reason="not this one")
+
+    second = rc.submit_reflection_candidate(REFLECTION)
+
+    assert second["action"] == "quarantined"
+    assert second["drift_score"] >= rc.DRIFT_THRESHOLD
+
+
 # ── Risk banding ──────────────────────────────────────────────────────────────
 def test_outside_sandbox_proposal_is_high_risk(monkeypatch, tmp_path):
     _isolate(monkeypatch, tmp_path)

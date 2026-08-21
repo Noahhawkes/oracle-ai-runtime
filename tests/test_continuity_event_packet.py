@@ -38,8 +38,34 @@ def test_build_packet_contains_whole_event_spine():
     )
 
     assert packet["schema_version"] == "continuity_event_packet.v1"
+    for key in (
+        "event_id",
+        "timestamp",
+        "source",
+        "speaker",
+        "channel",
+        "visible_context",
+        "user_intent",
+        "assistant_response",
+        "evidence_used",
+        "claims_extracted",
+        "uncertainties",
+        "corrections",
+        "actions_proposed",
+        "actions_taken",
+        "authority_status",
+        "memory_effect",
+        "return_pointer",
+    ):
+        assert key in packet
     assert packet["human_source"] == "Noah.Physical"
+    assert packet["source"] == "ORACLE /chat SSE"
+    assert packet["speaker"] == "Noah.Physical"
+    assert packet["channel"] == "ORACLE /chat SSE"
     assert packet["user_input"]["sha256"]
+    assert packet["assistant_response"] == packet["assistant_output"]
+    assert packet["evidence_used"] == packet["sources"]
+    assert packet["return_pointer"] == packet["resume_point"]
     assert packet["assistant_output"]["sha256"]
     assert packet["route"]["effective_route"] == "recall_orchestrator"
     assert packet["sources"]["records_used_count"] == 1
@@ -48,6 +74,43 @@ def test_build_packet_contains_whole_event_spine():
     assert packet["canon_status"]["promotion_status"] == "not_promoted"
     assert packet["boundaries"]["sandbox_read_by_packet"] is False
     assert packet["boundaries"]["external_send"] is False
+
+
+def test_source_resolution_metadata_becomes_candidate_claims():
+    packet = cep.build_event_packet(
+        user_text="How old am I?",
+        assistant_output="You're 44.",
+        done_payload={
+            "type": "done",
+            "route_type": "recall_orchestrator",
+            "effective_route": "recall_orchestrator",
+            "recall_evidence": {
+                "source_resolution": {
+                    "status": "RESOLVED",
+                    "fact_domain": "personal_identity",
+                    "field": "date_of_birth",
+                    "selected_claim": {
+                        "source_class": "governed_verified_identity_record",
+                        "source_id": "identity-record-1",
+                        "precision": "exact",
+                    },
+                    "candidate_claims": [{"source_id": "identity-record-1"}],
+                    "conflicts": [],
+                    "provenance_refs": ["remember_me"],
+                }
+            },
+        },
+        session_id="claim-test",
+    )
+
+    assert packet["claims_extracted"]
+    claim = packet["claims_extracted"][0]
+    assert claim["claim_type"] == "source_resolution"
+    assert claim["status"] == "RESOLVED"
+    assert claim["fact_domain"] == "personal_identity"
+    assert claim["field"] == "date_of_birth"
+    assert claim["selected_source_class"] == "governed_verified_identity_record"
+    assert claim["boundary"] == "candidate extraction from resolver metadata; not canon promotion"
 
 
 def test_write_packet_creates_local_candidate_files_without_sandbox(tmp_path):

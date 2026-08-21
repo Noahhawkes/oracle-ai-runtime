@@ -265,7 +265,7 @@
   #safety-indicator.receipt { background: rgba(251,191,36,0.14); color: #fbbf24; }
   #safety-indicator.approval { background: rgba(239,68,68,0.16); color: #f87171; }
   #safety-indicator.blocked { background: rgba(239,68,68,0.22); color: #fecaca; }
-  #read-access-btn, #ai-lockbox-btn {
+  #read-access-btn, #ai-lockbox-btn, #ui-advanced-btn {
     border: 1px solid rgba(34,211,238,0.22);
     border-radius: 6px;
     background: rgba(34,211,238,0.10);
@@ -281,6 +281,141 @@
   #read-access-btn.ok { border-color: rgba(34,211,238,0.32); background: rgba(34,211,238,0.13); color: #67e8f9; }
   #ai-lockbox-btn.warn { border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.12); color: #fbbf24; }
   #ai-lockbox-btn.ok { border-color: rgba(16,163,127,0.36); background: rgba(16,163,127,0.13); color: #5eead4; }
+  #ui-advanced-btn {
+    border-color: rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.06);
+    color: var(--text-dim);
+  }
+  body.ui-advanced-open #ui-advanced-btn {
+    border-color: rgba(16,163,127,0.38);
+    background: rgba(16,163,127,0.12);
+    color: #b7f7df;
+  }
+
+  #advanced-controls {
+    display: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(23,23,23,0.78);
+    flex-shrink: 0;
+  }
+  body.ui-advanced-open #advanced-controls { display: flex; }
+  #advanced-controls button,
+  #advanced-controls a {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 11px;
+    line-height: 1.2;
+    cursor: pointer;
+    text-decoration: none;
+    font-family: inherit;
+  }
+  #advanced-controls button:hover,
+  #advanced-controls a:hover {
+    border-color: var(--accent);
+    color: #fff;
+  }
+  #advanced-controls .advanced-label {
+    width: 100%;
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  body:not(.ui-advanced-open) .route-receipt { display: none; }
+  body:not(.ui-advanced-open) #ce-copyall,
+  body:not(.ui-advanced-open) #ce-fdn,
+  body:not(.ui-advanced-open) #ce-fup,
+  body:not(.ui-advanced-open) #ce-charcount {
+    display: none !important;
+  }
+  body:not(.ui-advanced-open) #ce-bar {
+    bottom: 10px !important;
+    padding: 5px 8px !important;
+    opacity: 0.78;
+  }
+  body:not(.ui-advanced-open) #af-fab {
+    bottom: 48px !important;
+    opacity: 0.78;
+  }
+  body:not(.ui-advanced-open) #rr-bridge-fab {
+    padding: 7px 10px !important;
+    letter-spacing: 0.04em !important;
+    text-transform: none !important;
+    opacity: 0.72;
+  }
+  body:not(.ui-advanced-open) #rr-bridge-fab:hover,
+  body:not(.ui-advanced-open) #af-fab:hover,
+  body:not(.ui-advanced-open) #ce-bar:hover {
+    opacity: 1;
+  }
+  #ce-bar,
+  #af-fab,
+  #af-panel {
+    left: 272px !important;
+  }
+  body.sidebar-collapsed #ce-bar,
+  body.sidebar-collapsed #af-fab,
+  body.sidebar-collapsed #af-panel {
+    left: 12px !important;
+  }
+  @media (max-width: 760px) {
+    #sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      z-index: 9100;
+      width: 260px !important;
+      min-width: 260px !important;
+      transform: translateX(0);
+      transition: transform 0.2s;
+    }
+    #sidebar.collapsed {
+      width: 260px !important;
+      min-width: 260px !important;
+      transform: translateX(-100%);
+    }
+    #main {
+      width: 100vw;
+      min-width: 0;
+      height: 100dvh;
+    }
+    #topbar {
+      gap: 6px;
+      padding: 0 8px;
+    }
+    #topbar-title {
+      min-width: 0;
+    }
+    #mode-indicator,
+    #safety-indicator,
+    #ai-lockbox-btn,
+    #self-prompt-btn,
+    #ui-advanced-btn {
+      font-size: 10px;
+      padding: 4px 7px;
+    }
+    #presence-rail {
+      padding: 7px 10px;
+      gap: 10px;
+    }
+    #input-area {
+      padding-left: 12px;
+      padding-right: 12px;
+    }
+    #ce-bar,
+    #af-fab,
+    #af-panel {
+      left: 12px !important;
+    }
+  }
 
   /* ── Messages ── */
   #messages {
@@ -360,6 +495,45 @@
     max-width: 100%;
     overflow-wrap: anywhere;
   }
+
+  .sandbox-edit-card {
+    border: 1px solid rgba(34, 211, 238, 0.45);
+    border-radius: 10px;
+    background: rgba(34, 211, 238, 0.045);
+    padding: 14px;
+  }
+  .sandbox-edit-card h3 { margin: 0 0 8px; font-size: 15px; }
+  .sandbox-edit-card .sandbox-edit-meta,
+  .sandbox-edit-card .sandbox-edit-boundary {
+    color: var(--text-dim);
+    font-size: 11px;
+    overflow-wrap: anywhere;
+  }
+  .sandbox-edit-card .sandbox-edit-boundary { margin-top: 9px; }
+  .sandbox-edit-card pre {
+    max-height: 300px;
+    white-space: pre;
+    color: var(--text);
+  }
+  .sandbox-edit-card .sandbox-edit-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .sandbox-edit-card button {
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    padding: 7px 11px;
+  }
+  .sandbox-edit-card button.confirm { border-color: var(--accent); color: var(--accent); }
+  .sandbox-edit-card button:disabled { cursor: default; opacity: 0.5; }
+  .sandbox-edit-card .sandbox-edit-status { margin-top: 9px; font-size: 12px; }
+  .sandbox-edit-card .sandbox-edit-status.ok { color: #4ade80; }
+  .sandbox-edit-card .sandbox-edit-status.error { color: #f87171; }
 
   .msg-bubble.user {
     background: var(--user-bg);
@@ -455,6 +629,7 @@
     transition: all 0.15s;
   }
   .chip:hover { border-color: var(--accent); color: var(--text); background: var(--surface2); }
+  body:not(.ui-advanced-open) .chip-extra { display: none; }
 
   /* ── Input area ── */
   #input-area {
@@ -580,6 +755,7 @@
     background: rgba(239,68,68,0.10);
   }
   .durability-chip.warn::before { background: var(--danger); }
+  body:not(.ui-advanced-open) .dur-extra { display: none; }
 
   #durability-detail {
     max-width: 800px;
@@ -907,6 +1083,7 @@
   }
   #presence-rail b { color: var(--text); font-weight: 600; }
   #presence-rail .pr-item { white-space: nowrap; }
+  body:not(.ui-advanced-open) #presence-rail .pr-extra { display: none; }
   .pr-dot {
     width: 7px; height: 7px; border-radius: 50%; background: #34d399;
     box-shadow: 0 0 8px #34d399; animation: prPulse 2.4s ease-in-out infinite;
@@ -975,9 +1152,14 @@
     <span id="topbar-title">ORACLE</span>
     <div id="mode-indicator" class="talk_lane" role="button" tabindex="0" onclick="showRuntimeDetail()" title="Show live runtime status">Talk</div>
     <div id="safety-indicator" class="safe" role="button" tabindex="0" onclick="showRuntimeDetail()" title="Show live runtime status">Safe</div>
-    <button id="read-access-btn" onclick="showReadAccessDetail()" title="Full-PC read-only access receipt">Read?</button>
     <button id="ai-lockbox-btn" onclick="showAiLockboxDetail()" title="Local .AI shorthand recall lockbox">Recall?</button>
     <button id="self-prompt-btn" onclick="toggleSelfPromptMode()" title="Writer mode is governed by Noah">Writer OFF</button>
+    <button id="ui-advanced-btn" onclick="toggleAdvancedControls()" title="Show diagnostics, receipts, and operator tools">More</button>
+  </div>
+
+  <div id="advanced-controls" aria-label="Advanced ORACLE controls">
+    <span class="advanced-label">Advanced tools</span>
+    <button id="read-access-btn" onclick="showReadAccessDetail()" title="Full-PC read-only access receipt">Read?</button>
     <button id="self-notes-btn" onclick="showSelfPromptJournal()" title="Read ORACLE's self-written sandbox prompt trail">Self Notes</button>
     <button id="tuneup-btn" onclick="showTuneupPanel()" title="Connector and tune-up status">Tune</button>
     <button id="human-state-btn" onclick="showHumanStatePanel()" title="Explicit Noah state and re-entry brief">Human ?</button>
@@ -1212,13 +1394,13 @@
   <div id="presence-rail">
     <span class="pr-dot"></span>
     <span class="pr-item">mode <b id="pr-mode">…</b></span>
-    <span class="pr-item">cognition <b id="pr-cognition">…</b></span>
+    <span class="pr-item pr-extra">cognition <b id="pr-cognition">…</b></span>
     <span class="pr-item">memory <b id="pr-mem">…</b></span>
-    <span class="pr-item">law <b id="pr-law">…</b></span>
-    <span class="pr-item">life <b id="pr-life">…</b></span>
-    <span class="pr-item">bridge <b id="pr-bridge">…</b></span>
+    <span class="pr-item pr-extra">law <b id="pr-law">…</b></span>
+    <span class="pr-item pr-extra">life <b id="pr-life">…</b></span>
+    <span class="pr-item pr-extra">bridge <b id="pr-bridge">…</b></span>
     <span class="pr-item" id="pr-intent-wrap" style="display:none">carrying <b id="pr-intent"></b></span>
-    <span class="pr-item" id="pr-obs-wrap" style="display:none">last look <b id="pr-obs"></b></span>
+    <span class="pr-item pr-extra" id="pr-obs-wrap" style="display:none">last look <b id="pr-obs"></b></span>
     <span class="pr-grow"></span>
     <span class="pr-receipt" id="pr-heartbeat">grounded · continuous</span>
   </div>
@@ -1231,12 +1413,12 @@
       <div class="suggestion-chips" id="welcome-chips">
         <div class="chip" onclick="sendSuggestion('Are you there?')">Are you there?</div>
         <div class="chip" onclick="sendSuggestion('What are you working on?')">What are you working on?</div>
-        <div class="chip" onclick="sendSuggestion('Who is Ellie from the grounded Ellie Rendered Reality domain?')">Ask Ellie domain</div>
-        <div class="chip" onclick="sendSuggestion('/self-patch')">Propose a self-improvement</div>
         <div class="chip" onclick="sendSuggestion('/focus')">Show current focus</div>
-        <div class="chip" onclick="sendSuggestion('/ai-lockbox-status')">Recall lockbox</div>
-        <div class="chip" onclick="sendSuggestion('/ai-lockbox-search oracle')">Search .AI recall</div>
-        <div class="chip" onclick="sendSuggestion('/help')">Show commands</div>
+        <div class="chip chip-extra" onclick="sendSuggestion('Who is Ellie from the grounded Ellie Rendered Reality domain?')">Ask Ellie domain</div>
+        <div class="chip chip-extra" onclick="sendSuggestion('/self-patch')">Propose a self-improvement</div>
+        <div class="chip chip-extra" onclick="sendSuggestion('/ai-lockbox-status')">Recall lockbox</div>
+        <div class="chip chip-extra" onclick="sendSuggestion('/ai-lockbox-search oracle')">Search .AI recall</div>
+        <div class="chip chip-extra" onclick="sendSuggestion('/help')">Show commands</div>
       </div>
     </div>
   </div>
@@ -1249,6 +1431,9 @@
         </button>
         <button class="tool-btn" id="mic-btn" onclick="toggleMic()" title="Speak to ORACLE">
           <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+        </button>
+        <button class="tool-btn" id="sandbox-edit-btn" onclick="prepareSandboxEdit()" title="Read, diff, and confirm an edit inside sandbox only">
+          <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
         </button>
         <button class="tool-btn active" id="voice-btn" onclick="toggleVoice()" title="ORACLE speaks her replies aloud">
           <svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
@@ -1269,9 +1454,9 @@
       <span class="durability-chip pending" id="dur-save-state" role="button" tabindex="0" data-durability-detail="save">checking save</span>
       <span class="durability-chip pending" id="dur-history-source" role="button" tabindex="0" data-durability-detail="history">history unknown</span>
       <span class="durability-chip pending" id="dur-session-count" role="button" tabindex="0" data-durability-detail="thread">thread --</span>
-      <span class="durability-chip pending" id="dur-custody-count" role="button" tabindex="0" data-durability-detail="custody">custody --</span>
-      <span class="durability-chip pending" id="dur-index-count" role="button" tabindex="0" data-durability-detail="index">index --</span>
-      <span class="durability-chip pending" id="dur-ellie-domain" role="button" tabindex="0" onclick="showEllieDomainDetail()" title="Ellie Rendered Reality read-domain">ellie domain --</span>
+      <span class="durability-chip pending dur-extra" id="dur-custody-count" role="button" tabindex="0" data-durability-detail="custody">custody --</span>
+      <span class="durability-chip pending dur-extra" id="dur-index-count" role="button" tabindex="0" data-durability-detail="index">index --</span>
+      <span class="durability-chip pending dur-extra" id="dur-ellie-domain" role="button" tabindex="0" onclick="showEllieDomainDetail()" title="Ellie Rendered Reality read-domain">ellie domain --</span>
       <span class="durability-chip pending" id="dur-receipt" role="button" tabindex="0" data-durability-detail="receipt">receipt --</span>
     </div>
     <div id="durability-detail" aria-live="polite">
@@ -1281,7 +1466,7 @@
       </div>
       <div id="durability-detail-body">Select a durability chip to inspect its receipt.</div>
     </div>
-    <div id="input-hint">Enter to send · 👁 webcam · 🎤 voice in · 🔊 voice out · /help for commands</div>
+    <div id="input-hint">Enter to send · ✎ confirmed sandbox edit · 👁 webcam · 🎤 voice in · 🔊 voice out · /help for commands</div>
   </div>
 </div>
 
@@ -1302,6 +1487,36 @@
 // ── Safe API base — resolves fetch calls against the correct HTTP origin ──────
 const API_ORIGIN = window.location.origin;  // e.g. http://127.0.0.1:7781
 function apiUrl(path) { return API_ORIGIN + path; }
+
+const UI_ADVANCED_STORAGE_KEY = 'oracle_ui_advanced_open';
+
+function setAdvancedControlsOpen(open) {
+  const enabled = !!open;
+  document.body.classList.toggle('ui-advanced-open', enabled);
+  const btn = document.getElementById('ui-advanced-btn');
+  if (btn) {
+    btn.textContent = enabled ? 'Less' : 'More';
+    btn.setAttribute('aria-expanded', enabled ? 'true' : 'false');
+    btn.title = enabled
+      ? 'Hide diagnostics, receipts, and operator tools'
+      : 'Show diagnostics, receipts, and operator tools';
+  }
+  try {
+    localStorage.setItem(UI_ADVANCED_STORAGE_KEY, enabled ? '1' : '0');
+  } catch {}
+}
+
+function toggleAdvancedControls() {
+  setAdvancedControlsOpen(!document.body.classList.contains('ui-advanced-open'));
+}
+
+function initUiDensity() {
+  let open = false;
+  try {
+    open = localStorage.getItem(UI_ADVANCED_STORAGE_KEY) === '1';
+  } catch {}
+  setAdvancedControlsOpen(open);
+}
 
 // ── Pre-fill from MiracleDrive ?q= param ──────────────────────────────────────
 (function() {
@@ -1335,7 +1550,18 @@ marked.setOptions({ breaks: true, gfm: true });
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('collapsed');
+  const sidebar = document.getElementById('sidebar');
+  sidebar.classList.toggle('collapsed');
+  document.body.classList.toggle('sidebar-collapsed', sidebar.classList.contains('collapsed'));
+}
+
+function initSidebarState() {
+  const sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
+  if (window.matchMedia && window.matchMedia('(max-width: 760px)').matches) {
+    sidebar.classList.add('collapsed');
+  }
+  document.body.classList.toggle('sidebar-collapsed', sidebar.classList.contains('collapsed'));
 }
 
 // ── Mode ──────────────────────────────────────────────────────────────────────
@@ -2566,12 +2792,239 @@ function addHistoryItem(text) {
   }
 }
 
+// ── Audited sandbox edit ─────────────────────────────────────────────────────
+// This is deliberately a browser-mediated confirmation flow. The chat command
+// never writes by itself: it reads through /api/sandbox/read, renders the
+// proposal, and only the explicit confirmation button calls /api/sandbox/edit.
+function prepareSandboxEdit() {
+  const input = document.getElementById('input');
+  input.value = '/sandbox-edit workbench/notes.md | ';
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+  autoResize(input);
+}
+
+function parseSandboxEditCommand(text) {
+  const match = String(text || '').match(/^\/sandbox-edit(?:\s+([\s\S]*))?$/i);
+  if (!match) return null;
+  const payload = match[1] || '';
+  const divider = payload.indexOf('|');
+  if (divider < 0) {
+    return { recognized: true, error: 'Usage: /sandbox-edit <sandbox path> | <complete proposed content>' };
+  }
+  const path = payload.slice(0, divider).trim();
+  let content = payload.slice(divider + 1);
+  if (content.startsWith(' ')) content = content.slice(1);
+  if (!path) {
+    return { recognized: true, error: 'A path below sandbox/ is required.' };
+  }
+  return { recognized: true, path, content };
+}
+
+async function sandboxApiJson(path, body) {
+  const response = await fetch(apiUrl(path), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  let data = {};
+  try { data = await response.json(); } catch (_) {}
+  if (!response.ok || !data.ok) {
+    throw new Error(data.error || `${path} returned ${response.status}`);
+  }
+  return data;
+}
+
+function sandboxUnifiedDiff(before, after, path) {
+  const oldLines = String(before).split('\n');
+  const newLines = String(after).split('\n');
+  let prefix = 0;
+  while (prefix < oldLines.length && prefix < newLines.length && oldLines[prefix] === newLines[prefix]) prefix++;
+  let suffix = 0;
+  while (
+    suffix < oldLines.length - prefix &&
+    suffix < newLines.length - prefix &&
+    oldLines[oldLines.length - 1 - suffix] === newLines[newLines.length - 1 - suffix]
+  ) suffix++;
+  if (prefix === oldLines.length && prefix === newLines.length) return '(no content change)';
+
+  const contextStart = Math.max(0, prefix - 2);
+  const oldEnd = oldLines.length - suffix;
+  const newEnd = newLines.length - suffix;
+  const tailEnd = Math.min(oldLines.length, oldEnd + 2);
+  const lines = [`--- ${path}:before`, `+++ ${path}:proposed`];
+  if (contextStart > 0) lines.push(' ...');
+  oldLines.slice(contextStart, prefix).forEach(line => lines.push(' ' + line));
+  oldLines.slice(prefix, oldEnd).forEach(line => lines.push('-' + line));
+  newLines.slice(prefix, newEnd).forEach(line => lines.push('+' + line));
+  oldLines.slice(oldEnd, tailEnd).forEach(line => lines.push(' ' + line));
+  if (tailEnd < oldLines.length) lines.push(' ...');
+  return lines.join('\n');
+}
+
+function sandboxEditElement(tag, className, text) {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  if (text !== undefined) element.textContent = text;
+  return element;
+}
+
+function renderSandboxEditRefusal(bubble, message) {
+  bubble.innerHTML = '';
+  const card = sandboxEditElement('div', 'sandbox-edit-card');
+  card.appendChild(sandboxEditElement('h3', '', 'SANDBOX EDIT REFUSED'));
+  card.appendChild(sandboxEditElement('div', 'sandbox-edit-status error', message));
+  card.appendChild(sandboxEditElement(
+    'div',
+    'sandbox-edit-boundary',
+    'Hard boundary: C:\\Oracle\\ORACLE.AI-runtime\\sandbox\\ only. No source-code edit, computer control, Drive write, Git action, or external action was attempted.'
+  ));
+  bubble.appendChild(card);
+  bubble.dataset.raw = `SANDBOX EDIT REFUSED\n${message}`;
+  updateRouteReceipt(bubble, {
+    route_type: 'sandbox_edit_refused',
+    lane: 'sandbox_only',
+    reason: 'path failed the confined sandbox read boundary',
+    fallback_used: false
+  });
+}
+
+async function confirmSandboxEdit(card, command, initialRead, controls) {
+  controls.confirm.disabled = true;
+  controls.cancel.disabled = true;
+  controls.status.className = 'sandbox-edit-status';
+  controls.status.textContent = 'Writing confirmed proposal through /api/sandbox/edit…';
+  let writeResult = null;
+  try {
+    writeResult = await sandboxApiJson('/api/sandbox/edit', {
+      path: command.path,
+      content: command.content,
+      expected_sha256: initialRead.sha256,
+      caller: 'ORACLE.web.confirmed_sandbox_edit'
+    });
+    controls.status.textContent = 'Write receipted; re-reading through /api/sandbox/read…';
+    const reread = await sandboxApiJson('/api/sandbox/read', { path: command.path });
+    if (reread.sha256 !== writeResult.post_operation_sha256 || reread.content !== command.content) {
+      throw new Error('post-write re-read did not match the confirmed proposal');
+    }
+    controls.status.className = 'sandbox-edit-status ok';
+    controls.status.textContent = 'Confirmed, written, and re-read successfully.';
+    controls.confirm.textContent = 'Written ✓';
+
+    const receipt = sandboxEditElement('div', 'sandbox-edit-meta');
+    receipt.textContent =
+      `Receipt: ${writeResult.receipt_path}\n` +
+      `Before SHA-256: ${writeResult.pre_operation_sha256}\n` +
+      `After SHA-256: ${writeResult.post_operation_sha256}`;
+    receipt.style.whiteSpace = 'pre-wrap';
+    card.appendChild(receipt);
+
+    const finalDetails = document.createElement('details');
+    const summary = sandboxEditElement('summary', '', 'Verified re-read content');
+    const finalContent = sandboxEditElement('pre', '', reread.content);
+    finalDetails.appendChild(summary);
+    finalDetails.appendChild(finalContent);
+    card.appendChild(finalDetails);
+  } catch (error) {
+    controls.status.className = 'sandbox-edit-status error';
+    controls.status.textContent = writeResult
+      ? `Write returned a receipt, but verification failed: ${error.message}`
+      : `Not written: ${error.message}. Re-run the proposal to read the current file again.`;
+    controls.confirm.disabled = !!writeResult;
+    controls.cancel.disabled = false;
+  }
+}
+
+function renderSandboxEditProposal(bubble, command, readResult) {
+  bubble.innerHTML = '';
+  const card = sandboxEditElement('div', 'sandbox-edit-card');
+  card.appendChild(sandboxEditElement('h3', '', 'SANDBOX EDIT PROPOSAL'));
+  card.appendChild(sandboxEditElement(
+    'div',
+    'sandbox-edit-meta',
+    `Read: ${readResult.path}\nSHA-256: ${readResult.sha256}\nState: not written`
+  ));
+  card.lastChild.style.whiteSpace = 'pre-wrap';
+
+  const originalDetails = document.createElement('details');
+  originalDetails.appendChild(sandboxEditElement('summary', '', 'Original file read'));
+  originalDetails.appendChild(sandboxEditElement('pre', '', readResult.content));
+  card.appendChild(originalDetails);
+
+  card.appendChild(sandboxEditElement('pre', 'sandbox-edit-diff', sandboxUnifiedDiff(readResult.content, command.content, command.path)));
+  card.appendChild(sandboxEditElement(
+    'div',
+    'sandbox-edit-boundary',
+    'Confirmation writes only this file under sandbox/. The original SHA guard prevents overwriting a file that changed after this read.'
+  ));
+
+  const actions = sandboxEditElement('div', 'sandbox-edit-actions');
+  const confirm = sandboxEditElement('button', 'confirm', 'Confirm sandbox write');
+  const cancel = sandboxEditElement('button', '', 'Cancel');
+  const status = sandboxEditElement('div', 'sandbox-edit-status', 'Awaiting explicit confirmation; no mutation has occurred.');
+  if (readResult.content === command.content) {
+    confirm.disabled = true;
+    status.textContent = 'No content change; nothing will be written.';
+  }
+  const controls = { confirm, cancel, status };
+  confirm.onclick = () => confirmSandboxEdit(card, command, readResult, controls);
+  cancel.onclick = () => {
+    confirm.disabled = true;
+    cancel.disabled = true;
+    status.textContent = 'Cancelled; no mutation occurred.';
+  };
+  actions.appendChild(confirm);
+  actions.appendChild(cancel);
+  card.appendChild(actions);
+  card.appendChild(status);
+  bubble.appendChild(card);
+  bubble.dataset.raw = `SANDBOX EDIT PROPOSAL\n${sandboxUnifiedDiff(readResult.content, command.content, command.path)}\nState: not written`;
+  updateRouteReceipt(bubble, {
+    route_type: 'sandbox_edit_proposal',
+    lane: 'sandbox_only',
+    reason: 'read complete; explicit confirmation required before write',
+    fallback_used: false
+  });
+}
+
+async function runSandboxEditFlow(text, command) {
+  const input = document.getElementById('input');
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('send-btn').disabled = true;
+  isStreaming = true;
+  stopSpeaking();
+  addMessage('user', text);
+  const bubble = addMessage('oracle', '', true);
+  try {
+    if (command.error) {
+      renderSandboxEditRefusal(bubble, command.error);
+      return;
+    }
+    const readResult = await sandboxApiJson('/api/sandbox/read', { path: command.path });
+    renderSandboxEditProposal(bubble, command, readResult);
+  } catch (error) {
+    renderSandboxEditRefusal(bubble, error.message || String(error));
+  } finally {
+    isStreaming = false;
+    document.getElementById('send-btn').disabled = false;
+    input.focus();
+    scrollToBottom();
+  }
+}
+
 // ── Send message ──────────────────────────────────────────────────────────────
 async function sendMessage() {
   if (isStreaming) return;
   const input = document.getElementById('input');
   const text = input.value.trim();
   if (!text) return;
+
+  const sandboxEditCommand = parseSandboxEditCommand(text);
+  if (sandboxEditCommand) {
+    await runSandboxEditFlow(text, sandboxEditCommand);
+    return;
+  }
 
   input.value = '';
   input.style.height = 'auto';
@@ -3900,6 +4353,8 @@ async function restoreHistory() {
 }
 
 async function init() {
+  initSidebarState();
+  initUiDensity();
   bindDurabilityControls();
 
   try {

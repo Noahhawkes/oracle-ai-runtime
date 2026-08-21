@@ -29,6 +29,7 @@ OBS_LOGS = Path(r"C:\Users\noahh\AppData\Roaming\obs-studio\logs")
 OLLAMA = "http://127.0.0.1:11434/api/generate"
 MODEL = "qwen2.5vl:7b"
 INTERVAL = 60  # seconds between samples
+SCREENSHOT_CAPTURE_ENABLED = False
 
 PROMPT = (
     "This is a screenshot of a desktop with one or more AI chat applications visible "
@@ -81,6 +82,13 @@ def vision_read(img_b64: str) -> str:
 
 
 def main():
+    if not SCREENSHOT_CAPTURE_ENABLED:
+        print(
+            "prompt_witness disabled: screenshot extraction was replaced by "
+            "obs_media_metadata_witness.py",
+            flush=True,
+        )
+        return
     FRAMES.mkdir(parents=True, exist_ok=True)
     prev_extract_hash = None
     print(f"prompt_witness up. interval={INTERVAL}s log={LOG}", flush=True)

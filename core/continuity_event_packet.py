@@ -209,6 +209,61 @@ def _executed_actions(done_payload: dict[str, Any], assistant_output: str) -> li
     return actions
 
 
+def _source_resolution_payload(done_payload: dict[str, Any]) -> dict[str, Any]:
+    recall = _coerce_dict(done_payload.get("recall_evidence"))
+    if recall.get("source_resolution"):
+        return _coerce_dict(recall.get("source_resolution"))
+    evidence = _coerce_dict(done_payload.get("evidence"))
+    recall_from_evidence = _coerce_dict(evidence.get("recall_orchestrator"))
+    return _coerce_dict(recall_from_evidence.get("source_resolution"))
+
+
+def _claims_extracted(done_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    claims: list[dict[str, Any]] = []
+    resolution = _source_resolution_payload(done_payload)
+    if resolution:
+        selected = _coerce_dict(resolution.get("selected_claim"))
+        claims.append({
+            "claim_type": "source_resolution",
+            "status": resolution.get("status") or "UNKNOWN",
+            "fact_domain": resolution.get("fact_domain") or "UNKNOWN",
+            "field": resolution.get("field") or "UNKNOWN",
+            "selected_source_class": selected.get("source_class") or None,
+            "selected_source_id": selected.get("source_id") or None,
+            "selected_precision": selected.get("precision") or None,
+            "conflict_count": len(_coerce_list(resolution.get("conflicts"))),
+            "candidate_count": len(_coerce_list(resolution.get("candidate_claims"))),
+            "provenance_refs": _coerce_list(resolution.get("provenance_refs")),
+            "boundary": "candidate extraction from resolver metadata; not canon promotion",
+        })
+
+    evidence = _coerce_dict(done_payload.get("evidence"))
+    for record in _coerce_list(evidence.get("records_used"))[:10]:
+        if not isinstance(record, dict):
+            continue
+        claims.append({
+            "claim_type": "evidence_record_used",
+            "surface": record.get("surface") or "UNKNOWN",
+            "title": record.get("title") or "UNKNOWN",
+            "path": record.get("path") or "",
+            "line_range": record.get("line_range") or "",
+            "boundary": "record was used as evidence context; content claims require source citation",
+        })
+    return claims
+
+
+def _user_intent(done_payload: dict[str, Any], user_text: str, route: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "summary": done_payload.get("intent") or route.get("route_type") or "UNKNOWN",
+        "route_type": route.get("route_type") or "UNKNOWN",
+        "effective_route": route.get("effective_route") or "UNKNOWN",
+        "lane": route.get("lane") or "UNKNOWN",
+        "reason": route.get("reason") or "",
+        "user_text_sha256": _sha256_text(user_text),
+        "user_text_preview": _preview(user_text),
+    }
+
+
 def _runtime_environment(session_id: str | None) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "runtime_root": str(ROOT),
@@ -248,11 +303,32 @@ def build_event_packet(
     receipts = _receipt_mentions(done, assistant_output)
     actions_executed = _executed_actions(done, assistant_output)
     uncertainties = _uncertainties(done, assistant_output)
+    claims_extracted = _claims_extracted(done)
+    visible_context = {
+        "status": "not_captured_by_backend_v1",
+        "note": "Backend packet records chat payloads; browser DOM/screenshot capture is a later layer.",
+    }
+    assistant_response = {
+        "text": assistant_output or "",
+        "sha256": _sha256_text(assistant_output),
+        "preview": _preview(assistant_output),
+    }
+    return_pointer = {
+        "last_user_preview": _preview(user_text),
+        "last_assistant_preview": _preview(assistant_output),
+        "session_id": session_id or "UNKNOWN",
+        "route_type": route.get("route_type"),
+        "effective_route": route.get("effective_route"),
+        "unknown_count": len(uncertainties),
+    }
 
     packet: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "event_id": event_id,
         "timestamp": _timestamp(now),
+        "source": "ORACLE /chat SSE",
+        "speaker": "Noah.Physical",
+        "channel": "ORACLE /chat SSE",
         "human_source": "Noah.Physical",
         "transport_channel": "ORACLE /chat SSE",
         "intended_audience": "Noah.Physical",
@@ -262,22 +338,20 @@ def build_event_packet(
             "conversation_turn_count": conversation_turn_count,
             "ui_mode": ui_mode or done.get("mode") or "UNKNOWN",
         },
-        "visible_ui_state": {
-            "status": "not_captured_by_backend_v1",
-            "note": "Backend packet records chat payloads; browser DOM/screenshot capture is a later layer.",
-        },
+        "visible_context": visible_context,
+        "visible_ui_state": visible_context,
+        "user_intent": _user_intent(done, user_text or "", route),
         "user_input": {
             "text": user_text or "",
             "sha256": _sha256_text(user_text),
             "preview": _preview(user_text),
         },
-        "assistant_output": {
-            "text": assistant_output or "",
-            "sha256": _sha256_text(assistant_output),
-            "preview": _preview(assistant_output),
-        },
+        "assistant_response": assistant_response,
+        "assistant_output": assistant_response,
         "route": route,
+        "evidence_used": sources,
         "sources": sources,
+        "claims_extracted": claims_extracted,
         "inferences": {
             "capability": _coerce_dict(done.get("evidence")).get("capability"),
             "intent_summary": done.get("intent") or done.get("route_type") or route.get("route_type"),
@@ -292,6 +366,7 @@ def build_event_packet(
             "packet_writes_are_local_memory_records": True,
         },
         "actions_proposed": [],
+        "actions_taken": actions_executed,
         "actions_executed": actions_executed,
         "receipts": receipts,
         "memory_effect": {
@@ -305,14 +380,8 @@ def build_event_packet(
             "status": "candidate_event_record",
             "promotion_status": "not_promoted",
         },
-        "resume_point": {
-            "last_user_preview": _preview(user_text),
-            "last_assistant_preview": _preview(assistant_output),
-            "session_id": session_id or "UNKNOWN",
-            "route_type": route.get("route_type"),
-            "effective_route": route.get("effective_route"),
-            "unknown_count": len(uncertainties),
-        },
+        "return_pointer": return_pointer,
+        "resume_point": return_pointer,
         "boundaries": {
             "sandbox_read_by_packet": False,
             "sandbox_write_by_packet": False,

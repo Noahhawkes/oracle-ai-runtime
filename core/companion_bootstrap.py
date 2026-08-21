@@ -850,13 +850,25 @@ class BootstrapResult:
             content = str(turn.get("content", "")).strip()
             if content:
                 if role.lower() == "user":
+                    try:
+                        from persona_router import current_session_source_type
+
+                        classification = current_session_source_type(content)
+                    except Exception:
+                        classification = {
+                            "source_type": "current_session_user_submission",
+                            "authorship": "user_submitted_text",
+                            "canon_status": "raw_capture",
+                            "factual_claim_admissible": True,
+                        }
                     sections["CURRENT_SESSION"].append(
                         "evidence_source=current_session | "
-                        "source_type=current_session_user_submission | "
+                        f"source_type={classification.get('source_type')} | "
                         "submitted_by=Noah.Physical | "
-                        "authorship=user_submitted_text | "
-                        "canon_status=raw_capture | "
+                        f"authorship={classification.get('authorship')} | "
+                        f"canon_status={classification.get('canon_status')} | "
                         "promotion_status=not_promoted | "
+                        f"factual_claim_admissible={str(bool(classification.get('factual_claim_admissible'))).lower()} | "
                         f"role={role} | text: {content[:600]}"
                     )
                 else:

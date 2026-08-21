@@ -96,6 +96,20 @@ def test_current_session_user_submission_is_admissible_raw_evidence(monkeypatch,
     ]
 
 
+def test_current_session_questions_are_not_factual_evidence(monkeypatch, tmp_path):
+    _use_temp_preferences(monkeypatch, tmp_path)
+    import persona_router
+
+    evidence = persona_router.current_session_evidence([
+        {"role": "user", "content": "Who is Ellie?"},
+        {"role": "user", "content": "diagnose why provenance failed"},
+    ])
+    context = persona_router.prepare_turn("Who is Ellie?", current_session=[])
+
+    assert evidence == []
+    assert context["evidence_sources"] == []
+
+
 def test_route_receipt_includes_preferences_applied(monkeypatch, tmp_path):
     _use_temp_preferences(monkeypatch, tmp_path)
     router = _patch_router_paths(monkeypatch, tmp_path)

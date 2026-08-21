@@ -21,19 +21,29 @@ interruption:
 This is not a personality layer, autonomy claim, canon promotion, or external
 action system. It is a governed event record.
 
-## Storage
+## Central ledger storage
 
-Packets are written locally under:
+The central V1 dataclass and append-only writer live in
+`core/continuity_event.py`. Completed turns are sealed as one JSON object per
+line under:
 
 ```text
-Memory/continuity_events/
+data/ledger/events.jsonl
 ```
 
-The writer maintains:
+`core/orchestrator.py` owns the four lifecycle phases: draft instantiation,
+source-resolution metadata capture, execution-result capture, and sealing with
+the active thread/session return pointer.
+
+The older compatibility recorder remains under `core/continuity_event_packet.py`
+and still maintains:
 
 - one JSON file per event
 - `latest.json`
 - `index.jsonl`
+
+under `Memory/continuity_events/`. It is preserved for existing status APIs and
+consumers; it is no longer the only turn ledger.
 
 The packet writer does not read or write `sandbox/`. Sandbox remains ORACLE's
 separate candidate filebase.
@@ -45,28 +55,48 @@ Each packet carries:
 - `schema_version`
 - `event_id`
 - `timestamp`
+- `source`
+- `speaker`
+- `channel`
 - `human_source`
 - `transport_channel`
 - `intended_audience`
 - `environment_state`
 - `active_session`
+- `visible_context`
 - `visible_ui_state`
+- `user_intent`
 - `user_input`
+- `assistant_response`
 - `assistant_output`
 - `route`
+- `evidence_used`
 - `sources`
+- `claims_extracted`
 - `inferences`
 - `uncertainties`
 - `corrections`
 - `authority_status`
 - `actions_proposed`
+- `actions_taken`
 - `actions_executed`
 - `receipts`
 - `memory_effect`
 - `canon_status`
+- `return_pointer`
 - `resume_point`
 - `boundaries`
 - `packet_hash_sha256`
+
+The duplicate names are intentional compatibility aliases. The build-order
+contract uses `source`, `speaker`, `channel`, `visible_context`,
+`user_intent`, `assistant_response`, `evidence_used`, `actions_taken`, and
+`return_pointer`; earlier runtime surfaces already consumed `human_source`,
+`transport_channel`, `visible_ui_state`, `assistant_output`, `sources`,
+`actions_executed`, and `resume_point`.
+
+`claims_extracted` is metadata-only in v1. It records resolver outcomes and
+evidence records used by the turn; it does not promote those claims to canon.
 
 ## Boundaries
 
@@ -98,8 +128,11 @@ GET /api/continuity-events/status
 GET /api/continuity-events/latest
 ```
 
-The chat stream also attaches a `continuity_event_packet` summary to completed
-responses when packet writing succeeds.
+The chat stream attaches `continuity_event` (the central append-only ledger
+receipt) and `continuity_event_packet` (the compatibility recorder receipt) to
+completed responses when their respective writes succeed. Either recorder may
+fail without suppressing the user-visible chat response; the failed receipt is
+reported explicitly.
 
 ## Why It Matters
 

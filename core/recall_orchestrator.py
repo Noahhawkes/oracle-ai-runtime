@@ -35,11 +35,28 @@ RECALL_HINTS = re.compile(
     r"\b("
     r"recall|remember|backend|writings?|documents?|docs?|source|cite|atlas|"
     r"lockbox|drive|thread|who is noah|noah hawkes|jupiter station|avalon|"
+    r"who am i|human baseline|actual human|basic demographics|birth date|"
+    r"how old|education|professionally|truck accident|2022 accident|"
     r"sov1|noah\.public|noah\.self|noah\.physical|max\.ai|five selves|"
     r"legacygi|legacy\.gi|truthwriter|return-from-dark|rendered reality|"
     r"ai compliance core|ai work audit kit|compression is identity|"
     r"federation ai|miracledrive|approval gates?|connector rules?|"
-    r"qr tattoo|25-question|diagnostic spine"
+    r"functional brain|brain router|executive loop|self[- ]prompt|"
+    r"self model|self-state|runtime self|cognitive salience|psi|"
+    r"corpus|quote corpus|quote-corpus|exact quote|exact quotes|exact excerpt|"
+    r"exact excerpts|retrieval surfaces?|entire corpus|backend recall truth|"
+    r"read all|source\s*map|sourcemap|document atlas|file recall|ai lockbox|"
+    r"qr tattoo|25-question|diagnostic spine|obs|mov|media metadata|"
+    r"recording metadata|video metadata"
+    r")\b",
+    re.IGNORECASE,
+)
+
+CORPUS_SCOPE_REQUEST = re.compile(
+    r"\b("
+    r"corpus|quote corpus|quote-corpus|exact quote|exact quotes|exact excerpt|"
+    r"exact excerpts|retrieval surfaces?|entire corpus|backend recall truth|"
+    r"read all|source\s*map|sourcemap|file recall|ai lockbox"
     r")\b",
     re.IGNORECASE,
 )
@@ -53,11 +70,17 @@ DOMAIN_QUERIES: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
     (re.compile(r"legacy\.?gi|truthwriter|return-from-dark|25-question|diagnostic spine", re.I),
      ("LegacyGI Truthwriter", "Return-from-Dark", "25-question diagnostic spine")),
     (re.compile(r"rendered reality", re.I), ("Rendered Reality",)),
+    (re.compile(r"functional brain|brain router|executive loop|self[- ]prompt|self model|self-state|runtime self|cognitive salience|psi", re.I),
+     ("ORACLE Brain Router", "ORACLE PSI Architecture", "ORACLE self-prompt loop", "Cognitive Salience Layer")),
+    (re.compile(r"corpus|quote corpus|quote-corpus|exact quote|exact quotes|exact excerpt|exact excerpts|retrieval surfaces?|entire corpus|backend recall truth|read all|source\s*map|sourcemap|document atlas|file recall|ai lockbox", re.I),
+     ("Quote Corpus", "AI Source Surface Map", "Document Atlas Status", "ORACLE Data Scope", "Rendered Reality Master Literature Spine")),
     (re.compile(r"compression is identity", re.I), ("Compression Is Identity",)),
     (re.compile(r"federation ai", re.I), ("Federation AI",)),
     (re.compile(r"miracledrive|miracle drive", re.I), ("MiracleDrive", "Miracle Drive")),
     (re.compile(r"thread injection|thread pass|thread merge", re.I), ("thread injection", "ThreadMerge")),
     (re.compile(r"qr tattoo|qr code|tattoo", re.I), ("QR code tattoo SOV1", "SOV1.AI QR")),
+    (re.compile(r"who am i|who is noah|human baseline|actual human|basic demographics|birth date|how old|education|professionally|truck accident|2022 accident|human anchors behind rendered reality", re.I),
+     ("Human Baseline Continuity V1", "Noah Hawkes human baseline")),
     (re.compile(r"noah hawkes|who is noah", re.I), ("Noah Hawkes",)),
 )
 
@@ -72,16 +95,78 @@ def _strip_test_prefix(value: str) -> str:
     return text
 
 
+def _human_baseline_query(user_text: str) -> bool:
+    try:
+        import human_baseline
+
+        return bool(human_baseline.is_human_baseline_query(user_text))
+    except Exception:
+        return False
+
+
+def _human_baseline_record(user_text: str) -> dict[str, Any] | None:
+    try:
+        import human_baseline
+
+        return human_baseline.recall_record(user_text)
+    except Exception:
+        return None
+
+
+def _human_baseline_answer(user_text: str) -> str | None:
+    try:
+        import human_baseline
+
+        return human_baseline.answer_text(user_text)
+    except Exception:
+        return None
+
+
+def _source_resolution(user_text: str) -> dict[str, Any] | None:
+    try:
+        import source_resolver
+
+        domain = source_resolver.classify_fact_domain(user_text)
+        if domain == source_resolver.GENERAL_PROJECT:
+            return None
+        result = source_resolver.resolve_fact(user_text, write_receipt=True)
+        return result.to_dict(public=False)
+    except Exception:
+        return None
+
+
 def should_ground(user_text: str) -> bool:
     text = _strip_test_prefix(user_text)
+    if _human_baseline_query(text):
+        return True
     return bool(RECALL_HINTS.search(text))
+
+
+def _is_live_diagnostic_status_request(user_text: str) -> bool:
+    try:
+        from unified_oracle_router import is_diagnostic_status_request
+
+        return bool(is_diagnostic_status_request(user_text))
+    except Exception:
+        lower = str(user_text or "").lower()
+        return "diagnostic" in lower and any(term in lower for term in ("status", "runtime", "route"))
+
+
+def is_corpus_scope_request(user_text: str) -> bool:
+    return bool(CORPUS_SCOPE_REQUEST.search(_strip_test_prefix(user_text)))
 
 
 def should_answer_deterministically(user_text: str) -> bool:
     raw = _clean(user_text)
     if raw.startswith("/"):
         return False
+    if _is_live_diagnostic_status_request(user_text):
+        return False
+    if _human_baseline_query(user_text):
+        return True
     lower = raw.lower()
+    if is_corpus_scope_request(user_text):
+        return True
     if lower.startswith("recall test"):
         return True
     if re.match(r"^(?:pass|recall test)\s*\d{1,3}\s*[:.)-]", lower):
@@ -158,6 +243,37 @@ def _document_atlas_records(query: str, limit: int = 4) -> list[dict[str, Any]]:
     return records
 
 
+def _runtime_doc_records(query: str, limit: int = 2) -> list[dict[str, Any]]:
+    """Prefer exact local runtime docs before broader indexes with pathless hits."""
+    docs = RUNTIME_ROOT / "docs"
+    if not docs.exists():
+        return []
+    terms = [
+        term.lower()
+        for term in re.findall(r"[A-Za-z0-9]+", query)
+        if len(term) > 1 and term.lower() not in STOPWORDS
+    ]
+    if not terms:
+        return []
+    records: list[dict[str, Any]] = []
+    for path in docs.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in {".md", ".txt", ".json"}:
+            continue
+        name = re.sub(r"[^a-z0-9]+", " ", path.stem.lower())
+        if all(term in name for term in terms):
+            records.append({
+                "surface": "runtime_docs",
+                "query": query,
+                "title": path.name,
+                "path": str(path.resolve()),
+                "category": "local_runtime_document",
+                "canon_status": "candidate",
+            })
+            if len(records) >= limit:
+                break
+    return records
+
+
 def _file_recall_records(query: str, limit: int = 3) -> list[dict[str, Any]]:
     try:
         from file_recall import search
@@ -178,6 +294,31 @@ def _file_recall_records(query: str, limit: int = 3) -> list[dict[str, Any]]:
     return records
 
 
+def _quote_corpus_records(query: str, limit: int = 3) -> list[dict[str, Any]]:
+    try:
+        from quote_corpus import search_quotes
+
+        result = search_quotes(query, limit=limit)
+    except Exception:
+        return []
+    records = []
+    for item in result.get("results") or []:
+        line_start = item.get("line_start")
+        line_end = item.get("line_end")
+        records.append({
+            "surface": "quote_corpus",
+            "query": query,
+            "title": item.get("name") or "UNKNOWN",
+            "path": item.get("source_path") or "",
+            "packet_path": item.get("packet_path") or "",
+            "category": "exact_quote_excerpt",
+            "canon_status": item.get("canon_status") or "candidate",
+            "quote_text": _clean(item.get("quote_text") or "")[:500],
+            "line_range": f"{line_start}-{line_end}" if line_start and line_end else "",
+        })
+    return records
+
+
 def _lockbox_records(query: str, limit: int = 3) -> list[dict[str, Any]]:
     try:
         from ai_lockbox import search_lockbox
@@ -194,6 +335,37 @@ def _lockbox_records(query: str, limit: int = 3) -> list[dict[str, Any]]:
             "path": item.get("source_path") or "",
             "capsule_path": item.get("capsule_path") or "",
             "canon_status": item.get("canon_status") or "candidate",
+        })
+    return records
+
+
+def _durable_memory_records(query: str, limit: int = 4) -> list[dict[str, Any]]:
+    """Search provenance-tagged durable memory, including media-thread indexes."""
+    try:
+        from memory import search_memory_index
+
+        result = search_memory_index(query, limit=limit)
+    except Exception:
+        return []
+    records: list[dict[str, Any]] = []
+    for item in result:
+        history = item.get("transformation_history")
+        try:
+            history = json.loads(history) if isinstance(history, str) else history
+        except Exception:
+            history = []
+        history = history if isinstance(history, list) else []
+        latest = history[-1] if history and isinstance(history[-1], dict) else {}
+        records.append({
+            "surface": "durable_memory",
+            "query": query,
+            "title": item.get("source_id") or f"memory_{item.get('id')}",
+            "path": latest.get("source_path") or "",
+            "source_system": latest.get("source_thread") or item.get("source_type") or "",
+            "canon_status": item.get("canonical_status") or "candidate",
+            "approval_status": item.get("approval_status") or "pending",
+            "preview": _clean(item.get("fact_text") or "")[:220],
+            "memory_id": item.get("id"),
         })
     return records
 
@@ -266,6 +438,10 @@ def build_context(user_text: str, *, max_chars: int = MAX_BLOCK_CHARS) -> dict[s
 
     records: list[dict[str, Any]] = []
     seen: set[str] = set()
+    source_resolution = _source_resolution(user_text)
+    human_record = _human_baseline_record(user_text) if _human_baseline_query(user_text) else None
+    if human_record:
+        _add_record(records, seen, human_record)
     mentioned_paths = _mentioned_windows_paths(user_text)
     unverified_paths: list[dict[str, str]] = []
     for candidate in mentioned_paths:
@@ -293,14 +469,25 @@ def build_context(user_text: str, *, max_chars: int = MAX_BLOCK_CHARS) -> dict[s
         re.IGNORECASE,
     )
     queries = _queries(user_text)
+    media_specific = bool(re.search(
+        r"\b(obs|mov|media metadata|recording metadata|video metadata)\b",
+        str(user_text or ""),
+        re.IGNORECASE,
+    ))
     if not exact_path_only or records:
         for query in queries:
-            for source in (
+            sources = [
+                _runtime_doc_records(query),
                 _document_atlas_records(query),
                 _file_recall_records(query),
+                _quote_corpus_records(query),
                 _lockbox_records(query),
                 _thread_records(query),
-            ):
+                _durable_memory_records(query),
+            ]
+            if media_specific:
+                sources.insert(0, sources.pop())
+            for source in sources:
                 for record in source:
                     _add_record(records, seen, record)
                     if len(records) >= MAX_RECORDS:
@@ -316,6 +503,14 @@ def build_context(user_text: str, *, max_chars: int = MAX_BLOCK_CHARS) -> dict[s
         "Boundary: no source mutation, no external send, no canon promotion, no command execution, no sandbox inspection by this coordinator.",
         f"queries: {', '.join(queries) if queries else 'UNKNOWN'}",
     ]
+    if source_resolution:
+        selected = source_resolution.get("selected_claim") or {}
+        lines.extend([
+            "source_resolution:",
+            f"  status={source_resolution.get('status')}; domain={source_resolution.get('fact_domain')}; field={source_resolution.get('field')}",
+            f"  selected_source_class={selected.get('source_class') or 'NONE'}; selected_precision={selected.get('precision') or 'NONE'}",
+            f"  rule=SOURCE_UNAVAILABLE != NOT_FOUND; NOT_FOUND != FALSE",
+        ])
     if not records:
         lines.append("records: NONE FOUND - answer UNKNOWN for requested source-grounded facts.")
     else:
@@ -329,6 +524,11 @@ def build_context(user_text: str, *, max_chars: int = MAX_BLOCK_CHARS) -> dict[s
             preview = _clean(record.get("preview") or "")
             if preview:
                 lines.append(f"   preview={preview[:180]}")
+            quote = _clean(record.get("quote_text") or "")
+            if quote:
+                line_range = _clean(record.get("line_range") or "")
+                suffix = f" line_range={line_range}" if line_range else ""
+                lines.append(f"   quote{suffix}={quote[:260]}")
     if unverified_paths:
         lines.append("unverified_paths:")
         for item in unverified_paths[:8]:
@@ -342,6 +542,7 @@ def build_context(user_text: str, *, max_chars: int = MAX_BLOCK_CHARS) -> dict[s
         "record_count": len(records),
         "sources": sorted({str(r.get("surface") or "UNKNOWN") for r in records}),
         "unverified_paths": unverified_paths,
+        "source_resolution": source_resolution,
     }
 
 
@@ -350,6 +551,10 @@ def context_block(user_text: str, *, max_chars: int = MAX_BLOCK_CHARS) -> str:
 
 
 def format_recall_answer(user_text: str, context: dict[str, Any] | None = None) -> str:
+    if _human_baseline_query(user_text):
+        answer = _human_baseline_answer(user_text)
+        if answer:
+            return answer
     context = context or build_context(user_text)
     records = list(context.get("records") or [])
     queries = list(context.get("queries") or [])
@@ -390,12 +595,26 @@ def format_recall_answer(user_text: str, context: dict[str, Any] | None = None) 
         preview = _clean(record.get("preview") or "")
         if preview:
             lines.append(f"   preview: {preview[:220]}")
+        quote = _clean(record.get("quote_text") or "")
+        if quote:
+            line_range = _clean(record.get("line_range") or "")
+            if line_range:
+                lines.append(f"   line_range: {line_range}")
+            lines.append(f"   quote: {quote[:320]}")
 
-    lines.extend([
-        "",
-        "Plain answer:",
-        "I found backend recall records for this topic. I can confirm the topic exists in the indexed corpus and can cite the records above. I will not fill missing meaning with invention; any detail not supported by those records remains UNKNOWN until a specific source is read or indexed.",
-    ])
+    lines.extend(["", "Plain answer:"])
+    if is_corpus_scope_request(user_text):
+        surfaces = ", ".join(sorted({str(r.get("surface") or "UNKNOWN") for r in records}))
+        lines.extend([
+            "Available corpus surfaces in this recall packet: " + (surfaces or "UNKNOWN") + ".",
+            "Known ORACLE retrieval surfaces include runtime docs, Document Atlas metadata, File Recall, Quote Corpus exact excerpts, AI Lockbox, Thread Ingest, durable memory, and explicit path verification when a local path is supplied.",
+            "Reliability gap: indexed metadata is not the same as complete semantic ingestion. Quote Corpus can provide exact excerpts only after sources are deliberately packetized; native Google Docs, DOCX/PDF content, duplicated thread exports, assistant-generated summaries, and unreviewed source families still need extraction, dedupe, provenance, and candidate claim review before ORACLE can answer as if she has read the entire corpus.",
+            "Smallest next build patch: keep routing corpus-scope questions through source-scope recall before model prose, then add a Corpus Ingestion Control Plane that chunks permitted sources into provenance-bound candidate claims.",
+        ])
+    else:
+        lines.append(
+            "I found backend recall records for this topic. I can confirm the topic exists in the indexed corpus and can cite the records above. I will not fill missing meaning with invention; any detail not supported by those records remains UNKNOWN until a specific source is read or indexed."
+        )
     if unverified_paths:
         lines.extend(["", "Unverified paths mentioned in the prompt:"])
         for item in unverified_paths[:8]:
@@ -450,11 +669,14 @@ def evidence_payload(context: dict[str, Any] | None) -> dict[str, Any]:
                 "surface": r.get("surface"),
                 "title": r.get("title"),
                 "path": r.get("path"),
+                "line_range": r.get("line_range"),
+                "quote_text": r.get("quote_text"),
                 "query": r.get("query"),
             }
             for r in records[:MAX_RECORDS]
         ],
         "queries": list(context.get("queries") or []),
+        "source_resolution": context.get("source_resolution"),
         "boundary": {
             "read_only": True,
             "source_mutation": False,

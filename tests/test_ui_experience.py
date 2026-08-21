@@ -86,6 +86,36 @@ def test_ui_exposes_self_prompt_writer_controls():
     assert "api/self-prompt/disable" in html
 
 
+def test_daily_driver_ui_collapses_advanced_controls():
+    html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+
+    assert 'id="ui-advanced-btn"' in html
+    assert 'id="advanced-controls"' in html
+    assert "function toggleAdvancedControls()" in html
+    assert "oracle_ui_advanced_open" in html
+    assert "body:not(.ui-advanced-open) .route-receipt { display: none; }" in html
+    assert 'class="pr-item pr-extra"' in html
+    assert 'durability-chip pending dur-extra' in html
+    assert 'class="chip chip-extra"' in html
+    assert "body.sidebar-collapsed #ce-bar" in html
+    assert "body.sidebar-collapsed #af-fab" in html
+    assert "body.sidebar-collapsed #af-panel" in html
+    assert "function initSidebarState()" in html
+    assert "window.matchMedia('(max-width: 760px)')" in html
+
+
+def test_daily_driver_keeps_core_controls_visible():
+    html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+    topbar = html.split('<div id="topbar">', 1)[1].split('<div id="advanced-controls"', 1)[0]
+    advanced = html.split('<div id="advanced-controls"', 1)[1].split('<!-- Camera / vision panel', 1)[0]
+
+    for token in ('id="mode-indicator"', 'id="safety-indicator"', 'id="ai-lockbox-btn"', 'id="self-prompt-btn"'):
+        assert token in topbar
+    for token in ('id="read-access-btn"', 'id="self-notes-btn"', 'id="tuneup-btn"', 'id="human-state-btn"', 'id="operator-dashboard-btn"', 'id="preferences-btn"', 'id="sourcemap-btn"'):
+        assert token in advanced
+        assert token not in topbar
+
+
 def test_chat_send_has_visible_timeout_recovery():
     html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
 
@@ -95,6 +125,20 @@ def test_chat_send_has_visible_timeout_recovery():
     assert "ORACLE backend did not answer /chat" in html
     assert "setDurabilityChip('dur-save-state', 'chat blocked', 'warn')" in html
     assert "clearTimeout(chatTimeout)" in html
+
+
+def test_ui_has_confirmation_gated_sandbox_edit_flow():
+    html = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+
+    assert 'id="sandbox-edit-btn"' in html
+    assert "function parseSandboxEditCommand(text)" in html
+    assert "sandboxApiJson('/api/sandbox/read'" in html
+    assert "sandboxApiJson('/api/sandbox/edit'" in html
+    assert "expected_sha256: initialRead.sha256" in html
+    assert "Confirm sandbox write" in html
+    assert "Awaiting explicit confirmation; no mutation has occurred." in html
+    assert "post-write re-read did not match the confirmed proposal" in html
+    assert "Hard boundary: C:\\\\Oracle\\\\ORACLE.AI-runtime\\\\sandbox\\\\ only." in html
 
 
 def test_cards_are_pure_reads(tmp_path):

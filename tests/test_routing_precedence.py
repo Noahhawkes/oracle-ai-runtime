@@ -95,6 +95,43 @@ def test_report_only_runtime_status_beats_noah_direct_model(monkeypatch, tmp_pat
     assert "route_type: diagnostic_status" in text
 
 
+def test_corpus_scope_question_beats_capability_scope():
+    prompt = (
+        "What corpus/retrieval surfaces are available to you right now, and what exact "
+        "gap prevents entire-corpus answers from being reliable yet? Mention "
+        "records_used/proven_sources if present."
+    )
+
+    payloads = asyncio.run(_collect_stream_payloads(prompt))
+    route = next(item for item in payloads if item.get("type") == "route")
+    done = payloads[-1]
+    text = "".join(item.get("text", "") for item in payloads if item.get("type") == "token")
+
+    assert route["route_type"] == "recall_orchestrator"
+    assert done["route_type"] == "recall_orchestrator"
+    assert done["effective_route"] == "recall_orchestrator"
+    assert "Available corpus surfaces" in text
+    assert "records_found:" in text
+
+
+def test_diagnostic_status_beats_corpus_recall_hijack():
+    prompt = (
+        "DIAGNOSTIC ONLY: report route_type, runtime status, and current state for "
+        "corpus recall. Do not execute or mutate."
+    )
+
+    payloads = asyncio.run(_collect_stream_payloads(prompt))
+    route = next(item for item in payloads if item.get("type") == "route")
+    done = payloads[-1]
+    text = "".join(item.get("text", "") for item in payloads if item.get("type") == "token")
+
+    assert route["route_type"] == "diagnostic_status"
+    assert done["route_type"] == "diagnostic_status"
+    assert done["effective_route"] == "diagnostic_status"
+    assert "route_type: diagnostic_status" in text
+    assert "Available corpus surfaces" not in text
+
+
 def test_large_marker_directive_uses_legacy_preservation():
     prompt = _long("BACKEND_PATCH_REQUEST patch oracle_server.py")
 
@@ -179,6 +216,39 @@ def test_current_session_user_submission_can_ground_protected_domain_answer():
     assert "I understand your concern" not in reply
     assert "simple API calls" not in reply
     assert "Would you like me to demonstrate" not in reply
+
+
+def test_current_session_questions_do_not_ground_protected_domain_facts():
+    history = [
+        {"role": "user", "content": "Who is Ellie?"},
+        {"role": "user", "content": "diagnose why provenance failed"},
+    ]
+
+    reply = srv._source_disciplined_response(
+        "What does Ellie mean to me?",
+        _FakeBootstrap(),
+        history,
+    )
+
+    assert reply is not None
+    assert "Based on Noah.Physical's current-session statement" not in reply
+    assert "Ellie domain readout" in reply
+    assert "candidate/not_promoted" in reply
+
+
+def test_who_is_ellie_returns_grounded_domain_readout():
+    reply = srv._source_disciplined_response(
+        "Who is Ellie?",
+        _FakeBootstrap(),
+        [],
+    )
+
+    assert reply is not None
+    assert "Ellie domain readout" in reply
+    assert "Layer boundary" in reply
+    assert "sha256=" in reply
+    assert "canon_status: candidate" in reply
+    assert "promotion_status: not_promoted" in reply
 
 
 def test_current_session_user_submission_stream_binds_source_before_model_fallback():
@@ -295,6 +365,47 @@ def test_current_session_grounding_metadata_marks_user_submission_raw_capture():
     assert "source_type=current_session_user_submission" in current_session
     assert "submitted_by=Noah.Physical" in current_session
     assert "authorship=user_submitted_text" in current_session
+
+
+def test_current_session_grounding_metadata_marks_questions_not_fact():
+    record = cb.SourceRecord(
+        path="missing",
+        resolved="missing",
+        exists=False,
+        sha256=None,
+        size_bytes=None,
+        mtime_utc=None,
+        load_error=None,
+        content=None,
+    )
+    bootstrap = cb.BootstrapResult(
+        identity=record,
+        latest_reflection=record,
+        live_context=record,
+    )
+
+    sections = bootstrap.source_sections(
+        current_session=[{"role": "user", "content": "Who is Ellie?"}]
+    )
+    current_session = "\n".join(sections["CURRENT_SESSION"])
+
+    assert "source_type=current_session_user_prompt" in current_session
+    assert "authorship=user_submitted_prompt" in current_session
+    assert "canon_status=query_not_fact" in current_session
+    assert "factual_claim_admissible=false" in current_session
+    assert "source_type=current_session_user_submission" not in current_session
+
+
+def test_provenance_challenge_beats_legacy_debug_request():
+    dispatch = srv._oracle_intent_dispatch(
+        "Why did the provenance answer treat authorial authority as unknown?"
+    )
+
+    assert dispatch is not None
+    text, route = dispatch
+    assert route == "source_provenance_request"
+    assert "authorial-authority" in text
+    assert "git/test status" not in text
 
 
 def test_continuation_prompts_return_bounded_plan_not_generic_fallback():

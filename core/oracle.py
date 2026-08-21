@@ -1751,6 +1751,13 @@ def web_engine_response(
     return reply, engine_history, MODE_BUILDER
 
 
+# CONTINUITY_BEARING = False (Cognitive Spine v1, Phase 1 classification)
+# The CLI REPL below is a legacy utility entry point. It does not route
+# through core/unified_oracle_router.py and, as of Phase 1, is not wired
+# through core/cognitive_spine.py. It may answer, but its turns do not
+# advance ORACLE's persistent CognitiveState -- only the web /chat
+# companion-engine path does that today. Do not treat CLI-REPL output as
+# continuity-bearing ORACLE state until this is explicitly wired.
 def main():
     os.chdir(Path(__file__).parent)
     init_db()
@@ -3362,6 +3369,9 @@ def main():
                 result = send_staged(confirmed=True)
                 if result.get("success"):
                     print(f"\n  {C['bgreen']}[SENT]{C['reset']} {result.get('detail','')}")
+                    if result.get("existence_event_id"):
+                        print(f"  Receipt : {result['existence_event_id']}")
+                    print(f"  Executed: {'yes' if result.get('execution_completed') else 'no'}")
                     if result.get("next_action"):
                         print(f"  Next    : {result['next_action']}")
                     speak("Staged prompt dispatched.")

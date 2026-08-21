@@ -21,6 +21,7 @@ from pathlib import Path
 
 import numpy as np
 from faster_whisper import WhisperModel, decode_audio
+from source_thread import THREAD_ID, THREAD_PATH, append_event
 
 VIDEOS = Path(r"C:\Users\noahh\OneDrive\Videos")
 OUT_DIR = Path(r"C:\Oracle\state\transcripts\obs")
@@ -124,6 +125,24 @@ def process_increment(rec: Path, prog: dict) -> int:
             fh.write("\n".join(lines) + "\n")
         elif done_s == 0 and peak <= 0.001:
             fh.write("*(no audio signal in this span)*\n")
+    append_event(
+        "obs_transcript_segment",
+        source_path=rec,
+        content={
+            "recording": rec.name,
+            "offset_start_s": round(done_s, 3),
+            "offset_end_s": round(total_s, 3),
+            "audio_peak": round(peak, 6),
+            "transcript_lines": lines,
+            "speaker_attribution": None,
+        },
+        provenance={
+            "method": "local_faster_whisper_audio_extraction",
+            "model": str(MODEL_DIR),
+            "raw_audio_stored": False,
+            "screenshot_created": False,
+        },
+    )
     prog[key] = total_s
     save_progress(prog)
     return len(lines)
@@ -132,7 +151,11 @@ def process_increment(rec: Path, prog: dict) -> int:
 def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     prog = load_progress()
-    print(f"transcript watcher up. out={out_file()}", flush=True)
+    print(
+        f"transcript watcher up. canonical_thread={THREAD_ID} path={THREAD_PATH}; "
+        f"derived_view={out_file()}",
+        flush=True,
+    )
     # catch-up pass over all of today's recordings
     for rec in today_recordings():
         try:

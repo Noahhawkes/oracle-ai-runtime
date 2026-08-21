@@ -1,8 +1,15 @@
-"""Operational Continuity Spine for ORACLE.
+"""Operational continuity dashboard for ORACLE.
 
-The spine composes existing ledgers into one operational view. It does not
-replace Human State, project state, approvals, or receipts; it reads them and
-normalizes their current continuity surface.
+NOTE (Cognitive Spine v1, Phase 1): despite the module name, this is a
+read-only aggregation/dashboard layer, not a state machine -- it has no
+write path and no transition function. It composes Human State, project
+state, approvals, and receipts into one operational view; it does not own
+or advance ORACLE's persistent cognitive state. That role belongs to
+core/cognitive_spine.py's advance_state(). The name is kept for Phase 1 to
+avoid a mechanical rename touching every caller (core/master_task_ledger.py
+and others); a rename to continuity_dashboard.py is a reasonable Phase 2
+cleanup once the real spine is proven. Until then: if code needs "the
+ORACLE spine," it means core/cognitive_spine.py, not this module.
 """
 from __future__ import annotations
 

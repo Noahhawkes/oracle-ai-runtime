@@ -10,6 +10,12 @@ Conservative observe-and-propose mode:
 Launch: python core/daemon.py
 """
 
+# CONTINUITY_BEARING = False (Cognitive Spine v1, Phase 1 classification)
+# The daemon runs its own observe/reason/propose cycle on a timer, calling
+# make_client() directly. It is not wired through core/cognitive_spine.py
+# as of Phase 1 -- its proposals land in Projects/daemon_proposals/ for
+# human review, and do not advance ORACLE's persistent CognitiveState.
+
 import os
 import sys
 import time

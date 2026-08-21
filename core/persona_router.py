@@ -52,6 +52,12 @@ BUILD_WITH_ME_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\btext\s+(?:is\s+)?fine\s+for\s+now\b", re.I),
 )
 
+QUESTION_OR_COMMAND_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\?\s*$"),
+    re.compile(r"^\s*(?:who|what|when|where|why|how|can|could|would|should|do|does|did|is|are|am)\b", re.I),
+    re.compile(r"^\s*(?:tell|explain|check|diagnose|debug|fix|build|patch|implement|run|search|look up|compare|summarize|proceed)\b", re.I),
+)
+
 
 def detects_no_self_intro_preference(user_text: str) -> bool:
     """Return True when Noah explicitly asks ORACLE to stop introducing itself."""
@@ -79,6 +85,30 @@ def _active_preference_ids(preferences: list[dict[str, Any]]) -> list[str]:
         if pref_id:
             ids.append(pref_id)
     return ids
+
+
+def current_session_source_type(content: str) -> dict[str, Any]:
+    """Classify a user turn before exposing it as current-session evidence.
+
+    Questions and commands are still useful conversational context, but they are
+    not factual source claims. This prevents prompts like "Who is Ellie?" from
+    being treated as evidence that "Ellie = who is Ellie".
+    """
+    text = str(content or "").strip()
+    is_question_or_command = any(pattern.search(text) for pattern in QUESTION_OR_COMMAND_PATTERNS)
+    if is_question_or_command:
+        return {
+            "source_type": "current_session_user_prompt",
+            "authorship": "user_submitted_prompt",
+            "canon_status": "query_not_fact",
+            "factual_claim_admissible": False,
+        }
+    return {
+        "source_type": "current_session_user_submission",
+        "authorship": "user_submitted_text",
+        "canon_status": "raw_capture",
+        "factual_claim_admissible": True,
+    }
 
 
 def load_active_preferences() -> list[dict[str, Any]]:
@@ -127,18 +157,19 @@ def current_session_evidence(
         content = str(turn.get("content") or "").strip()
         if role != "user" or not content:
             continue
-        evidence.append(
-            {
-                "evidence_source": "current_session",
-                "source_type": "current_session_user_submission",
-                "submitted_by": "Noah.Physical",
-                "authorship": "user_submitted_text",
-                "canon_status": "raw_capture",
-                "promotion_status": "not_promoted",
-                "message_index": index,
-                "text": content,
-            }
-        )
+        classification = current_session_source_type(content)
+        if not classification.get("factual_claim_admissible"):
+            continue
+        evidence.append({
+            "evidence_source": "current_session",
+            "source_type": classification["source_type"],
+            "submitted_by": "Noah.Physical",
+            "authorship": classification["authorship"],
+            "canon_status": classification["canon_status"],
+            "promotion_status": "not_promoted",
+            "message_index": index,
+            "text": content,
+        })
     return evidence
 
 
@@ -150,7 +181,7 @@ def prepare_turn(
     """Prepare preference and source-admission context before route classification."""
     stored_preferences = store_detected_preferences(user_text)
     active = load_active_preferences()
-    evidence = current_session_evidence(current_session, include_text=user_text)
+    evidence = current_session_evidence(current_session)
 
     return {
         "preferences_applied": _active_preference_ids(active),

@@ -347,6 +347,9 @@ def is_ellie_domain_prompt(text: str) -> bool:
     low = _lower(text)
     return (
         "who is ellie" in low
+        or "what does ellie mean" in low
+        or "ellie mean to me" in low
+        or "ellie means to me" in low
         or "grounded ellie" in low
         or "ellie rendered reality domain" in low
         or "separate creative-fiction" in low

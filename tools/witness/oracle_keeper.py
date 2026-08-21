@@ -3,7 +3,8 @@ r"""oracle_keeper.py — keeps ORACLE and her witnesses alive, always.
 The keeper is the "always" in "always watching": a supervisor that
   1. relights oracle_server.py on 7781 whenever it is down (crash, logoff, kill)
   2. keeps the witness watchers running:
-       - prompt_witness.py        (screen-recording AI prompt/response witness)
+       - obs_media_metadata_witness.py (OBS/MOV metadata only; no screenshots)
+       - media_memory_bridge.py (canonical media thread -> searchable memory)
        - obs_transcript_watcher.py (ongoing daily voice/audio transcript)
        - yt_live_bridge.py         (YouTube live chat -> ORACLE, read-only)
   3. writes a heartbeat receipt so the capability broker can PROVE the
@@ -38,13 +39,15 @@ HEALTH = f"http://{RUNTIME_HOST}:{RUNTIME_PORT}/health"
 INTERVAL = 60
 
 WATCHERS = {
-    "prompt_witness": REPO / "tools" / "witness" / "prompt_witness.py",
+    "obs_media_metadata_witness": REPO / "tools" / "witness" / "obs_media_metadata_witness.py",
+    "media_memory_bridge": REPO / "tools" / "witness" / "media_memory_bridge.py",
     "obs_transcript_watcher": REPO / "tools" / "witness" / "obs_transcript_watcher.py",
     "yt_live_bridge": REPO / "tools" / "witness" / "yt_live_bridge.py",
     "creation_witness": REPO / "tools" / "witness" / "creation_witness.py",
 }
 CHILD_STOP_FLAGS = (
-    STATE / "prompt_witness" / "stop.flag",
+    STATE / "media_metadata_witness" / "stop.flag",
+    STATE / "media_memory_bridge" / "stop.flag",
     STATE / "transcripts" / "obs" / "stop.flag",
     STATE / "youtube_witness" / "stop.flag",
     STATE / "creation_witness" / "stop.flag",

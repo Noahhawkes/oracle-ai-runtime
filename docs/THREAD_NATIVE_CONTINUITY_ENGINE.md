@@ -36,9 +36,29 @@ The missing layer was a durable thread object that owns:
 ## Implemented Files
 
 - `core/thread_native_continuity.py`
+- `core/thread_engine.py`
 - `tests/test_thread_native_continuity.py`
+- `tests/test_thread_engine.py`
 
 No runtime route, server restart, sandbox write, Drive mutation, GitHub push, or canon promotion was performed.
+
+## Continuity Event Packet Projection
+
+`core/thread_engine.py` is the Step 3 projection layer from Continuity Event
+Packets into simple persistent thread snapshots. It is intentionally small and
+deterministic: it reads a supplied event packet, appends the `event_id` to the
+thread timeline, carries `claims_extracted` as candidate facts, preserves
+`uncertainties` as open questions, stores correction metadata only when a
+correction was detected, links evidence records, and exposes a compact
+`where_were_we()` summary.
+
+Default storage:
+
+`Memory/thread_engine/`
+
+This is a projection over event packets, not a second canon system. The older
+`ThreadStore` remains the richer SQLite-backed store for source records,
+thread items, relationships, heartbeats, and operational briefings.
 
 ## Minimal Thread Object
 

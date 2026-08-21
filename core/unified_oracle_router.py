@@ -529,6 +529,8 @@ CAPABILITY_INVENTORY_ASKS = (
 )
 # Plain-language subjects -> registered broker component names (lowercased).
 CAPABILITY_SUBJECT_COMPONENT_HINTS = (
+    ("capability scope", ("claude code bridge", "codex bridge")),
+    ("capability broker", ("claude code bridge", "codex bridge")),
     ("thread injection", ("claude code bridge", "codex bridge", "chatgpt relay")),
     ("thread inject", ("claude code bridge", "codex bridge", "chatgpt relay")),
     ("injection update", ("claude code bridge", "codex bridge", "chatgpt relay")),
@@ -666,10 +668,19 @@ def capability_scope_response(route: dict[str, Any], user_text: str = "") -> str
         lines.append("no single registered capability named — full registry:")
         lines.extend(_line(st) for st in statuses)
 
-    requested_control_gates: list[tuple[str, str, str]] = []
+    # A capability-scope answer always states the three core non-chat control
+    # boundaries. This prevents a truthful read-only inventory from being
+    # mistaken for permission to send, execute, or control the desktop.
+    requested_control_gates: list[tuple[str, str, str]] = [
+        (name, state, detail)
+        for _, name, state, detail in CONTROL_GATE_HINTS[:3]
+        if name not in by_name
+    ]
+    requested_gate_names = {name for name, _, _ in requested_control_gates}
     for phrase, name, state, detail in CONTROL_GATE_HINTS:
-        if phrase in norm and name not in by_name:
+        if phrase in norm and name not in by_name and name not in requested_gate_names:
             requested_control_gates.append((name, state, detail))
+            requested_gate_names.add(name)
     if requested_control_gates:
         lines.append("requested control gates not registered as callable broker capabilities:")
         for name, state, detail in requested_control_gates:

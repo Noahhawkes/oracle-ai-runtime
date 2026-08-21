@@ -109,6 +109,136 @@ def test_search_falls_back_to_bing_when_duckduckgo_has_no_results(monkeypatch, t
     assert result["results"][0]["title"] == "Bing Result"
 
 
+def _mediawiki_search_body(title: str, snippet: str) -> str:
+    return json.dumps({"query": {"search": [{"title": title, "snippet": snippet}]}})
+
+
+def test_search_memory_alpha_parses_results(monkeypatch):
+    def fake_request(url: str, **__):
+        assert "memory-alpha.fandom.com" in url
+        return {"ok": True, "status": 200, "body": _mediawiki_search_body("Klingon", "A warrior race.")}
+
+    monkeypatch.setattr(ir, "_request", fake_request)
+    results, status = ir._search_memory_alpha("klingon", limit=3, timeout=5)
+
+    assert status["provider"] == "memory_alpha"
+    assert status["ok"] is True
+    assert len(results) == 1
+    assert results[0].title == "Klingon"
+    assert results[0].url == "https://memory-alpha.fandom.com/wiki/Klingon"
+    assert results[0].snippet == "A warrior race."
+
+
+def test_search_memory_beta_parses_results(monkeypatch):
+    def fake_request(url: str, **__):
+        assert "memory-beta.fandom.com" in url
+        return {"ok": True, "status": 200, "body": _mediawiki_search_body("Star Trek: Vanguard", "A novel series.")}
+
+    monkeypatch.setattr(ir, "_request", fake_request)
+    results, status = ir._search_memory_beta("vanguard novel", limit=3, timeout=5)
+
+    assert status["provider"] == "memory_beta"
+    assert len(results) == 1
+    assert results[0].title == "Star Trek: Vanguard"
+    assert results[0].url == "https://memory-beta.fandom.com/wiki/Star_Trek%3A_Vanguard"
+
+
+def test_search_stowiki_parses_results(monkeypatch):
+    def fake_request(url: str, **__):
+        assert "stowiki.net" in url
+        return {"ok": True, "status": 200, "body": _mediawiki_search_body("Jupiter Station", "A Federation facility.")}
+
+    monkeypatch.setattr(ir, "_request", fake_request)
+    results, status = ir._search_stowiki("jupiter station", limit=3, timeout=5)
+
+    assert status["provider"] == "stowiki"
+    assert len(results) == 1
+    assert results[0].title == "Jupiter Station"
+    assert results[0].url == "https://stowiki.net/wiki/Jupiter_Station"
+
+
+def test_search_mediawiki_handles_empty_and_failed_responses(monkeypatch):
+    monkeypatch.setattr(ir, "_request", lambda *_, **__: {"ok": False, "status": 500, "error": "boom", "body": None})
+    results, status = ir._search_memory_alpha("nothing here", limit=3, timeout=5)
+    assert results == []
+    assert status["ok"] is False
+    assert status["error"] == "boom"
+
+
+def test_looks_like_sto_and_star_trek_hints():
+    assert ir._looks_like_sto("what's new in sto 2411")
+    assert ir._looks_like_sto("star trek online jupiter station")
+    assert not ir._looks_like_sto("star trek the next generation")
+    assert ir._looks_like_star_trek("tell me about the borg")
+    assert ir._looks_like_star_trek("jupiter station commander")
+    assert not ir._looks_like_star_trek("what's the weather today")
+
+
+def test_search_routes_sto_queries_to_stowiki_first(monkeypatch, tmp_path):
+    monkeypatch.setattr(ir, "MEMORY_DIR", tmp_path)
+    monkeypatch.setattr(ir, "RECEIPT_FILE", tmp_path / "internet_recall_receipts.jsonl")
+    monkeypatch.setattr(ir, "_search_stowiki", lambda query, **__: (
+        [ir.SearchResult(title="Jupiter Station", url="https://stowiki.net/wiki/Jupiter_Station", snippet="s")],
+        {"provider": "stowiki", "ok": True, "status": 200, "error": None, "user_agent": "oracle_declared"},
+    ))
+    monkeypatch.setattr(ir, "_search_memory_beta", lambda *_, **__: (_ for _ in ()).throw(AssertionError("should not be called")))
+    monkeypatch.setattr(ir, "_search_memory_alpha", lambda *_, **__: (_ for _ in ()).throw(AssertionError("should not be called")))
+
+    result = ir.search("sto 2411 jupiter station", limit=3)
+
+    assert result["source"] == "stowiki"
+    assert result["results"][0]["title"] == "Jupiter Station"
+
+
+def test_search_falls_back_to_memory_beta_when_stowiki_empty(monkeypatch, tmp_path):
+    monkeypatch.setattr(ir, "MEMORY_DIR", tmp_path)
+    monkeypatch.setattr(ir, "RECEIPT_FILE", tmp_path / "internet_recall_receipts.jsonl")
+    monkeypatch.setattr(ir, "_search_stowiki", lambda query, **__: (
+        [], {"provider": "stowiki", "ok": True, "status": 200, "error": None, "user_agent": "oracle_declared"},
+    ))
+    monkeypatch.setattr(ir, "_search_memory_beta", lambda query, **__: (
+        [ir.SearchResult(title="Star Trek Online", url="https://memory-beta.fandom.com/wiki/Star_Trek_Online", snippet="s")],
+        {"provider": "memory_beta", "ok": True, "status": 200, "error": None, "user_agent": "oracle_declared"},
+    ))
+
+    result = ir.search("sto 2411 lore", limit=3)
+
+    assert result["source"] == "memory_beta"
+    assert result["results"][0]["title"] == "Star Trek Online"
+
+
+def test_search_routes_star_trek_queries_to_memory_alpha(monkeypatch, tmp_path):
+    monkeypatch.setattr(ir, "MEMORY_DIR", tmp_path)
+    monkeypatch.setattr(ir, "RECEIPT_FILE", tmp_path / "internet_recall_receipts.jsonl")
+    monkeypatch.setattr(ir, "_search_memory_alpha", lambda query, **__: (
+        [ir.SearchResult(title="Borg", url="https://memory-alpha.fandom.com/wiki/Borg", snippet="s")],
+        {"provider": "memory_alpha", "ok": True, "status": 200, "error": None, "user_agent": "oracle_declared"},
+    ))
+
+    result = ir.search("tell me about the borg", limit=3)
+
+    assert result["source"] == "memory_alpha"
+    assert result["results"][0]["title"] == "Borg"
+
+
+def test_fetch_uses_mediawiki_extract_api_for_stowiki_and_memory_alpha_articles(monkeypatch, tmp_path):
+    monkeypatch.setattr(ir, "MEMORY_DIR", tmp_path)
+    monkeypatch.setattr(ir, "RECEIPT_FILE", tmp_path / "internet_recall_receipts.jsonl")
+
+    def fake_request(url: str, **__):
+        assert "action=query" in url and "prop=extracts" in url
+        body = json.dumps({"query": {"pages": {"1": {"title": "Jupiter Station", "extract": "A Federation shipyard."}}}})
+        return {"ok": True, "status": 200, "body": body}
+
+    monkeypatch.setattr(ir, "_request", fake_request)
+    result = ir.fetch("https://stowiki.net/wiki/Jupiter_Station")
+
+    assert result["ok"] is True
+    assert result["title"] == "Jupiter Station"
+    assert "A Federation shipyard." in result["text_preview"]
+    assert result["boundary"]["browser_control"] is False
+
+
 def test_parse_recall_request_supports_commands_and_natural_language():
     assert ir.parse_recall_request("/internet-search sqlite release") == {
         "mode": "search",

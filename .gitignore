@@ -105,3 +105,9 @@ custody/
 
 # Ellie/Drakin extracted manuscripts (unpublished novels; regenerable via tools/extract_ellie_corpus.py)
 data/domains/ellie/extracted/
+
+# Extracted Documents corpus (local recall content; regenerable via tools/extract_documents_corpus.py)
+data/domains/documents/extracted/
+
+# Agent gateway bearer token (local secret, never commit)
+agent_gateway_token.txt

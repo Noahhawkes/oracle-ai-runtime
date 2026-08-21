@@ -571,6 +571,91 @@ def test_sandbox_api_blocks_outside_root_and_executables(monkeypatch, tmp_path, 
     assert response.json()["ok"] is False
 
 
+def test_sandbox_edit_vertical_slice_writes_only_after_confirmation_and_rereads(monkeypatch, tmp_path):
+    import memory
+    os.environ.setdefault("ORACLE_SKIP_SERVER_BOOT", "1")
+    from fastapi.testclient import TestClient
+    import oracle_server as srv
+
+    _isolate(monkeypatch, tmp_path)
+    monkeypatch.setattr(memory, "save_message", lambda *_, **__: None)
+    sf.write_file("workbench/confirm_me.md", "before\n", caller="test.setup", action_id="setup")
+    client = TestClient(srv.app)
+
+    initial = client.post("/api/sandbox/read", json={"path": "workbench/confirm_me.md"})
+    assert initial.status_code == 200
+    assert initial.json()["content"] == "before\n"
+
+    proposal_response = client.post(
+        "/chat",
+        json={"message": "/sandbox-edit workbench/confirm_me.md | after", "mode": "companion"},
+    )
+    assert proposal_response.status_code == 200
+    proposal = [
+        json.loads(line[len("data: "):])
+        for line in proposal_response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    proposal_text = "".join(item.get("text", "") for item in proposal if item.get("type") == "token")
+    proposal_done = [item for item in proposal if item.get("type") == "done"][-1]
+
+    assert "SANDBOX EDIT PROPOSAL — CONFIRMATION REQUIRED" in proposal_text
+    assert "State: **not written**" in proposal_text
+    assert "-before" in proposal_text
+    assert "+after" in proposal_text
+    assert proposal_done["effective_route"] == "sandbox_edit_proposal"
+    assert proposal_done["confirmation_required"] is True
+    assert proposal_done["mutation_performed"] is False
+
+    before_confirmation = client.post("/api/sandbox/read", json={"path": "workbench/confirm_me.md"})
+    assert before_confirmation.status_code == 200
+    assert before_confirmation.json()["content"] == "before\n"
+    assert before_confirmation.json()["sha256"] == initial.json()["sha256"]
+
+    confirmed_write = client.post("/api/sandbox/edit", json={
+        "path": "workbench/confirm_me.md",
+        "content": "after",
+        "expected_sha256": initial.json()["sha256"],
+        "caller": "ORACLE.web.confirmed_sandbox_edit",
+    })
+    assert confirmed_write.status_code == 200
+    assert Path(confirmed_write.json()["receipt_path"]).exists()
+
+    verified = client.post("/api/sandbox/read", json={"path": "workbench/confirm_me.md"})
+    assert verified.status_code == 200
+    assert verified.json()["content"] == "after"
+    assert verified.json()["sha256"] == confirmed_write.json()["post_operation_sha256"]
+
+
+def test_sandbox_edit_vertical_slice_refuses_outside_boundary_without_mutation(monkeypatch, tmp_path):
+    import memory
+    os.environ.setdefault("ORACLE_SKIP_SERVER_BOOT", "1")
+    from fastapi.testclient import TestClient
+    import oracle_server as srv
+
+    _isolate(monkeypatch, tmp_path)
+    monkeypatch.setattr(memory, "save_message", lambda *_, **__: None)
+    outside = tmp_path / "outside.md"
+    outside.write_text("untouched", encoding="utf-8")
+
+    response = TestClient(srv.app).post(
+        "/chat",
+        json={"message": f"/sandbox-edit {outside} | changed", "mode": "companion"},
+    )
+    assert response.status_code == 200
+    payloads = [
+        json.loads(line[len("data: "):])
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    text = "".join(item.get("text", "") for item in payloads if item.get("type") == "token")
+
+    assert "SANDBOX EDIT REFUSED" in text
+    assert "path escaped sandbox root" in text
+    assert "no source-code, computer-control, Drive, or external action was attempted" in text
+    assert outside.read_text(encoding="utf-8") == "untouched"
+
+
 def test_sandbox_chat_commands_use_backend_ultrasound_lanes(monkeypatch, tmp_path):
     import asyncio
     import memory
@@ -613,7 +698,8 @@ def test_sandbox_chat_commands_use_backend_ultrasound_lanes(monkeypatch, tmp_pat
 
     edit_payloads = asyncio.run(collect("/sandbox-edit workbench/chat_v2.ai | gamma"))
     edit_text = "".join(item.get("text", "") for item in edit_payloads if item.get("type") == "token")
-    assert "SANDBOX EDIT RECEIPT" in edit_text
+    assert "SANDBOX EDIT PROPOSAL — CONFIRMATION REQUIRED" in edit_text
+    assert (tmp_path / "sandbox" / "workbench" / "chat_v2.ai").read_text(encoding="utf-8") == "alphabeta"
 
     mkdir_payloads = asyncio.run(collect("/sandbox-mkdir workbench/chat_folder"))
     mkdir_text = "".join(item.get("text", "") for item in mkdir_payloads if item.get("type") == "token")
