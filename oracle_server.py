@@ -1725,8 +1725,15 @@ def _run_session_continuity(history: list[dict], session_id: str) -> dict:
     """
     try:
         from continuity_pipeline import run_continuity_pipeline
+        # Chat history only carries a role ("user"/"assistant"), never a
+        # verified per-turn speaker identity — Ashley, a coworker, or anyone
+        # else typing into this runtime looks identical to Noah at this
+        # layer. Pass the generic "user" placeholder through rather than
+        # asserting "Noah"; continuity_pipeline.resolve_speaker_identity()
+        # resolves that placeholder to UNKNOWN instead of silently
+        # attributing it to Noah.Physical (Issue #16, failure site B).
         session = [
-            {"speaker": "Noah" if m.get("role") == "user" else "Oracle",
+            {"speaker": "user" if m.get("role") == "user" else "Oracle",
              "text": str(m.get("content", ""))}
             for m in (history or []) if str(m.get("content", "")).strip()
         ]
