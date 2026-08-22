@@ -293,11 +293,24 @@ def build_event_packet(
     ui_mode: str | None = None,
     conversation_turn_count: int | None = None,
     created_at: datetime | None = None,
+    speaker_id: str | None = None,
+    author_id: str | None = None,
+    submitter_id: str | None = None,
+    account_owner_id: str | None = None,
+    intended_audience: str | None = None,
 ) -> dict[str, Any]:
     """Build a Continuity Event Packet without writing it."""
     done = dict(done_payload or {})
     now = created_at or _utc_now()
     event_id = f"cep_{_stamp_for_path(now)}_{uuid.uuid4().hex[:10]}"
+    # Cross-human provenance integrity (issue #16): never collapse speaker/author/
+    # submitter into the account owner or the approval authority. Unresolved humans
+    # stay UNKNOWN and are never silently rebound to Noah.Physical.
+    speaker_id = speaker_id or "UNKNOWN"
+    author_id = author_id or "UNKNOWN"
+    submitter_id = submitter_id or "UNKNOWN"
+    account_owner_id = account_owner_id or "Noah.Physical"
+    intended_audience = intended_audience or "UNKNOWN"
     route = _route_payload(done)
     sources = _source_payload(done)
     receipts = _receipt_mentions(done, assistant_output)
@@ -327,11 +340,20 @@ def build_event_packet(
         "event_id": event_id,
         "timestamp": _timestamp(now),
         "source": "ORACLE /chat SSE",
-        "speaker": "Noah.Physical",
+        "speaker": speaker_id,
+        "speaker_id": speaker_id,
+        "author_id": author_id,
+        "submitter_id": submitter_id,
+        "account_owner_id": account_owner_id,
         "channel": "ORACLE /chat SSE",
-        "human_source": "Noah.Physical",
+        "human_source": speaker_id,
         "transport_channel": "ORACLE /chat SSE",
-        "intended_audience": "Noah.Physical",
+        "intended_audience": intended_audience,
+        "provenance_note": (
+            "speaker/author/submitter are NOT assumed to be the account owner or the "
+            "approval authority; unresolved humans are UNKNOWN, never silently rebound "
+            "to Noah.Physical (issue #16)."
+        ),
         "environment_state": _runtime_environment(session_id),
         "active_session": {
             "session_id": session_id or "UNKNOWN",

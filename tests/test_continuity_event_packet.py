@@ -58,9 +58,15 @@ def test_build_packet_contains_whole_event_spine():
         "return_pointer",
     ):
         assert key in packet
-    assert packet["human_source"] == "Noah.Physical"
+    # Provenance integrity (issue #16): an un-established human speaker is UNKNOWN,
+    # never silently rebound to Noah.Physical.
+    assert packet["human_source"] == "UNKNOWN"
     assert packet["source"] == "ORACLE /chat SSE"
-    assert packet["speaker"] == "Noah.Physical"
+    assert packet["speaker"] == "UNKNOWN"
+    assert packet["speaker_id"] == "UNKNOWN"
+    assert packet["author_id"] == "UNKNOWN"
+    assert packet["submitter_id"] == "UNKNOWN"
+    assert packet["account_owner_id"] == "Noah.Physical"
     assert packet["channel"] == "ORACLE /chat SSE"
     assert packet["user_input"]["sha256"]
     assert packet["assistant_response"] == packet["assistant_output"]
@@ -74,6 +80,40 @@ def test_build_packet_contains_whole_event_spine():
     assert packet["canon_status"]["promotion_status"] == "not_promoted"
     assert packet["boundaries"]["sandbox_read_by_packet"] is False
     assert packet["boundaries"]["external_send"] is False
+
+
+def test_cross_human_provenance_never_collapses_to_noah():
+    # A turn actually spoken by Ashley must be preserved as Ashley, not rebound to
+    # Noah.Physical. Noah remains approval authority without being the speaker/author.
+    packet = cep.build_event_packet(
+        user_text="Ashley asked about the kids' schedule.",
+        assistant_output="Noted.",
+        done_payload={"type": "done", "route_type": "talk_lane"},
+        session_id="ashley-test",
+        speaker_id="Ashley",
+        author_id="Ashley",
+        submitter_id="Noah.Physical",
+    )
+    assert packet["speaker"] == "Ashley"
+    assert packet["speaker_id"] == "Ashley"
+    assert packet["author_id"] == "Ashley"
+    assert packet["human_source"] == "Ashley"
+    assert packet["submitter_id"] == "Noah.Physical"
+    # speaker/author are NOT the approval authority
+    assert packet["authority_status"]["approval_authority"] == "Noah.Physical"
+    assert packet["speaker"] != packet["authority_status"]["approval_authority"]
+
+    # AI-authored pasted material: author is the model, submitter is the human transport.
+    ai_packet = cep.build_event_packet(
+        user_text="[pasted] Here is the analysis...",
+        assistant_output="Recorded.",
+        done_payload={"type": "done"},
+        author_id="ChatGPT",
+        submitter_id="Noah.Physical",
+    )
+    assert ai_packet["author_id"] == "ChatGPT"
+    assert ai_packet["submitter_id"] == "Noah.Physical"
+    assert ai_packet["speaker"] == "UNKNOWN"
 
 
 def test_source_resolution_metadata_becomes_candidate_claims():
