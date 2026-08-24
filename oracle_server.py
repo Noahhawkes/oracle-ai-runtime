@@ -1962,6 +1962,16 @@ _RECALL_TRIGGERS = (
 )
 
 
+def _return_to_work_state_block() -> str:
+    """Inject a bounded <return_to_work_state> capsule so a fresh session resumes
+    instead of starting at turn zero. Empty until there is real goal/event state."""
+    try:
+        import context_rehydrator as _cr
+        return _cr.return_to_work_block()
+    except Exception:
+        return ""
+
+
 def _deepcut_grounding_block(message: str) -> str:
     """Remember-before-answering grounding for continuity-significant entities.
 
@@ -2208,6 +2218,7 @@ def _noah_direct_reply(user_text: str, recall_block: str = "") -> str:
     "Do not claim to have performed any action. "
     f"{_prompt_boundary}\n"
     f"{recall_block}\n\n"
+    f"{_return_to_work_state_block()}"
     f"{_deepcut_grounding_block(message)}"
     f"{_noah_direct_recall_block(message)}"
     f"{_noah_direct_history_block(message)}"
