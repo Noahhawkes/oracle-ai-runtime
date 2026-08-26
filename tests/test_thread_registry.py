@@ -1,0 +1,77 @@
+from __future__ import annotations
+
+import os
+import sqlite3
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+for p in (ROOT, ROOT / "core"):
+    if str(p) not in sys.path:
+        sys.path.insert(0, str(p))
+os.environ.setdefault("ORACLE_SKIP_SERVER_BOOT", "1")
+
+import thread_registry as tr  # noqa: E402
+
+
+def _seed(path):
+    """Build a minimal DB mirroring the real messages/sessions schema."""
+    c = sqlite3.connect(path)
+    c.execute("CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, timestamp TEXT)")
+    c.execute("CREATE TABLE sessions (id TEXT PRIMARY KEY, started_at TEXT, summary TEXT)")
+    for sid in ("s1", "s2", "empty"):
+        c.execute("INSERT INTO sessions VALUES (?,?,?)", (sid, "t", None))
+    c.executemany("INSERT INTO messages (session_id,role,content,timestamp) VALUES (?,?,?,?)", [
+        ("s1", "user", "Who is Ashley?", "t1"), ("s1", "assistant", "your wife", "t2"),
+        ("s2", "user", "where were we", "t3")])
+    c.commit()
+    return c
+
+
+def test_schema_is_additive(tmp_path):
+    c = _seed(tmp_path / "m.db")
+    did = tr.ensure_schema(c)
+    assert did["threads_table_created"] is True
+    assert did["thread_id_column_added"] is True
+    cols = {r[1] for r in c.execute("PRAGMA table_info(messages)")}
+    assert "thread_id" in cols
+    # idempotent: second call does nothing
+    did2 = tr.ensure_schema(c)
+    assert did2 == {"threads_table_created": False, "thread_id_column_added": False}
+    # no message data was lost
+    assert c.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 3
+
+
+def test_thread_is_durable_object(tmp_path):
+    dbp = tmp_path / "m.db"
+    c = _seed(dbp)
+    tid = tr.create_thread(c, title="Ashley repair")
+    assert tr.attach_message(c, thread_id=tid, message_id=1) is True
+    assert tr.attach_message(c, thread_id=tid, message_id=2) is True
+    c.close()
+    # reopen a FRESH connection -> the thread + its messages survive (durability)
+    c2 = sqlite3.connect(dbp)
+    t = tr.get_thread(c2, tid)
+    assert t is not None and t["turn_count"] == 2
+    msgs = tr.thread_messages(c2, tid)
+    assert [m["content"] for m in msgs] == ["Who is Ashley?", "your wife"]
+
+
+def test_attach_unknown_message_fails_cleanly(tmp_path):
+    c = _seed(tmp_path / "m.db")
+    tid = tr.create_thread(c, title="x")
+    assert tr.attach_message(c, thread_id=tid, message_id=9999) is False
+
+
+def test_discovery_invents_nothing(tmp_path):
+    c = _seed(tmp_path / "m.db")
+    tr.ensure_schema(c)
+    d = tr.discover_threads_from_sessions(c)
+    # s1 and s2 have messages -> recoverable; 'empty' session has none
+    sids = {r["session_id"] for r in d["recoverable"]}
+    assert sids == {"s1", "s2"}
+    assert d["unrecoverable_or_empty_sessions"] == 1  # the empty session
+    # title comes from real first user message, not fabricated
+    s1 = next(r for r in d["recoverable"] if r["session_id"] == "s1")
+    assert s1["suggested_title"] == "Who is Ashley?"
+    assert s1["message_count"] == 2
