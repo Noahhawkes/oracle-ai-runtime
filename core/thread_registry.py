@@ -42,7 +42,8 @@ def _has_table(conn: sqlite3.Connection, table: str) -> bool:
 def ensure_schema(conn: sqlite3.Connection) -> dict[str, Any]:
     """Additive, idempotent. Creates the threads table and adds messages.thread_id
     if absent. Returns what it did."""
-    did = {"threads_table_created": False, "thread_id_column_added": False}
+    did = {"threads_table_created": False, "thread_id_column_added": False,
+           "session_id_column_added": False}
     if not _has_table(conn, "threads"):
         conn.execute(
             """CREATE TABLE threads (
@@ -56,10 +57,16 @@ def ensure_schema(conn: sqlite3.Connection) -> dict[str, Any]:
                  turn_count INTEGER NOT NULL DEFAULT 0,
                  last_event TEXT,
                  runtime_boot_id TEXT,
-                 parent_thread TEXT
+                 parent_thread TEXT,
+                 session_id TEXT
                )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_threads_updated ON threads(updated_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_threads_session ON threads(session_id)")
         did["threads_table_created"] = True
+    elif "session_id" not in _columns(conn, "threads"):
+        conn.execute("ALTER TABLE threads ADD COLUMN session_id TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_threads_session ON threads(session_id)")
+        did["session_id_column_added"] = True
     if _has_table(conn, "messages") and "thread_id" not in _columns(conn, "messages"):
         # nullable, additive: existing rows keep NULL until mapped. No data touched.
         conn.execute("ALTER TABLE messages ADD COLUMN thread_id TEXT")
@@ -95,6 +102,47 @@ def attach_message(conn: sqlite3.Connection, *, thread_id: str, message_id: int,
         "WHERE thread_id=?", (_now(), last_event, thread_id))
     conn.commit()
     return True
+
+
+def get_or_create_thread_for_session(conn: sqlite3.Connection, session_id: Any, *,
+                                     title: str | None = None,
+                                     runtime_boot_id: str | None = None) -> str:
+    """One durable thread per session (V1). Idempotent: same session_id -> same
+    thread_id across restarts. Threads can later be merged across sessions via
+    parent_thread; V1 keeps the conversation from evaporating."""
+    ensure_schema(conn)
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT thread_id FROM threads WHERE session_id=?",
+                       (str(session_id),)).fetchone()
+    if row:
+        return row["thread_id"]
+    tid = f"thread_{uuid.uuid4().hex[:12]}"
+    now = _now()
+    _lines = str(title or "").strip().splitlines()
+    ttl = ((_lines[0] if _lines else "") or f"session {session_id}")[:60]
+    conn.execute(
+        "INSERT INTO threads (thread_id,title,created_at,updated_at,status,turn_count,"
+        "session_id,runtime_boot_id) VALUES (?,?,?,?, 'active', 0, ?, ?)",
+        (tid, ttl, now, now, str(session_id), runtime_boot_id))
+    conn.commit()
+    return tid
+
+
+def on_message_saved(conn: sqlite3.Connection, *, session_id: Any, message_id: int,
+                     role: str, content: str) -> str:
+    """Hot-path hook. Attaches a just-saved message to its session's durable thread.
+    Best-effort by contract: callers wrap in try/except so chat never breaks on it."""
+    tid = get_or_create_thread_for_session(
+        conn, session_id, title=content if role == "user" else None)
+    # give the thread a real title from the first user turn even if an assistant/
+    # system message created it first
+    if role == "user":
+        _lines = str(content or "").strip().splitlines()
+        ttl = ((_lines[0] if _lines else "") or "conversation")[:60]
+        conn.execute("UPDATE threads SET title=? WHERE thread_id=? AND "
+                     "(title LIKE 'session %' OR title='')", (ttl, tid))
+    attach_message(conn, thread_id=tid, message_id=message_id)
+    return tid
 
 
 def get_thread(conn: sqlite3.Connection, thread_id: str) -> dict[str, Any] | None:

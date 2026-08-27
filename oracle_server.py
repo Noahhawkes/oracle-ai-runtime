@@ -637,6 +637,17 @@ def _boot():
     global _session_id, _active_context_latest
     from memory import init_db, new_session
     init_db()
+    # Ensure the durable thread schema exists (additive, non-destructive). This is
+    # where the migration actually lands on the live DB - at an owned, fresh boot.
+    try:
+        import thread_registry as _thread_registry
+        import memory as _memory
+        with _memory.get_conn() as _c:
+            _did = _thread_registry.ensure_schema(_c)
+        if any(_did.values()):
+            print(f"[Boot] thread registry schema ensured: {_did}")
+    except Exception as _e:
+        print(f"[Boot] thread registry schema not ensured: {_e}")
     _session_id = new_session()
     try:
         from active_context_sync import load_active_context_latest
@@ -9665,6 +9676,37 @@ async def chat(request: Request):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.get("/api/threads")
+def api_threads(limit: int = 50):
+    """Durable thread list (read-only) - the backbone of a real thread-history UI.
+    A thread is a first-class object here, not an ephemeral browser session."""
+    try:
+        import thread_registry as _thread_registry
+        import memory as _memory
+        with _memory.get_conn() as conn:
+            _thread_registry.ensure_schema(conn)
+            return {"ok": True, "threads": _thread_registry.list_threads(conn, limit=limit)}
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}", "threads": []}
+
+
+@app.get("/api/threads/{thread_id}")
+def api_thread_detail(thread_id: str):
+    """One durable thread + its messages (read-only)."""
+    try:
+        import thread_registry as _thread_registry
+        import memory as _memory
+        with _memory.get_conn() as conn:
+            _thread_registry.ensure_schema(conn)
+            t = _thread_registry.get_thread(conn, thread_id)
+            if not t:
+                return {"ok": False, "error": "thread not found", "thread": None}
+            return {"ok": True, "thread": t,
+                    "messages": _thread_registry.thread_messages(conn, thread_id)}
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}", "thread": None}
 
 
 @app.get("/api/history")

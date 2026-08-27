@@ -37,7 +37,8 @@ def test_schema_is_additive(tmp_path):
     assert "thread_id" in cols
     # idempotent: second call does nothing
     did2 = tr.ensure_schema(c)
-    assert did2 == {"threads_table_created": False, "thread_id_column_added": False}
+    assert did2 == {"threads_table_created": False, "thread_id_column_added": False,
+                    "session_id_column_added": False}
     # no message data was lost
     assert c.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 3
 
@@ -55,6 +56,28 @@ def test_thread_is_durable_object(tmp_path):
     assert t is not None and t["turn_count"] == 2
     msgs = tr.thread_messages(c2, tid)
     assert [m["content"] for m in msgs] == ["Who is Ashley?", "your wife"]
+
+
+def test_message_save_hook_makes_a_durable_thread(tmp_path):
+    """Simulate the live save path: each saved message flows through on_message_saved.
+    Same session -> one durable thread that survives a fresh reopen (the real fix)."""
+    dbp = tmp_path / "m.db"
+    c = _seed(dbp)
+    tr.ensure_schema(c)
+    # session s3: an assistant greeting created first, then the first user turn
+    c.execute("INSERT INTO messages (session_id,role,content,timestamp) VALUES ('s3','assistant','hi there','t')")
+    m1 = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+    t1 = tr.on_message_saved(c, session_id="s3", message_id=m1, role="assistant", content="hi there")
+    c.execute("INSERT INTO messages (session_id,role,content,timestamp) VALUES ('s3','user','remember the seed',?)", ("t",))
+    m2 = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+    t2 = tr.on_message_saved(c, session_id="s3", message_id=m2, role="user", content="remember the seed")
+    assert t1 == t2  # one durable thread for the session, not two shards
+    c.close()
+    c2 = sqlite3.connect(dbp)  # restart: nothing in memory carried over
+    t = tr.get_thread(c2, t1)
+    assert t["turn_count"] == 2
+    assert t["title"] == "remember the seed"  # titled from the first USER turn
+    assert [m["content"] for m in tr.thread_messages(c2, t1)] == ["hi there", "remember the seed"]
 
 
 def test_attach_unknown_message_fails_cleanly(tmp_path):

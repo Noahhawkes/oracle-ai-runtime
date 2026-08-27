@@ -104,10 +104,21 @@ def new_session():
 
 def save_message(session_id, role, content):
     with get_conn() as conn:
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
             (session_id, role, content, datetime.now().isoformat())
         )
+        message_id = cur.lastrowid
+        # Attach the message to its session's durable thread so a conversation
+        # survives restarts. Best-effort: chat must never break if this fails.
+        try:
+            import thread_registry as _thread_registry
+            _thread_registry.on_message_saved(
+                conn, session_id=session_id, message_id=message_id,
+                role=role, content=content)
+        except Exception:
+            pass
+        return message_id
 
 
 def get_recent_messages(session_id, limit=20):
