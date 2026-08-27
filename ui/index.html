@@ -329,6 +329,10 @@
     text-transform: uppercase;
   }
   body:not(.ui-advanced-open) .route-receipt { display: none; }
+  /* Receipt telemetry (save/history/thread/custody/index/receipt chips) is proof
+     for a builder, not company for a person. Hide the whole strip in the calm
+     view; More brings it back. */
+  body:not(.ui-advanced-open) #durability-strip { display: none; }
   body:not(.ui-advanced-open) #ce-copyall,
   body:not(.ui-advanced-open) #ce-fdn,
   body:not(.ui-advanced-open) #ce-fup,
