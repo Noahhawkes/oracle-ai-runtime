@@ -9709,6 +9709,41 @@ def api_thread_detail(thread_id: str):
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}", "thread": None}
 
 
+def _history_thread_payload(session_id: Any) -> dict[str, Any]:
+    """Return durable thread identity for a chat session without inventing one."""
+    try:
+        import sqlite3
+        import thread_registry as _thread_registry
+        import memory as _memory
+        with _memory.get_conn() as conn:
+            _thread_registry.ensure_schema(conn)
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                SELECT thread_id
+                FROM threads
+                WHERE session_id=?
+                ORDER BY updated_at DESC, created_at DESC
+                LIMIT 1
+                """,
+                (str(session_id),),
+            ).fetchone()
+            if not row or not row["thread_id"]:
+                return {"thread_id": None, "thread": None, "thread_source": "unbound"}
+            thread = _thread_registry.get_thread(conn, row["thread_id"])
+            return {
+                "thread_id": row["thread_id"],
+                "thread": thread,
+                "thread_source": "thread_registry",
+            }
+    except Exception as exc:
+        return {
+            "thread_id": None,
+            "thread": None,
+            "thread_source": f"error:{type(exc).__name__}: {exc}",
+        }
+
+
 @app.get("/api/history")
 async def history():
     """Conversation history for UI rehydrate.
@@ -9719,7 +9754,13 @@ async def history():
     like amnesia. This is what makes a refresh retain the thread.
     """
     if _history:
-        return JSONResponse({"history": _history, "session_id": _session_id, "source": "live"})
+        thread_payload = _history_thread_payload(_session_id)
+        return JSONResponse({
+            "history": _history,
+            "session_id": _session_id,
+            "source": "live",
+            **thread_payload,
+        })
     try:
         import memory
         with memory.get_conn() as conn:
@@ -9728,14 +9769,30 @@ async def history():
             ).fetchone()
         if row:
             prior = memory.get_recent_messages(row["session_id"], limit=40)
+            thread_payload = _history_thread_payload(row["session_id"])
             return JSONResponse({
                 "history": prior,
                 "session_id": row["session_id"],
                 "source": "durable",
+                **thread_payload,
             })
     except Exception as exc:
-        return JSONResponse({"history": [], "session_id": _session_id, "source": f"error:{type(exc).__name__}: {exc}"})
-    return JSONResponse({"history": [], "session_id": _session_id, "source": "empty"})
+        return JSONResponse({
+            "history": [],
+            "session_id": _session_id,
+            "source": f"error:{type(exc).__name__}: {exc}",
+            "thread_id": None,
+            "thread": None,
+            "thread_source": "error",
+        })
+    return JSONResponse({
+        "history": [],
+        "session_id": _session_id,
+        "source": "empty",
+        "thread_id": None,
+        "thread": None,
+        "thread_source": "empty",
+    })
 
 
 # ── Visible activity feed ─────────────────────────────────────────────────────

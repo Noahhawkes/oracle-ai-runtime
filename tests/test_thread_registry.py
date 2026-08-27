@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import sys
@@ -58,6 +59,25 @@ def test_thread_is_durable_object(tmp_path):
     assert [m["content"] for m in msgs] == ["Who is Ashley?", "your wife"]
 
 
+def test_new_thread_does_not_claim_noah_as_participant_without_source(tmp_path):
+    c = _seed(tmp_path / "m.db")
+
+    tid = tr.create_thread(c, title="unattributed turn")
+    thread = tr.get_thread(c, tid)
+
+    assert json.loads(thread["participants_json"]) == ["UNKNOWN"]
+
+
+def test_session_thread_records_session_without_fabricated_participant(tmp_path):
+    c = _seed(tmp_path / "m.db")
+
+    tid = tr.get_or_create_thread_for_session(c, "s1")
+    thread = tr.get_thread(c, tid)
+
+    assert thread["session_id"] == "s1"
+    assert json.loads(thread["participants_json"]) == ["UNKNOWN"]
+
+
 def test_message_save_hook_makes_a_durable_thread(tmp_path):
     """Simulate the live save path: each saved message flows through on_message_saved.
     Same session -> one durable thread that survives a fresh reopen (the real fix)."""
@@ -84,6 +104,15 @@ def test_attach_unknown_message_fails_cleanly(tmp_path):
     c = _seed(tmp_path / "m.db")
     tid = tr.create_thread(c, title="x")
     assert tr.attach_message(c, thread_id=tid, message_id=9999) is False
+
+
+def test_attach_unknown_thread_fails_without_mutating_message(tmp_path):
+    c = _seed(tmp_path / "m.db")
+    tr.ensure_schema(c)
+
+    assert tr.attach_message(c, thread_id="thread_missing", message_id=1) is False
+    row = c.execute("SELECT thread_id FROM messages WHERE id=1").fetchone()
+    assert row["thread_id"] is None
 
 
 def test_discovery_invents_nothing(tmp_path):

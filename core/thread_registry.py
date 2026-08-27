@@ -17,6 +17,7 @@ authorized step; it needs a relight to take effect).
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -52,7 +53,7 @@ def ensure_schema(conn: sqlite3.Connection) -> dict[str, Any]:
                  created_at TEXT NOT NULL,
                  updated_at TEXT NOT NULL,
                  status TEXT NOT NULL DEFAULT 'active',
-                 participants_json TEXT NOT NULL DEFAULT '["Noah.Physical"]',
+                 participants_json TEXT NOT NULL DEFAULT '["UNKNOWN"]',
                  active_goal TEXT,
                  turn_count INTEGER NOT NULL DEFAULT 0,
                  last_event TEXT,
@@ -78,15 +79,20 @@ def ensure_schema(conn: sqlite3.Connection) -> dict[str, Any]:
 
 def create_thread(conn: sqlite3.Connection, *, title: str, status: str = "active",
                   active_goal: str | None = None, runtime_boot_id: str | None = None,
-                  parent_thread: str | None = None) -> str:
+                  parent_thread: str | None = None,
+                  session_id: str | int | None = None,
+                  participants: list[str] | tuple[str, ...] | None = None) -> str:
     ensure_schema(conn)
     tid = f"thread_{uuid.uuid4().hex[:12]}"
     now = _now()
+    participants_json = json.dumps(list(participants or ("UNKNOWN",)))
     conn.execute(
         """INSERT INTO threads
-           (thread_id,title,created_at,updated_at,status,active_goal,turn_count,runtime_boot_id,parent_thread)
-           VALUES (?,?,?,?,?,?,0,?,?)""",
-        (tid, title, now, now, status, active_goal, runtime_boot_id, parent_thread))
+           (thread_id,title,created_at,updated_at,status,participants_json,
+            active_goal,turn_count,runtime_boot_id,parent_thread,session_id)
+           VALUES (?,?,?,?,?,?,?,0,?,?,?)""",
+        (tid, title, now, now, status, participants_json, active_goal,
+         runtime_boot_id, parent_thread, str(session_id) if session_id is not None else None))
     conn.commit()
     return tid
 
@@ -94,6 +100,9 @@ def create_thread(conn: sqlite3.Connection, *, title: str, status: str = "active
 def attach_message(conn: sqlite3.Connection, *, thread_id: str, message_id: int,
                    last_event: str | None = None) -> bool:
     """Attach an existing message row to a thread and bump the thread's counters."""
+    ensure_schema(conn)
+    if get_thread(conn, thread_id) is None:
+        return False
     cur = conn.execute("UPDATE messages SET thread_id=? WHERE id=?", (thread_id, message_id))
     if cur.rowcount == 0:
         return False
@@ -122,8 +131,8 @@ def get_or_create_thread_for_session(conn: sqlite3.Connection, session_id: Any, 
     ttl = ((_lines[0] if _lines else "") or f"session {session_id}")[:60]
     conn.execute(
         "INSERT INTO threads (thread_id,title,created_at,updated_at,status,turn_count,"
-        "session_id,runtime_boot_id) VALUES (?,?,?,?, 'active', 0, ?, ?)",
-        (tid, ttl, now, now, str(session_id), runtime_boot_id))
+        "session_id,runtime_boot_id,participants_json) VALUES (?,?,?,?, 'active', 0, ?, ?, ?)",
+        (tid, ttl, now, now, str(session_id), runtime_boot_id, json.dumps(["UNKNOWN"])))
     conn.commit()
     return tid
 
