@@ -1493,6 +1493,11 @@ const UI_ADVANCED_STORAGE_KEY = 'oracle_ui_advanced_open';
 function setAdvancedControlsOpen(open) {
   const enabled = !!open;
   document.body.classList.toggle('ui-advanced-open', enabled);
+  // Keep already-rendered diagnostic chips honest: their inline display is set
+  // at render time, so re-sync existing ones when the mode flips.
+  document.querySelectorAll('.route-receipt').forEach(el => {
+    el.style.display = enabled ? 'flex' : 'none';
+  });
   const btn = document.getElementById('ui-advanced-btn');
   if (btn) {
     btn.textContent = enabled ? 'Less' : 'More';
@@ -1513,6 +1518,14 @@ function toggleAdvancedControls() {
 function initUiDensity() {
   let open = false;
   try {
+    // One-time reset to the calm default. Older sessions could leave advanced
+    // mode stuck on, burying every message under diagnostic chips and a wall of
+    // operator buttons. Force the simple view once; after that, honor the choice
+    // the user makes with the More/Less button.
+    if (localStorage.getItem('oracle_ui_density_v2') !== '1') {
+      localStorage.setItem(UI_ADVANCED_STORAGE_KEY, '0');
+      localStorage.setItem('oracle_ui_density_v2', '1');
+    }
     open = localStorage.getItem(UI_ADVANCED_STORAGE_KEY) === '1';
   } catch {}
   setAdvancedControlsOpen(open);
@@ -2766,7 +2779,11 @@ function updateRouteReceipt(bubble, patch) {
       '<span>proven_sources: ' + escapeHtml(String(proven)) + '</span>' +
       '<span>unknowns: ' + unknowns + '</span>'
     ) : '');
-  bubble._routeReceiptEl.style.display = 'flex';
+  // Honor the calm view: the CSS gate (body:not(.ui-advanced-open) .route-receipt)
+  // is defeated by an inline style, so gate the inline value too. Chips appear
+  // only in advanced mode; in simple mode the message stands on its own.
+  bubble._routeReceiptEl.style.display =
+    document.body.classList.contains('ui-advanced-open') ? 'flex' : 'none';
 }
 
 function escapeHtml(str) {
