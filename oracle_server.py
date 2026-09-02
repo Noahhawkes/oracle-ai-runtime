@@ -195,21 +195,50 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 
+async def _continuity_backup_loop() -> None:
+    # The web server is the one process that reliably stays alive, so it owns
+    # the backup tick. run_if_due() is a no-op unless the scheduler is enabled
+    # and a run is due (at most one export per its configured frequency).
+    # The resident_runtime daemon also ticks this when running; run_if_due is
+    # idempotent per due-window so double-ticking is safe.
+    while True:
+        try:
+            _core = str(Path(__file__).resolve().parent / "core")
+            if _core not in sys.path:
+                sys.path.insert(0, _core)
+            from continuity_scheduler import run_if_due
+            run = await asyncio.to_thread(run_if_due)
+            if run is not None:
+                print(f"[Continuity] Backup tick: {run.get('status')}"
+                      + (f" — {run.get('blocked_reason')}" if run.get("blocked_reason") else ""))
+        except Exception as e:
+            print(f"[Continuity] Backup tick failed: {e}")
+        await asyncio.sleep(3600)
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
     _persist_continuity_frame()
     autonomous_self_prompt_task = None
+    continuity_backup_task = None
     try:
         if _autonomous_self_prompt_enabled():
             autonomous_self_prompt_task = asyncio.create_task(_autonomous_self_prompt_after_boot())
         if _autonomous_self_prompt_loop_enabled():
             _self_prompt_start_loop_task()
+        continuity_backup_task = asyncio.create_task(_continuity_backup_loop())
         yield
     finally:
         if autonomous_self_prompt_task and not autonomous_self_prompt_task.done():
             autonomous_self_prompt_task.cancel()
             try:
                 await autonomous_self_prompt_task
+            except asyncio.CancelledError:
+                pass
+        if continuity_backup_task and not continuity_backup_task.done():
+            continuity_backup_task.cancel()
+            try:
+                await continuity_backup_task
             except asyncio.CancelledError:
                 pass
         _self_prompt_stop_loop_task()
