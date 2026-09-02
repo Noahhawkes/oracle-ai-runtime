@@ -28,6 +28,7 @@ B: `core.continuity_pipeline.resolve_speaker_identity`, and the
 from __future__ import annotations
 
 import os
+import sqlite3
 import sys
 import tempfile
 from pathlib import Path
@@ -74,6 +75,9 @@ def test_ashley_speaker_is_preserved_not_collapsed():
     identity = resolve_speaker_identity({"speaker": "Ashley", "text": "hi"})
     assert identity["speaker_id"] == "Ashley"
     assert identity["speaker_id"] != "Noah.Physical"
+    assert identity["human_source_id"] == "Ashley"
+    assert identity["source_agent_type"] == "human"
+    assert identity["identity_resolution_status"] == "explicit"
 
 
 def test_account_owner_id_never_used_to_infer_speaker():
@@ -92,6 +96,7 @@ def test_author_and_submitter_default_to_speaker_but_are_independent():
     assert identity["speaker_id"] == "Noah.Physical"
     assert identity["submitter_id"] == "Noah.Physical"
     assert identity["author_id"] == "ChatGPT"
+    assert identity["human_source_id"] == "UNKNOWN"
 
 
 # ── extract_candidates / assign_provenance wiring ────────────────────────
@@ -165,6 +170,155 @@ def test_generic_user_role_never_becomes_noah_through_full_pipeline():
             assert written["provenance"]["speaker_id"] != "Noah.Physical"
         finally:
             mem_module.DB_PATH = orig
+
+
+def test_actor_provenance_survives_sqlite_reopen_and_recall():
+    """The former tests stopped at the Python return value. Prove the actor
+    dimensions survive the actual SQLite boundary and a fresh runtime object."""
+    session = [{
+        "speaker": "Ashley",
+        "text": "My preferred dealer visit cadence is Tuesday through Thursday.",
+    }]
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        import memory as mem_module
+        from continuity_pipeline import ContinuityRuntime
+
+        db_path = Path(tmp) / "oracle_memory.db"
+        orig = mem_module.DB_PATH
+        try:
+            run_continuity_pipeline(session, session_id="ashley-reopen", db_path=db_path)
+            mem_module.DB_PATH = orig
+            fresh = ContinuityRuntime(db_path=db_path)
+            recalled = fresh.wake_memory_search("dealer visit cadence")
+
+            assert recalled is not None
+            assert recalled["speaker_id"] == "Ashley"
+            assert recalled["author_id"] == "Ashley"
+            assert recalled["submitter_id"] == "Ashley"
+            assert recalled["provenance"]["account_owner_id"] == "Noah.Physical"
+            assert recalled["provenance"]["human_source_id"] == "Ashley"
+            assert recalled["provenance"]["source_agent_type"] == "human"
+            assert recalled["identity_resolution_status"] == "explicit"
+            assert recalled["speaker_id"] != recalled["provenance"]["account_owner_id"]
+            assert recalled["provenance_suspect"] is False
+        finally:
+            mem_module.DB_PATH = orig
+
+
+def test_ai_author_and_human_submitter_survive_durable_recall():
+    session = [{
+        "speaker": "Noah",
+        "author_id": "ChatGPT",
+        "submitter_id": "Noah.Physical",
+        "text": "The quoted migration plan requires a provenance regression test.",
+    }]
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        import memory as mem_module
+        from continuity_pipeline import ContinuityRuntime
+
+        db_path = Path(tmp) / "oracle_memory.db"
+        orig = mem_module.DB_PATH
+        try:
+            run_continuity_pipeline(session, session_id="ai-paste-reopen", db_path=db_path)
+            mem_module.DB_PATH = orig
+            recalled = ContinuityRuntime(db_path=db_path).wake_memory_search(
+                "quoted migration plan"
+            )
+
+            assert recalled is not None
+            assert recalled["speaker_id"] == "Noah.Physical"
+            assert recalled["author_id"] == "ChatGPT"
+            assert recalled["submitter_id"] == "Noah.Physical"
+            assert recalled["provenance"]["source_agent_type"] == "ai"
+            assert recalled["provenance"]["human_source_id"] == "UNKNOWN"
+        finally:
+            mem_module.DB_PATH = orig
+
+
+def test_unknown_human_identity_stays_unknown_after_restart():
+    session = [{
+        "speaker": "user",
+        "text": "My preferred archive cadence is every second Friday morning.",
+    }]
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        import memory as mem_module
+        from continuity_pipeline import ContinuityRuntime
+
+        db_path = Path(tmp) / "oracle_memory.db"
+        orig = mem_module.DB_PATH
+        try:
+            run_continuity_pipeline(session, session_id="unknown-reopen", db_path=db_path)
+            mem_module.DB_PATH = orig
+            recalled = ContinuityRuntime(db_path=db_path).wake_memory_search(
+                "archive cadence"
+            )
+
+            assert recalled is not None
+            assert recalled["speaker_id"] == "UNKNOWN"
+            assert recalled["author_id"] == "UNKNOWN"
+            assert recalled["speaker_id"] != "Noah.Physical"
+        finally:
+            mem_module.DB_PATH = orig
+
+
+def test_legacy_rows_are_marked_suspect_without_inventing_noah(tmp_path):
+    """Historical repair is a downgrade to UNKNOWN, never a guessed author."""
+    import memory as mem_module
+
+    db_path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        CREATE TABLE durable_facts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fact_text TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            confidence REAL NOT NULL,
+            transformation_history TEXT NOT NULL DEFAULT '[]',
+            canonical_status TEXT NOT NULL DEFAULT 'staged',
+            approval_status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO durable_facts
+        (fact_text, source_type, source_id, observed_at, confidence,
+         canonical_status, approval_status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "Legacy personal statement with no actor receipt.",
+            "human_stated",
+            "legacy-session",
+            "2026-01-01",
+            0.8,
+            "accepted",
+            "auto_approved",
+            "2026-01-01",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    orig = mem_module.DB_PATH
+    try:
+        mem_module.DB_PATH = db_path
+        mem_module._FTS_AVAILABLE = None
+        mem_module.init_db()
+        row = mem_module.search_durable_facts("Legacy personal statement")[0]
+
+        assert row["speaker_id"] == "UNKNOWN"
+        assert row["author_id"] == "UNKNOWN"
+        assert row["identity_resolution_status"] == "legacy_unresolved"
+        assert row["provenance_suspect"] is True
+        assert "Noah.Physical" not in row["provenance"].values()
+    finally:
+        mem_module.DB_PATH = orig
+        mem_module._FTS_AVAILABLE = None
 
 
 # ── oracle_server.py live wiring: the production instance of the bug ─────
