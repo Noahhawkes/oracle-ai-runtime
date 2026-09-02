@@ -135,12 +135,41 @@ def resolve_speaker_identity(message: dict) -> dict:
 
     author_id = str(message.get("author_id", "")).strip() or speaker_id
     submitter_id = str(message.get("submitter_id", "")).strip() or speaker_id
+    source_agent_type = str(message.get("source_agent_type", "")).strip().lower()
+    if source_agent_type not in {"human", "ai", "system", "unknown"}:
+        author_lower = author_id.lower()
+        known_ai_author = author_lower in {
+            "ai", "assistant", "oracle", "chatgpt", "claude", "gemini",
+            "copilot", "gpt", "sov1.ai",
+        }
+        source_agent_type = (
+            "unknown" if speaker_id == "UNKNOWN"
+            else "ai" if lowered in {"oracle", "assistant", "ai"} or known_ai_author
+            else "human"
+        )
+    identity_resolution_status = str(
+        message.get("identity_resolution_status", "")
+    ).strip() or ("unknown" if speaker_id == "UNKNOWN" else "explicit")
+    human_source_id = str(message.get("human_source_id", "")).strip()
+    if not human_source_id:
+        human_source_id = author_id if source_agent_type == "human" else "UNKNOWN"
 
     return {
         "speaker_id": speaker_id,
         "author_id": author_id,
         "submitter_id": submitter_id,
         "account_owner_id": "Noah.Physical",
+        "project_owner_id": str(message.get("project_owner_id", "")).strip() or "UNKNOWN",
+        "human_source_id": human_source_id,
+        "source_agent_type": source_agent_type,
+        "source_model": str(message.get("source_model", "")).strip() or "UNKNOWN",
+        "participant_role": str(message.get("participant_role", "")).strip() or "speaker",
+        "intended_audience": str(message.get("intended_audience", "")).strip() or "UNKNOWN",
+        "transport_channel": str(message.get("transport_channel", "")).strip() or "UNKNOWN",
+        "source_reference": str(message.get("source_reference", "")).strip() or "UNKNOWN",
+        "identity_resolution_status": identity_resolution_status,
+        "provenance_evidence": list(message.get("provenance_evidence") or []),
+        "correction_history": list(message.get("correction_history") or []),
         "provenance_note": (
             "account_owner_id identifies the runtime owner and is never "
             "assumed to be the speaker/author/submitter; unresolved humans "
@@ -277,11 +306,7 @@ def assign_provenance(candidate: dict) -> dict:
     provenance = {
         "source_type": source_type,
         "source_id": candidate["session_id"],
-        "speaker_id": identity["speaker_id"],
-        "author_id": identity["author_id"],
-        "submitter_id": identity["submitter_id"],
-        "account_owner_id": identity["account_owner_id"],
-        "provenance_note": identity["provenance_note"],
+        **identity,
         "observed_at": now,
         "confidence": min(1.0, max(0.0, candidate["score"] * 1.5))
         if source_type == "human_stated"
@@ -527,6 +552,14 @@ class ContinuityRuntime:
                     "canonical_status": row["canonical_status"],
                     "approval_status": row["approval_status"],
                     "confidence": row["confidence"],
+                    "speaker_id": row.get("speaker_id", "UNKNOWN"),
+                    "author_id": row.get("author_id", "UNKNOWN"),
+                    "submitter_id": row.get("submitter_id", "UNKNOWN"),
+                    "identity_resolution_status": row.get(
+                        "identity_resolution_status", "UNKNOWN"
+                    ),
+                    "provenance_suspect": bool(row.get("provenance_suspect")),
+                    "provenance": row.get("provenance", {}),
                 }
         # Fall back to any match
         return rows[0] if rows else None
