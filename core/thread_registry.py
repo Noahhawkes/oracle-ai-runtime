@@ -172,6 +172,47 @@ def list_threads(conn: sqlite3.Connection, limit: int = 50) -> list[dict[str, An
         "SELECT * FROM threads ORDER BY updated_at DESC LIMIT ?", (limit,))]
 
 
+def backfill_threads_from_sessions(conn: sqlite3.Connection, *,
+                                   dry_run: bool = True) -> dict[str, Any]:
+    """Turn already-recoverable sessions into durable thread rows (one per session)
+    and attach their messages. Idempotent, additive, invents nothing: a session
+    that already has a thread is skipped, and only NULL thread_id messages are
+    touched. dry_run=True reports the plan without writing.
+
+    This is the one-time migration that makes historical conversations appear as
+    durable threads after a relight, without silently rewriting any content."""
+    ensure_schema(conn)
+    disc = discover_threads_from_sessions(conn)
+    would_create = 0
+    applied = 0
+    messages_attached = 0
+    for r in disc.get("recoverable", []):
+        sid = r["session_id"]
+        existing = conn.execute(
+            "SELECT thread_id FROM threads WHERE session_id=?", (str(sid),)).fetchone()
+        if existing:
+            continue
+        would_create += 1
+        if dry_run:
+            continue
+        tid = get_or_create_thread_for_session(conn, sid, title=r.get("suggested_title"))
+        cur = conn.execute(
+            "UPDATE messages SET thread_id=? WHERE session_id=? "
+            "AND (thread_id IS NULL OR thread_id='')", (tid, sid))
+        messages_attached += cur.rowcount
+        n = conn.execute(
+            "SELECT COUNT(*) FROM messages WHERE thread_id=?", (tid,)).fetchone()[0]
+        conn.execute("UPDATE threads SET turn_count=?, updated_at=? WHERE thread_id=?",
+                     (n, _now(), tid))
+        applied += 1
+    if not dry_run:
+        conn.commit()
+    return {"recoverable": disc.get("recoverable_count", 0),
+            "would_create": would_create, "applied": applied,
+            "messages_attached": messages_attached, "dry_run": dry_run,
+            "note": "idempotent; existing threads skipped; no content rewritten"}
+
+
 def discover_threads_from_sessions(conn: sqlite3.Connection) -> dict[str, Any]:
     """Read-only. Propose recoverable threads from existing session/message rows.
     Invents nothing: sessions with zero messages are reported unrecoverable."""

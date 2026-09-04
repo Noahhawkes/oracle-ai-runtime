@@ -115,6 +115,24 @@ def test_attach_unknown_thread_fails_without_mutating_message(tmp_path):
     assert row["thread_id"] is None
 
 
+def test_backfill_is_idempotent_and_attaches(tmp_path):
+    """The one-time migration: recoverable sessions become durable threads with
+    their messages attached; running it twice creates nothing new."""
+    c = _seed(tmp_path / "m.db")
+    tr.ensure_schema(c)
+    plan = tr.backfill_threads_from_sessions(c, dry_run=True)
+    assert plan["would_create"] == 2 and plan["applied"] == 0  # s1, s2 (empty skipped)
+    done = tr.backfill_threads_from_sessions(c, dry_run=False)
+    assert done["applied"] == 2 and done["messages_attached"] == 3
+    # every message with a session now has a thread; the empty session made none
+    assert len(tr.list_threads(c)) == 2
+    s1_thread = c.execute("SELECT thread_id FROM threads WHERE session_id='s1'").fetchone()[0]
+    assert [m["content"] for m in tr.thread_messages(c, s1_thread)] == ["Who is Ashley?", "your wife"]
+    # idempotent: a second run creates nothing
+    again = tr.backfill_threads_from_sessions(c, dry_run=False)
+    assert again["applied"] == 0 and len(tr.list_threads(c)) == 2
+
+
 def test_discovery_invents_nothing(tmp_path):
     c = _seed(tmp_path / "m.db")
     tr.ensure_schema(c)
