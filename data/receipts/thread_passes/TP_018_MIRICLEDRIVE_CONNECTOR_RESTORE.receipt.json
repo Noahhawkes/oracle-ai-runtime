@@ -1,0 +1,42 @@
+{
+  "receipt_id": "build_TP_018_MIRICLEDRIVE_CONNECTOR_RESTORE",
+  "record_id": "TP_018_MIRICLEDRIVE_CONNECTOR_RESTORE",
+  "title": "MiricleDrive Connector Restore - Source Manifest (preserve-first)",
+  "kind": "source_manifest_record",
+  "ingested_at": "2026-06-28T18:30:34.386933+00:00",
+  "submitted_by": "Noah.Physical",
+  "authorial_authority": "Noah.Physical",
+  "intent_owner": "Noah.Physical",
+  "produced_with": "Claude Code",
+  "token_origin": "ai",
+  "origin_channel": "build_directive",
+  "authorship_status": "noah_authorized_ai_assisted",
+  "connector": "google_drive",
+  "connector_status": "restored (reported by Noah.Physical; MiricleDrive visible and searchable by title)",
+  "source_family": "MiricleDrive",
+  "manifest_path": "research_canon/miricledrive_source_manifest.jsonl",
+  "manifest_sha256": "sha256:93e4b33289c4c7efbba66cce5c4c712c9b0058e84fd4dbf1127aecb332c4d1e6",
+  "source_count": 10,
+  "discipline": [
+    "Preserve-first / refine-later: titles captured as candidate sources; nothing ingested or rewritten.",
+    "Authorship not collapsed: multi-agent / merged / Grok-attributed docs marked unknown_multi_agent or attributed-pending-confirmation. TRANSPORT != ORIGIN.",
+    "Provenance fields present (title, connector, drive_id, url, created_at, updated_at, retrieved_at). Unverified values are null with an explicit hole, never fabricated."
+  ],
+  "machine_observed": false,
+  "observation_status": "post_event_testimony",
+  "testimony_source": "Noah.Physical",
+  "canon_status": "runtime_ingested_record",
+  "approval_status": "pending_noah_physical",
+  "holes": [
+    "drive_id / url / created_at / updated_at NOT yet verified via the connector for all 10 sources (dates on some are parsed from filenames only). Refine pass needed to populate verified Drive metadata.",
+    "No file content was retrieved or hashed; this records source existence and provenance intent, not content.",
+    "oracle_source_manifest_report_20260619 may overlap local research_canon/source_index.jsonl; reconcile before any merge.",
+    "Token origin is AI-authored (Claude Code) under Noah.Physical authority; pending Noah.Physical canon approval."
+  ],
+  "next_refine_pass": [
+    "Use the Google Drive connector to resolve drive_id, url, created_at, updated_at for each title and clear the provenance holes.",
+    "Then, per-source, decide candidate -> witness with authorship preserved."
+  ],
+  "required_review": ["Noah.Physical approve source family before any content ingest"],
+  "promoted_to_canon": false
+}

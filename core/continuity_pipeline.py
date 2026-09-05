@@ -63,15 +63,26 @@ def classify_source_type(message: dict) -> str:
     Classify a message's source_type from speaker and content.
 
     Rules:
-      - Noah speaking → "human_stated"
+      - Any human speaking (Noah, a generic "user"/"human" placeholder, or a
+        named human like "Ashley") → "human_stated"
       - Oracle speaking with hedge words → "inferred"
       - Oracle speaking factually → "generated"
-      - Other → "observed"
+
+    This decides *what kind of claim* the text is (a human statement vs. a
+    model inference), not *who* said it. Identity is resolved separately by
+    `resolve_speaker_identity` — do not conflate the two (Issue #16).
+
+    Historical bug (Issue #16, site B): this used to only recognize the
+    literal strings "noah"/"user"/"human" as human speech. A real name like
+    "Ashley" fell through to the Oracle-inference branch below and got
+    misclassified as AI-generated content — which then made her statement
+    ineligible for the human-stated salience override and let it be
+    silently discarded. Any non-Oracle speaker is a human statement.
     """
-    speaker = str(message.get("speaker", "")).lower()
+    speaker = str(message.get("speaker", "")).strip().lower()
     text = str(message.get("text", "")).lower()
 
-    if speaker in ("noah", "user", "human"):
+    if speaker not in ("oracle", "assistant", "ai"):
         return "human_stated"
 
     # Model inference markers
@@ -83,6 +94,88 @@ def classify_source_type(message: dict) -> str:
         return "inferred"
 
     return "generated"
+
+
+# ── Speaker identity resolution (Issue #16: never collapse speaker into
+#    Noah.Physical) ────────────────────────────────────────────────────────
+
+# Generic role placeholders carry no identity signal by themselves — they
+# only say "some human typed this," not "Noah typed this." A placeholder
+# must resolve to UNKNOWN, never be silently upgraded to the account owner.
+_GENERIC_HUMAN_PLACEHOLDERS = {"user", "human"}
+
+
+def resolve_speaker_identity(message: dict) -> dict:
+    """
+    Resolve who actually produced this turn, independent of source_type.
+
+    Governing rule (Issue #16 — cross-human provenance integrity): never
+    assume account_owner == speaker, submitter == author, or that a generic
+    "user"/"human" role means Noah. Ashley, a coworker, a pasted AI reply,
+    or an unidentified human must stay distinguishable from Noah.
+
+      - "" / "user" / "human"  -> speaker_id UNKNOWN (no identity given)
+      - "noah" (any case)      -> speaker_id "Noah.Physical" (explicit claim)
+      - anything else          -> preserved verbatim (e.g. "Ashley", "ChatGPT")
+
+    `author_id` / `submitter_id` default to the resolved speaker but can be
+    set independently on the message (e.g. Noah submitting text authored by
+    an external AI). `account_owner_id` is the runtime's account owner — it
+    is tracked separately from speaker/author/submitter and must never be
+    used to infer either.
+    """
+    raw_speaker = str(message.get("speaker", "")).strip()
+    lowered = raw_speaker.lower()
+    if not raw_speaker or lowered in _GENERIC_HUMAN_PLACEHOLDERS:
+        speaker_id = "UNKNOWN"
+    elif lowered == "noah":
+        speaker_id = "Noah.Physical"
+    else:
+        speaker_id = raw_speaker
+
+    author_id = str(message.get("author_id", "")).strip() or speaker_id
+    submitter_id = str(message.get("submitter_id", "")).strip() or speaker_id
+    source_agent_type = str(message.get("source_agent_type", "")).strip().lower()
+    if source_agent_type not in {"human", "ai", "system", "unknown"}:
+        author_lower = author_id.lower()
+        known_ai_author = author_lower in {
+            "ai", "assistant", "oracle", "chatgpt", "claude", "gemini",
+            "copilot", "gpt", "sov1.ai",
+        }
+        source_agent_type = (
+            "unknown" if speaker_id == "UNKNOWN"
+            else "ai" if lowered in {"oracle", "assistant", "ai"} or known_ai_author
+            else "human"
+        )
+    identity_resolution_status = str(
+        message.get("identity_resolution_status", "")
+    ).strip() or ("unknown" if speaker_id == "UNKNOWN" else "explicit")
+    human_source_id = str(message.get("human_source_id", "")).strip()
+    if not human_source_id:
+        human_source_id = author_id if source_agent_type == "human" else "UNKNOWN"
+
+    return {
+        "speaker_id": speaker_id,
+        "author_id": author_id,
+        "submitter_id": submitter_id,
+        "account_owner_id": "Noah.Physical",
+        "project_owner_id": str(message.get("project_owner_id", "")).strip() or "UNKNOWN",
+        "human_source_id": human_source_id,
+        "source_agent_type": source_agent_type,
+        "source_model": str(message.get("source_model", "")).strip() or "UNKNOWN",
+        "participant_role": str(message.get("participant_role", "")).strip() or "speaker",
+        "intended_audience": str(message.get("intended_audience", "")).strip() or "UNKNOWN",
+        "transport_channel": str(message.get("transport_channel", "")).strip() or "UNKNOWN",
+        "source_reference": str(message.get("source_reference", "")).strip() or "UNKNOWN",
+        "identity_resolution_status": identity_resolution_status,
+        "provenance_evidence": list(message.get("provenance_evidence") or []),
+        "correction_history": list(message.get("correction_history") or []),
+        "provenance_note": (
+            "account_owner_id identifies the runtime owner and is never "
+            "assumed to be the speaker/author/submitter; unresolved humans "
+            "stay UNKNOWN rather than being silently attributed to Noah."
+        ),
+    }
 
 
 # ── Salience extraction ───────────────────────────────────────────────────────
@@ -103,6 +196,7 @@ def extract_candidates(session: list[dict], session_id: str) -> list[dict]:
             continue
 
         source_type = classify_source_type(msg)
+        identity = resolve_speaker_identity(msg)
         score, relevance, emo, proj, sensitivity, noise = score_signal(
             text, memory_type=FACT, source="conversation"
         )
@@ -111,6 +205,12 @@ def extract_candidates(session: list[dict], session_id: str) -> list[dict]:
             {
                 "step": "source_classification",
                 "source_type": source_type,
+            },
+            {
+                "step": "speaker_identity_resolved",
+                "speaker_id": identity["speaker_id"],
+                "author_id": identity["author_id"],
+                "submitter_id": identity["submitter_id"],
             },
             {
                 "step": "salience_scoring",
@@ -137,6 +237,7 @@ def extract_candidates(session: list[dict], session_id: str) -> list[dict]:
             candidates.append({
                 "text": text,
                 "source_type": source_type,
+                "identity": identity,
                 "score": score,
                 "discarded": True,
                 "transformation_history": transformation_history,
@@ -157,6 +258,7 @@ def extract_candidates(session: list[dict], session_id: str) -> list[dict]:
         candidates.append({
             "text": text,
             "source_type": source_type,
+            "identity": identity,
             "score": score,
             "discarded": False,
             "transformation_history": transformation_history,
@@ -181,6 +283,9 @@ def assign_provenance(candidate: dict) -> dict:
     """
     source_type = candidate["source_type"]
     now = datetime.now(timezone.utc).isoformat()
+    # Falls back to a fresh UNKNOWN resolution for candidates built before
+    # identity resolution existed (e.g. hand-built dicts in older callers).
+    identity = candidate.get("identity") or resolve_speaker_identity(candidate)
 
     if source_type == "human_stated":
         canonical_status = "accepted"
@@ -195,11 +300,13 @@ def assign_provenance(candidate: dict) -> dict:
         "step": "provenance_assigned",
         "canonical_status": canonical_status,
         "approval_status": approval_status,
+        "speaker_id": identity["speaker_id"],
     })
 
     provenance = {
         "source_type": source_type,
         "source_id": candidate["session_id"],
+        **identity,
         "observed_at": now,
         "confidence": min(1.0, max(0.0, candidate["score"] * 1.5))
         if source_type == "human_stated"
@@ -378,6 +485,7 @@ def run_continuity_pipeline(
         provenance = assign_provenance(candidate)
         append_audit_chain(session_id, "provenance_assigned", {
             "source_type": provenance["source_type"],
+            "speaker_id": provenance["speaker_id"],
             "canonical_status": provenance["canonical_status"],
             "approval_status": provenance["approval_status"],
             "confidence": provenance["confidence"],
@@ -444,6 +552,14 @@ class ContinuityRuntime:
                     "canonical_status": row["canonical_status"],
                     "approval_status": row["approval_status"],
                     "confidence": row["confidence"],
+                    "speaker_id": row.get("speaker_id", "UNKNOWN"),
+                    "author_id": row.get("author_id", "UNKNOWN"),
+                    "submitter_id": row.get("submitter_id", "UNKNOWN"),
+                    "identity_resolution_status": row.get(
+                        "identity_resolution_status", "UNKNOWN"
+                    ),
+                    "provenance_suspect": bool(row.get("provenance_suspect")),
+                    "provenance": row.get("provenance", {}),
                 }
         # Fall back to any match
         return rows[0] if rows else None

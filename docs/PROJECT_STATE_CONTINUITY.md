@@ -205,4 +205,19 @@ This replaces the "re-explain everything" problem with a live state snapshot.
 
 ---
 
-*Last updated: 2026-06-07 | ORACLE.AI*
+## 2026-08-16 — Durable research update (continuity restore)
+
+Merged from Captain's Log `docs/captains_logs/2026-08-16_continuity-restore-oracle-gateway-and-recall.md`.
+
+**Newly built / durable this session:**
+- `agent_gateway.py` — read-only, bearer-gated ORACLE → agent gateway (6 endpoints, provenance envelope, reuses existing ORACLE functions, ORACLE stays localhost). 16 tests pass; proven live. Not exposed externally.
+- Self-prompt loop upgraded (staged) to read one approved, bounded, receipted corpus excerpt per cycle using the `OBSERVED / INTERPRETED / UNKNOWN / CONTRADICTION / NEXT_SOURCE_QUESTION` schema, with duplicate-family suppression and a topic-level privacy filter.
+- Governance distinction established: **recall vs representation** — full recall over Noah.Self for reasoning; public representation limited to Noah.Public.
+
+**Correction (preserved):** the 930-document corpus was believed unreachable by recall; live probes show it **is** reachable via `file_recall` / `document_atlas`. The real gap is find → read (locates the file, does not read its contents into the answer).
+
+**Open next steps:** relight to activate the staged self-prompt patch; implement the find → read last hop; build the canon-only public projection endpoint before any external exposure.
+
+---
+
+*Last updated: 2026-08-16 | ORACLE.AI — prior: 2026-06-07*

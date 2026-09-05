@@ -25,11 +25,16 @@ Noah's Windows machine.
 | Google Drive | G:\\My Drive |
 | Dev roots | C:\\dev, C:\\repos, ~/dev, ~/repos |
 | OBS recordings | ~/Videos/OBS or ~/Videos if present |
-| ORACLE root | G:\\My Drive\\HawkesNest LLC\\ORACLE.AI |
+| ORACLE root | Active runtime root first (`C:\\Oracle\\ORACLE.AI-runtime`), with the G:\\ Drive mirror treated as an optional source |
 
 **v0.2 fix:** `onedrive_sov1` now correctly resolves to
 `C:\Users\noahh\OneDrive - sov1.ai` instead of the personal OneDrive folder.
 `onedrive_eh3` (`OneDrive - Eh3 Holdings LLC`) added.
+
+**MiracleDrive runtime fix:** the live index now treats the active local runtime
+root as first-class source material, while skipping `sandbox` and
+`sandbox.trash` so ORACLE's private sandbox lane does not become general search
+fodder.
 
 ### Governance model
 

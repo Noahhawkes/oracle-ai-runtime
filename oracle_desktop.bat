@@ -2,21 +2,44 @@
 cd /d "%~dp0"
 setlocal
 
+set "RUNTIME_ROOT=%~dp0"
+if "%RUNTIME_ROOT:~-1%"=="\" set "RUNTIME_ROOT=%RUNTIME_ROOT:~0,-1%"
+if /I not "%RUNTIME_ROOT%"=="C:\Oracle\ORACLE.AI-runtime" (
+    echo BOOT REFUSED: runtime root must be C:\Oracle\ORACLE.AI-runtime
+    pause
+    exit /b 1
+)
+if not exist "C:\Oracle\state" (
+    echo BOOT REFUSED: state root unavailable: C:\Oracle\state
+    pause
+    exit /b 1
+)
+if not exist "C:\Oracle\state\boot_receipts" mkdir "C:\Oracle\state\boot_receipts"
+
 REM ORACLE Desktop Launcher
 REM Double-click to start ORACLE in the browser.
 REM If the server is already running, just open the tab.
 REM Errors are logged to Logs\oracle_startup.log
 
-set PORT=7777
+set PORT=7781
 set URL=http://localhost:%PORT%
 set LOGFILE=%~dp0Logs\oracle_startup.log
 set PYTHON_EXE=%LOCALAPPDATA%\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\pythonw.exe
+set ORACLE_FORCE_LOCAL=true
+set LOCAL_MODE=true
 
 if not exist "%~dp0Logs" mkdir "%~dp0Logs"
 
 REM Write timestamped startup record.
 echo. >> "%LOGFILE%"
 echo [%DATE% %TIME%] oracle_desktop.bat launched >> "%LOGFILE%"
+
+python core\boot_receipt.py --print-line >> "%LOGFILE%" 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo  ORACLE boot receipt failed. Check: %LOGFILE%
+    pause
+    exit /b 1
+)
 
 REM Check if server is already up.
 curl -s --connect-timeout 1 --max-time 1 "%URL%/api/mode" >nul 2>&1

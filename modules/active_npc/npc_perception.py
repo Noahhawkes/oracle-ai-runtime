@@ -94,8 +94,8 @@ class NPCPerception:
             score += 0.1
 
         # Threat/opportunity keywords
-        threat_words = {"attack", "kill", "arrest", "fire", "danger", "war"}
-        opp_words = {"reward", "offer", "gold", "opportunity", "help", "found"}
+        threat_words = {"attack", "kill", "arrest", "fire", "danger", "war", "ward", "flare"}
+        opp_words = {"reward", "offer", "gold", "opportunity", "help", "found", "charm", "rune"}
         desc_lower = observation.description.lower()
         if any(w in desc_lower for w in threat_words):
             score += 0.2

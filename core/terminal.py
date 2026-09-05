@@ -20,6 +20,7 @@ import queue
 import time
 import os
 import sys
+import atexit
 from pathlib import Path
 
 if getattr(sys, "frozen", False):
@@ -33,6 +34,37 @@ _END_MARKER = "__ORACLE_CMD_DONE_9f3a__"
 
 _instance = None
 _lock = threading.Lock()
+
+
+def _creationflags() -> int:
+    if os.name != "nt":
+        return 0
+    return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def _record_spawn(pid: int, command: str, visible_window: bool) -> None:
+    try:
+        from terminal_census import record_spawn
+
+        record_spawn(
+            kind="persistent_terminal",
+            pid=pid,
+            command=command,
+            cwd=str(ROOT),
+            visible_window=visible_window,
+            cleanup_policy="close on ORACLE process exit",
+        )
+    except Exception:
+        pass
+
+
+def _record_exit(pid: int, reason: str) -> None:
+    try:
+        from terminal_census import record_exit
+
+        record_exit(kind="persistent_terminal", pid=pid, reason=reason)
+    except Exception:
+        pass
 
 
 def get_terminal() -> "PersistentTerminal":
@@ -51,6 +83,10 @@ class PersistentTerminal:
     """
 
     def __init__(self):
+        env = os.environ.copy()
+        env["ORACLE_TERMINAL_OWNER"] = "terminal_run"
+        env["ORACLE_TERMINAL_VISIBLE"] = "false"
+        command = "powershell -NoLogo -NoExit -ExecutionPolicy Bypass -Command -"
         self._proc = subprocess.Popen(
             ["powershell", "-NoLogo", "-NoExit", "-ExecutionPolicy", "Bypass",
              "-Command", "-"],
@@ -61,8 +97,10 @@ class PersistentTerminal:
             encoding="utf-8",
             errors="replace",
             cwd=str(ROOT),
-            env=os.environ.copy(),
+            env=env,
+            creationflags=_creationflags(),
         )
+        _record_spawn(self._proc.pid, command, visible_window=False)
         self._out_q: queue.Queue = queue.Queue()
         self._reader = threading.Thread(
             target=self._read_stdout, daemon=True, name="oracle-terminal-reader"
@@ -136,6 +174,7 @@ class PersistentTerminal:
 
     def close(self):
         """Cleanly shut down the terminal process."""
+        pid = getattr(self._proc, "pid", 0) if self._proc else 0
         try:
             self._proc.stdin.write("exit\n")
             self._proc.stdin.flush()
@@ -148,3 +187,14 @@ class PersistentTerminal:
                 self._proc.kill()
             except Exception:
                 pass
+            if pid:
+                _record_exit(pid, "close")
+
+
+def close_terminal():
+    global _instance
+    if _instance is not None and _instance.alive:
+        _instance.close()
+
+
+atexit.register(close_terminal)

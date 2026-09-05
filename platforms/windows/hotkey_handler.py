@@ -79,7 +79,10 @@ class HotkeyHandler:
 class OracleHotkeyManager:
     """ORACLE-specific hotkey bindings and callbacks."""
     
-    def __init__(self, ui_url: str = "http://localhost:7777"):
+    def __init__(self, ui_url: str | None = None):
+        if ui_url is None:
+            from runtime_config import runtime_base_url
+            ui_url = runtime_base_url(host="localhost")
         self.ui_url = ui_url
         self.handler = HotkeyHandler()
         self._setup_hotkeys()

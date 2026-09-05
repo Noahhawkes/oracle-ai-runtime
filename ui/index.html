@@ -82,6 +82,7 @@
   #new-chat-btn:hover { background: var(--surface2); }
 
   #mode-section {
+    display: none;
     padding: 8px 10px 4px;
     border-bottom: 1px solid var(--border);
   }
@@ -217,6 +218,8 @@
     gap: 10px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   #toggle-sidebar {
@@ -231,6 +234,7 @@
   #topbar-title {
     font-size: 15px; font-weight: 600;
     flex: 1;
+    min-width: 72px;
   }
 
   #mode-indicator {
@@ -241,8 +245,181 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
   }
-  #mode-indicator.companion { background: rgba(16,163,127,0.15); color: var(--accent); }
-  #mode-indicator.builder   { background: rgba(99,102,241,0.15); color: #818cf8; }
+  #mode-indicator.unified_oracle { background: rgba(16,163,127,0.15); color: var(--accent); }
+  #mode-indicator.talk_lane { background: rgba(16,163,127,0.15); color: var(--accent); }
+  #mode-indicator.build_lane { background: rgba(99,102,241,0.15); color: #818cf8; }
+  #mode-indicator.capture_lane { background: rgba(251,191,36,0.14); color: #fbbf24; }
+  #mode-indicator.witness_lane { background: rgba(34,211,238,0.14); color: #22d3ee; }
+  #mode-indicator.guard_lane { background: rgba(239,68,68,0.16); color: #f87171; }
+  #safety-indicator {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    background: rgba(255,255,255,0.07);
+    color: var(--text-dim);
+  }
+  #safety-indicator.safe { background: rgba(16,163,127,0.12); color: var(--accent); }
+  #safety-indicator.receipt { background: rgba(251,191,36,0.14); color: #fbbf24; }
+  #safety-indicator.approval { background: rgba(239,68,68,0.16); color: #f87171; }
+  #safety-indicator.blocked { background: rgba(239,68,68,0.22); color: #fecaca; }
+  #read-access-btn, #ai-lockbox-btn, #ui-advanced-btn {
+    border: 1px solid rgba(34,211,238,0.22);
+    border-radius: 6px;
+    background: rgba(34,211,238,0.10);
+    color: #67e8f9;
+    font-size: 11px;
+    font-weight: 650;
+    padding: 4px 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+  }
+  #read-access-btn.warn { border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.12); color: #fbbf24; }
+  #read-access-btn.ok { border-color: rgba(34,211,238,0.32); background: rgba(34,211,238,0.13); color: #67e8f9; }
+  #ai-lockbox-btn.warn { border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.12); color: #fbbf24; }
+  #ai-lockbox-btn.ok { border-color: rgba(16,163,127,0.36); background: rgba(16,163,127,0.13); color: #5eead4; }
+  #ui-advanced-btn {
+    border-color: rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.06);
+    color: var(--text-dim);
+  }
+  body.ui-advanced-open #ui-advanced-btn {
+    border-color: rgba(16,163,127,0.38);
+    background: rgba(16,163,127,0.12);
+    color: #b7f7df;
+  }
+
+  #advanced-controls {
+    display: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(23,23,23,0.78);
+    flex-shrink: 0;
+  }
+  body.ui-advanced-open #advanced-controls { display: flex; }
+  #advanced-controls button,
+  #advanced-controls a {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 11px;
+    line-height: 1.2;
+    cursor: pointer;
+    text-decoration: none;
+    font-family: inherit;
+  }
+  #advanced-controls button:hover,
+  #advanced-controls a:hover {
+    border-color: var(--accent);
+    color: #fff;
+  }
+  #advanced-controls .advanced-label {
+    width: 100%;
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  body:not(.ui-advanced-open) .route-receipt { display: none; }
+  /* Receipt telemetry (save/history/thread/custody/index/receipt chips) is proof
+     for a builder, not company for a person. Hide the whole strip in the calm
+     view; More brings it back. */
+  body:not(.ui-advanced-open) #durability-strip { display: none; }
+  body:not(.ui-advanced-open) #ce-copyall,
+  body:not(.ui-advanced-open) #ce-fdn,
+  body:not(.ui-advanced-open) #ce-fup,
+  body:not(.ui-advanced-open) #ce-charcount {
+    display: none !important;
+  }
+  body:not(.ui-advanced-open) #ce-bar {
+    bottom: 10px !important;
+    padding: 5px 8px !important;
+    opacity: 0.78;
+  }
+  body:not(.ui-advanced-open) #af-fab {
+    bottom: 48px !important;
+    opacity: 0.78;
+  }
+  body:not(.ui-advanced-open) #rr-bridge-fab {
+    padding: 7px 10px !important;
+    letter-spacing: 0.04em !important;
+    text-transform: none !important;
+    opacity: 0.72;
+  }
+  body:not(.ui-advanced-open) #rr-bridge-fab:hover,
+  body:not(.ui-advanced-open) #af-fab:hover,
+  body:not(.ui-advanced-open) #ce-bar:hover {
+    opacity: 1;
+  }
+  #ce-bar,
+  #af-fab,
+  #af-panel {
+    left: 272px !important;
+  }
+  body.sidebar-collapsed #ce-bar,
+  body.sidebar-collapsed #af-fab,
+  body.sidebar-collapsed #af-panel {
+    left: 12px !important;
+  }
+  @media (max-width: 760px) {
+    #sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      z-index: 9100;
+      width: 260px !important;
+      min-width: 260px !important;
+      transform: translateX(0);
+      transition: transform 0.2s;
+    }
+    #sidebar.collapsed {
+      width: 260px !important;
+      min-width: 260px !important;
+      transform: translateX(-100%);
+    }
+    #main {
+      width: 100vw;
+      min-width: 0;
+      height: 100dvh;
+    }
+    #topbar {
+      gap: 6px;
+      padding: 0 8px;
+    }
+    #topbar-title {
+      min-width: 0;
+    }
+    #mode-indicator,
+    #safety-indicator,
+    #ai-lockbox-btn,
+    #self-prompt-btn,
+    #ui-advanced-btn {
+      font-size: 10px;
+      padding: 4px 7px;
+    }
+    #presence-rail {
+      padding: 7px 10px;
+      gap: 10px;
+    }
+    #input-area {
+      padding-left: 12px;
+      padding-right: 12px;
+    }
+    #ce-bar,
+    #af-fab,
+    #af-panel {
+      left: 12px !important;
+    }
+  }
 
   /* ── Messages ── */
   #messages {
@@ -304,6 +481,63 @@
   .msg-wrap:hover .copy-btn { opacity: 1; }
   .copy-btn:hover { color: var(--text); border-color: var(--accent); }
   .copy-btn.copied { color: var(--accent); border-color: var(--accent); }
+
+  .route-receipt {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 7px;
+    color: var(--text-dim);
+    font-size: 10px;
+    line-height: 1.3;
+  }
+  .route-receipt span {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 6px;
+    background: rgba(255,255,255,0.025);
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .sandbox-edit-card {
+    border: 1px solid rgba(34, 211, 238, 0.45);
+    border-radius: 10px;
+    background: rgba(34, 211, 238, 0.045);
+    padding: 14px;
+  }
+  .sandbox-edit-card h3 { margin: 0 0 8px; font-size: 15px; }
+  .sandbox-edit-card .sandbox-edit-meta,
+  .sandbox-edit-card .sandbox-edit-boundary {
+    color: var(--text-dim);
+    font-size: 11px;
+    overflow-wrap: anywhere;
+  }
+  .sandbox-edit-card .sandbox-edit-boundary { margin-top: 9px; }
+  .sandbox-edit-card pre {
+    max-height: 300px;
+    white-space: pre;
+    color: var(--text);
+  }
+  .sandbox-edit-card .sandbox-edit-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .sandbox-edit-card button {
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    padding: 7px 11px;
+  }
+  .sandbox-edit-card button.confirm { border-color: var(--accent); color: var(--accent); }
+  .sandbox-edit-card button:disabled { cursor: default; opacity: 0.5; }
+  .sandbox-edit-card .sandbox-edit-status { margin-top: 9px; font-size: 12px; }
+  .sandbox-edit-card .sandbox-edit-status.ok { color: #4ade80; }
+  .sandbox-edit-card .sandbox-edit-status.error { color: #f87171; }
 
   .msg-bubble.user {
     background: var(--user-bg);
@@ -399,6 +633,7 @@
     transition: all 0.15s;
   }
   .chip:hover { border-color: var(--accent); color: var(--text); background: var(--surface2); }
+  body:not(.ui-advanced-open) .chip-extra { display: none; }
 
   /* ── Input area ── */
   #input-area {
@@ -455,6 +690,124 @@
     font-size: 11px;
     color: var(--text-dim);
     text-align: center;
+  }
+
+  #durability-strip {
+    max-width: 800px;
+    margin: 8px auto 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+    min-height: 24px;
+  }
+
+  .durability-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 22px;
+    padding: 3px 8px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    color: var(--text-dim);
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .durability-chip[data-durability-detail],
+  #mode-indicator,
+  #safety-indicator {
+    cursor: pointer;
+  }
+
+  .durability-chip[data-durability-detail]:hover,
+  .durability-chip[data-durability-detail]:focus {
+    border-color: var(--accent);
+    color: var(--text);
+    outline: none;
+  }
+
+  .durability-chip::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-dim);
+  }
+
+  .durability-chip.saved {
+    color: #b7f7df;
+    border-color: rgba(16,163,127,0.42);
+    background: rgba(16,163,127,0.12);
+  }
+  .durability-chip.saved::before { background: var(--accent); }
+
+  .durability-chip.pending {
+    color: #fde68a;
+    border-color: rgba(245,158,11,0.45);
+    background: rgba(245,158,11,0.10);
+  }
+  .durability-chip.pending::before { background: var(--warning); }
+
+  .durability-chip.warn {
+    color: #fecaca;
+    border-color: rgba(239,68,68,0.50);
+    background: rgba(239,68,68,0.10);
+  }
+  .durability-chip.warn::before { background: var(--danger); }
+  body:not(.ui-advanced-open) .dur-extra { display: none; }
+
+  #durability-detail {
+    max-width: 800px;
+    margin: 8px auto 0;
+    border: 1px solid rgba(34,211,238,0.24);
+    background: rgba(9,14,22,0.96);
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.36);
+    overflow: hidden;
+    display: none;
+  }
+
+  #durability-detail.visible {
+    display: block;
+  }
+
+  .durability-detail-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 11px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .durability-detail-head button {
+    border: 1px solid rgba(255,255,255,0.14);
+    background: transparent;
+    color: var(--text-dim);
+    border-radius: 6px;
+    cursor: pointer;
+    padding: 3px 8px;
+    font: inherit;
+  }
+
+  #durability-detail-body {
+    padding: 10px 12px;
+    color: var(--text-muted);
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
   /* ── Input toolbar (eyes / mic / voice) ── */
@@ -558,6 +911,149 @@
     overflow-y: auto;
   }
 
+  /* SourceMap / RenderedReality Live Witness panel */
+  #sourcemap-panel {
+    position: absolute;
+    top: 60px;
+    right: 16px;
+    width: min(520px, calc(100vw - 32px));
+    max-height: calc(100dvh - 92px);
+    overflow-y: auto;
+    background: var(--sidebar-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    z-index: 28;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    display: none;
+  }
+  #sourcemap-panel.visible { display: block; }
+  .sourcemap-head {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .sourcemap-head h2 {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .sourcemap-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 3px 6px;
+  }
+  .sourcemap-close:hover { color: var(--text); }
+  .sourcemap-body {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .witness-governance {
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    background: rgba(255,255,255,0.03);
+  }
+  .witness-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .witness-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px;
+    min-height: 70px;
+    background: var(--surface);
+  }
+  .witness-card b {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 11px;
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .witness-card span {
+    display: block;
+    font-size: 12px;
+    line-height: 1.35;
+    color: var(--text-dim);
+    overflow-wrap: anywhere;
+  }
+  .witness-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .witness-actions button, #sourcemap-btn, #preferences-btn, #self-prompt-btn, #self-notes-btn, #tuneup-btn, #human-state-btn, #operator-dashboard-btn, #ai-lockbox-btn {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 7px 9px;
+    cursor: pointer;
+  }
+  .witness-actions button:hover, #sourcemap-btn:hover, #preferences-btn:hover, #self-prompt-btn:hover, #self-notes-btn:hover, #tuneup-btn:hover, #human-state-btn:hover, #operator-dashboard-btn:hover, #ai-lockbox-btn:hover {
+    border-color: var(--accent);
+    color: #fff;
+  }
+  #self-prompt-btn.active {
+    background: rgba(34,211,238,0.16);
+    border-color: rgba(34,211,238,0.35);
+    color: #9bf6ff;
+  }
+  #self-prompt-btn.safe {
+    background: rgba(245,158,11,0.12);
+    border-color: rgba(245,158,11,0.25);
+    color: #ffd58a;
+  }
+  #self-notes-btn.active, #tuneup-btn.active {
+    background: rgba(88,208,200,0.12);
+    border-color: rgba(88,208,200,0.35);
+    color: #bffbf7;
+  }
+  #tuneup-btn.warn {
+    background: rgba(245,158,11,0.12);
+    border-color: rgba(245,158,11,0.28);
+    color: #ffd58a;
+  }
+  #human-state-btn.active {
+    background: rgba(16,185,129,0.12);
+    border-color: rgba(16,185,129,0.3);
+    color: #a7f3d0;
+  }
+  #operator-dashboard-btn.active {
+    background: rgba(14,165,233,0.12);
+    border-color: rgba(14,165,233,0.32);
+    color: #bae6fd;
+  }
+  #ai-lockbox-btn.active {
+    background: rgba(16,163,127,0.14);
+    border-color: rgba(16,163,127,0.34);
+    color: #99f6e4;
+  }
+  .witness-actions button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .witness-actions button.warn {
+    color: #fbbf24;
+  }
+
   /* ORACLE's spontaneous vision messages */
   .msg-bubble.vision {
     color: var(--text-dim);
@@ -591,6 +1087,7 @@
   }
   #presence-rail b { color: var(--text); font-weight: 600; }
   #presence-rail .pr-item { white-space: nowrap; }
+  body:not(.ui-advanced-open) #presence-rail .pr-extra { display: none; }
   .pr-dot {
     width: 7px; height: 7px; border-radius: 50%; background: #34d399;
     box-shadow: 0 0 8px #34d399; animation: prPulse 2.4s ease-in-out infinite;
@@ -657,7 +1154,25 @@
   <div id="topbar">
     <button id="toggle-sidebar" onclick="toggleSidebar()" title="Toggle sidebar">☰</button>
     <span id="topbar-title">ORACLE</span>
-    <div id="mode-indicator" class="companion">Companion</div>
+    <div id="mode-indicator" class="talk_lane" role="button" tabindex="0" onclick="showRuntimeDetail()" title="Show live runtime status">Talk</div>
+    <div id="safety-indicator" class="safe" role="button" tabindex="0" onclick="showRuntimeDetail()" title="Show live runtime status">Safe</div>
+    <button id="ai-lockbox-btn" onclick="showAiLockboxDetail()" title="Local .AI shorthand recall lockbox">Recall?</button>
+    <button id="self-prompt-btn" onclick="toggleSelfPromptMode()" title="Writer mode is governed by Noah">Writer OFF</button>
+    <button id="ui-advanced-btn" onclick="toggleAdvancedControls()" title="Show diagnostics, receipts, and operator tools">More</button>
+  </div>
+
+  <div id="advanced-controls" aria-label="Advanced ORACLE controls">
+    <span class="advanced-label">Advanced tools</span>
+    <button id="read-access-btn" onclick="showReadAccessDetail()" title="Full-PC read-only access receipt">Read?</button>
+    <button id="self-notes-btn" onclick="showSelfPromptJournal()" title="Read ORACLE's self-written sandbox prompt trail">Self Notes</button>
+    <button id="tuneup-btn" onclick="showTuneupPanel()" title="Connector and tune-up status">Tune</button>
+    <button id="human-state-btn" onclick="showHumanStatePanel()" title="Explicit Noah state and re-entry brief">Human ?</button>
+    <button id="operator-dashboard-btn" class="active" onclick="showOperatorDashboard()" title="Continuity Spine operator dashboard">Operator</button>
+    <button id="preferences-btn" onclick="showPreferencesDrawer()" title="ORACLE behavior preferences">Preferences</button>
+    <input type="file" id="preferences-upload-input" accept=".json,.md,.txt,.ai" style="display:none" onchange="uploadPreferencesFile(this)">
+    <button id="sourcemap-btn" onclick="toggleSourceMapPanel()" title="ORACLE SourceMap">SourceMap</button>
+    <a href="/nexus" title="Oracle Nexus" style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.42);text-decoration:none;padding:4px 10px;border:1px solid rgba(255,255,255,0.14);border-radius:6px;transition:0.2s;" onmouseover="this.style.color='#f4c76b';this.style.borderColor='rgba(244,199,107,0.45)'" onmouseout="this.style.color='rgba(255,255,255,0.42)';this.style.borderColor='rgba(255,255,255,0.14)'">Nexus</a>
+    <a href="/evidence" title="Evidence Cockpit" style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.42);text-decoration:none;padding:4px 10px;border:1px solid rgba(88,208,200,0.2);border-radius:6px;transition:0.2s;" onmouseover="this.style.color='#58d0c8';this.style.borderColor='rgba(88,208,200,0.55)'" onmouseout="this.style.color='rgba(255,255,255,0.42)';this.style.borderColor='rgba(88,208,200,0.2)'">Evidence</a>
     <a href="/miracledrive" id="md-link" title="MiracleDrive OS" style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.28);text-decoration:none;padding:4px 10px;border:1px solid rgba(255,255,255,0.1);border-radius:6px;transition:0.2s;" onmouseover="this.style.color='#22d3ee';this.style.borderColor='rgba(34,211,238,0.35)'" onmouseout="this.style.color='rgba(255,255,255,0.28)';this.style.borderColor='rgba(255,255,255,0.1)'">MiracleDrive ↗</a>
   </div>
 
@@ -675,16 +1190,221 @@
     <div id="cam-seen">Preview only. Press LOOK ONCE for a single observation.</div>
   </div>
 
+  <div id="sourcemap-panel">
+    <div class="sourcemap-head">
+      <h2>RenderedReality Live Witness</h2>
+      <button class="sourcemap-close" onclick="toggleSourceMapPanel(false)" title="Close">x</button>
+    </div>
+    <div class="sourcemap-body">
+      <div class="witness-governance">
+        RenderedReality Live Witness observes metadata only when Noah.Physical enables it. It does not record the screen, audio, video, keystrokes, or clipboard by default. It writes receipts, not surveillance archives.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>Live Witness Status</b><span id="rr-status">loading</span></div>
+        <div class="witness-card"><b>Consent Mode</b><span id="rr-mode">off</span></div>
+        <div class="witness-card"><b>OBS Status</b><span id="rr-obs">not observed</span></div>
+        <div class="witness-card"><b>Current Window</b><span id="rr-window">not observed</span></div>
+        <div class="witness-card"><b>Last Session Receipt</b><span id="rr-receipt">none</span></div>
+        <div class="witness-card"><b>Warnings</b><span id="rr-warnings">none</span></div>
+      </div>
+      <div class="witness-actions">
+        <button class="primary" onclick="setRenderedRealityMode('metadata_only')">Enable metadata-only witness</button>
+        <button onclick="setRenderedRealityMode('off')">Disable witness</button>
+        <button onclick="refreshRenderedReality()">Refresh live context</button>
+        <button class="warn" onclick="writeRenderedRealityReceipt()">Write session receipt</button>
+      </div>
+      <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
+        <h2>SourceMap Witness Governance</h2>
+      </div>
+      <div class="witness-governance">
+        Observe. Link. Receipt. Store by consent. Copy only by Noah.Physical approval.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>Current Watch State</b><span id="gov-watch-state">watch_off</span></div>
+        <div class="witness-card"><b>Current Storage Tier</b><span id="gov-storage-tier">do_not_store</span></div>
+        <div class="witness-card"><b>Last Receipt</b><span id="gov-receipt">none</span></div>
+        <div class="witness-card"><b>Consent Status</b><span id="gov-consent">explicit consent required</span></div>
+        <div class="witness-card"><b>Allowed To Observe</b><span id="gov-observe">metadata only after explicit enablement</span></div>
+        <div class="witness-card"><b>Allowed To Store</b><span id="gov-store">receipts and selected artifacts by consent</span></div>
+        <div class="witness-card"><b>Forbidden To Capture</b><span id="gov-forbidden">hidden recording, keylogging, clipboard, screenshots, audio, video by default</span></div>
+        <div class="witness-card"><b>Known References</b><span id="gov-known">not loaded</span></div>
+      </div>
+      <div class="witness-actions">
+        <button onclick="sendGovernanceCommand('do_not_watch')">Do not watch</button>
+        <button class="primary" onclick="sendGovernanceCommand('metadata_only')">Metadata only</button>
+        <button onclick="sendGovernanceCommand('link_this')">Link this</button>
+        <button onclick="sendGovernanceCommand('write_receipt')">Write receipt</button>
+        <button class="warn" onclick="sendGovernanceCommand('preserve_this')">Preserve this</button>
+        <button onclick="sendGovernanceCommand('forget_this')">Forget this</button>
+        <button onclick="showGovernanceKnown()">Show me what you know</button>
+      </div>
+      <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
+        <h2>Build Witness</h2>
+      </div>
+      <div class="witness-governance" id="build-witness-notice">
+        Candidate construction receipts. ORACLE records the build event: request, agent, changed-file metadata, tests, result, and receipt hash. No file contents, commits, pushes, uploads, or canon promotion.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>Latest Build Event</b><span id="build-event">none</span></div>
+        <div class="witness-card"><b>Test Result</b><span id="build-test-result">unverified</span></div>
+        <div class="witness-card"><b>Files Changed</b><span id="build-files-changed">0</span></div>
+        <div class="witness-card"><b>Approval Status</b><span id="build-approval">candidate</span></div>
+        <div class="witness-card"><b>Receipt Hash</b><span id="build-hash">none</span></div>
+        <div class="witness-card"><b>Timeline</b><span id="build-timeline-count">0 events</span></div>
+      </div>
+      <div class="witness-actions">
+        <button class="primary" onclick="loadBuildWitnessTimeline()">Refresh Build Timeline</button>
+        <button class="warn" onclick="writeBuildWitnessReceipt()">Write Build Receipt</button>
+      </div>
+      <div id="build-witness-results" class="witness-governance" style="white-space:pre-wrap;font-family:monospace;font-size:11px"></div>
+      <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
+        <h2>LootDrops</h2>
+      </div>
+      <div class="witness-governance" id="lootdrop-notice">
+        MindCoin is symbolic, local-only, nonfinancial, nontransferable, and has no cash, crypto, market, or exchange value.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>Latest LootDrop</b><span id="loot-latest">none</span></div>
+        <div class="witness-card"><b>MindCoin Total</b><span id="loot-total">0</span></div>
+        <div class="witness-card"><b>Last Award Reason</b><span id="loot-reason">none</span></div>
+        <div class="witness-card"><b>Linked Receipt</b><span id="loot-receipt">none</span></div>
+        <div class="witness-card"><b>Artifact Path</b><span id="loot-artifact">none</span></div>
+        <div class="witness-card"><b>Warnings</b><span id="loot-warnings">none</span></div>
+      </div>
+      <div class="witness-actions">
+        <button class="primary" onclick="createManualLootDrop()">Create manual LootDrop</button>
+        <button onclick="writeLootDropReceipt()">Write LootDrop receipt</button>
+        <button class="warn" onclick="awardLootDropMindCoin()">Award MindCoin</button>
+      </div>
+      <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
+        <h2>Active Context</h2>
+      </div>
+      <div class="witness-governance" id="active-context-notice">
+        Active Context Sync refreshes local state from C:\Oracle\state without resetting this conversation, uploading, syncing, or making Drive canonical.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>Last Refresh Time</b><span id="ctx-refresh-time">none</span></div>
+        <div class="witness-card"><b>Sources Loaded</b><span id="ctx-sources-loaded">0</span></div>
+        <div class="witness-card"><b>New Changes</b><span id="ctx-new-changes">0</span></div>
+        <div class="witness-card"><b>Warnings</b><span id="ctx-warnings">none</span></div>
+        <div class="witness-card"><b>Reset Status</b><span id="ctx-reset-status">Not reset</span></div>
+        <div class="witness-card"><b>Latest Snapshot</b><span id="ctx-latest-path">none</span></div>
+      </div>
+      <div class="witness-actions">
+        <button class="primary" onclick="refreshActiveContext()">Refresh Context</button>
+        <button onclick="showActiveContextDiff()">Show Context Diff</button>
+      </div>
+      <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
+        <h2>Live Runtime Mirror</h2>
+      </div>
+      <div class="witness-governance" id="live-mirror-notice">
+        Every reading below carries its own age, read live at refresh. The capability panel is a
+        snapshot from its last smoke run and can be hours old; this is not. When a number here
+        disagrees with the capability panel, this one is current and that one is stale.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>OBS</b><span id="lm-obs">reading…</span></div>
+        <div class="witness-card"><b>OBS Scene</b><span id="lm-obs-scene">unknown</span></div>
+        <div class="witness-card"><b>OBS Sources</b><span id="lm-obs-sources">unknown</span></div>
+        <div class="witness-card"><b>Self-Prompt State</b><span id="lm-selfprompt">reading…</span></div>
+        <div class="witness-card"><b>Open Loops</b><span id="lm-loops">reading…</span></div>
+        <div class="witness-card"><b>Receipts (24h)</b><span id="lm-receipts">reading…</span></div>
+        <div class="witness-card"><b>Evidence Quality</b><span id="lm-evidence">reading…</span></div>
+        <div class="witness-card"><b>Runtime PID</b><span id="lm-pid">reading…</span></div>
+        <div class="witness-card"><b>Mirror Read At</b><span id="lm-readat">never</span></div>
+      </div>
+      <div class="witness-actions">
+        <button class="primary" onclick="refreshLiveMirror()">Refresh live mirror</button>
+      </div>
+
+      <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
+        <h2>Captain's Log Transcript</h2>
+      </div>
+      <div class="witness-governance" id="obs-transcript-notice">
+        Local-only OBS transcript shelf. ORACLE reads OBS recording metadata and existing transcript sidecars only; it does not upload media, copy raw video, record audio, capture the screen, or use cloud transcription.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>Active OBS Recording</b><span id="obs-transcript-recording">unknown</span></div>
+        <div class="witness-card"><b>Local Transcript Stack</b><span id="obs-transcript-stack">unknown</span></div>
+        <div class="witness-card"><b>Transcript Sidecars</b><span id="obs-transcript-sidecars">unknown</span></div>
+        <div class="witness-card"><b>Latest Transcript</b><span id="obs-transcript-latest">none</span></div>
+        <div class="witness-card"><b>Latest Receipt</b><span id="obs-transcript-receipt">none</span></div>
+        <div class="witness-card"><b>Warnings</b><span id="obs-transcript-warnings">none</span></div>
+      </div>
+      <div class="witness-actions">
+        <button class="primary" onclick="loadObsTranscriptStatus()">Refresh OBS transcript status</button>
+        <button onclick="pullObsTranscript()">Pull local transcript</button>
+        <button class="warn" onclick="writeObsTranscriptReceipt()">Write transcript receipt</button>
+      </div>
+      <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
+        <h2>ORACLE Intake</h2>
+      </div>
+      <div class="witness-governance" id="intake-notice">
+        Local file intake only. Files are copied into C:\Oracle\state\inbox. ORACLE does not upload to cloud, sync Drive, commit, push, delete, move, or rename existing files. Files are not automatically memory: every upload lands in intake state first and nothing is promoted into memory without Noah.Physical approval. Dangerous executables and credential-risk files are quarantined and never stored.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>Last Intake</b><span id="intake-time">none</span></div>
+        <div class="witness-card"><b>Files Received</b><span id="intake-received">0</span></div>
+        <div class="witness-card"><b>Quarantined</b><span id="intake-quarantined">0</span></div>
+        <div class="witness-card"><b>Rejected</b><span id="intake-rejected">0</span></div>
+        <div class="witness-card"><b>Manifest Path</b><span id="intake-manifest">none</span></div>
+        <div class="witness-card"><b>Last Receipt</b><span id="intake-receipt">none</span></div>
+        <div class="witness-card"><b>Warnings</b><span id="intake-warnings">none</span></div>
+      </div>
+      <input type="file" id="intake-file-input" multiple style="display:none" onchange="handleIntakeFiles(this)">
+      <input type="file" id="intake-folder-input" webkitdirectory directory multiple style="display:none" onchange="handleIntakeFolder(this)">
+      <div class="witness-actions">
+        <button class="primary" onclick="document.getElementById('intake-file-input').click()">Add Files</button>
+        <button onclick="document.getElementById('intake-folder-input').click()">Add Folder</button>
+        <button onclick="reviewIntake()">Review Intake</button>
+        <button onclick="clearIntakeView()">Clear Intake View</button>
+        <button class="warn" onclick="showIntakeManifest()">Show Intake Manifest</button>
+      </div>
+      <div id="intake-results" class="witness-governance" style="white-space:pre-wrap;font-family:monospace;font-size:11px"></div>
+      <div class="sourcemap-head" style="padding-left:0;padding-right:0;margin-top:6px">
+        <h2>Storage Census</h2>
+      </div>
+      <div class="witness-governance" id="census-notice">
+        Governed, read-only discovery. Imports and obeys core/governance.py — it does not define new governance. Full-PC read-only access is granted for search/list/read, while mutation and external actions remain gated. Metadata census never ingests content, uploads, syncs, deletes, moves, renames, commits, pushes, or auto-merges into the canonical SourceMap. Credential-risk files are reported as a count only; their contents are never stored.
+      </div>
+      <div class="witness-grid">
+        <div class="witness-card"><b>Governance</b><span id="census-governance">unknown</span></div>
+        <div class="witness-card"><b>Governance Source</b><span id="census-gov-source">none</span></div>
+        <div class="witness-card"><b>Approved Roots Scanned</b><span id="census-approved">none</span></div>
+        <div class="witness-card"><b>Known Roots Not Scanned</b><span id="census-known">none</span></div>
+        <div class="witness-card"><b>ORACLE-related Candidates</b><span id="census-candidates">0</span></div>
+        <div class="witness-card"><b>Credential-risk (count only)</b><span id="census-credrisk">0</span></div>
+        <div class="witness-card"><b>Duplicate Candidates</b><span id="census-dupes">0</span></div>
+        <div class="witness-card"><b>Manifest Path</b><span id="census-manifest">none</span></div>
+        <div class="witness-card"><b>Last Receipt</b><span id="census-receipt">none</span></div>
+        <div class="witness-card"><b>Warnings</b><span id="census-warnings">none</span></div>
+      </div>
+      <div class="witness-actions">
+        <button class="primary" onclick="loadCensusRoots()">Show Roots</button>
+        <button onclick="scanApprovedCensus()">Scan Approved</button>
+        <button onclick="loadCensusReport()">Report</button>
+        <button onclick="loadCensusRisks()">Risks</button>
+      </div>
+      <div class="witness-actions">
+        <input type="text" id="census-root-input" placeholder="root path to approve/reject" style="flex:1;min-width:160px;padding:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px">
+        <button onclick="approveCensusRoot()">Approve Root</button>
+        <button class="warn" onclick="rejectCensusRoot()">Reject Root</button>
+      </div>
+      <div id="census-results" class="witness-governance" style="white-space:pre-wrap;font-family:monospace;font-size:11px"></div>
+    </div>
+  </div>
+
   <!-- Presence rail — ORACLE's live state, always visible -->
   <div id="presence-rail">
     <span class="pr-dot"></span>
     <span class="pr-item">mode <b id="pr-mode">…</b></span>
+    <span class="pr-item pr-extra">cognition <b id="pr-cognition">…</b></span>
     <span class="pr-item">memory <b id="pr-mem">…</b></span>
-    <span class="pr-item">law <b id="pr-law">…</b></span>
-    <span class="pr-item">life <b id="pr-life">…</b></span>
-    <span class="pr-item">bridge <b id="pr-bridge">…</b></span>
+    <span class="pr-item pr-extra">law <b id="pr-law">…</b></span>
+    <span class="pr-item pr-extra">life <b id="pr-life">…</b></span>
+    <span class="pr-item pr-extra">bridge <b id="pr-bridge">…</b></span>
     <span class="pr-item" id="pr-intent-wrap" style="display:none">carrying <b id="pr-intent"></b></span>
-    <span class="pr-item" id="pr-obs-wrap" style="display:none">last look <b id="pr-obs"></b></span>
+    <span class="pr-item pr-extra" id="pr-obs-wrap" style="display:none">last look <b id="pr-obs"></b></span>
     <span class="pr-grow"></span>
     <span class="pr-receipt" id="pr-heartbeat">grounded · continuous</span>
   </div>
@@ -697,9 +1417,12 @@
       <div class="suggestion-chips" id="welcome-chips">
         <div class="chip" onclick="sendSuggestion('Are you there?')">Are you there?</div>
         <div class="chip" onclick="sendSuggestion('What are you working on?')">What are you working on?</div>
-        <div class="chip" onclick="sendSuggestion('/self-patch')">Propose a self-improvement</div>
         <div class="chip" onclick="sendSuggestion('/focus')">Show current focus</div>
-        <div class="chip" onclick="sendSuggestion('/help')">Show commands</div>
+        <div class="chip chip-extra" onclick="sendSuggestion('Who is Ellie from the grounded Ellie Rendered Reality domain?')">Ask Ellie domain</div>
+        <div class="chip chip-extra" onclick="sendSuggestion('/self-patch')">Propose a self-improvement</div>
+        <div class="chip chip-extra" onclick="sendSuggestion('/ai-lockbox-status')">Recall lockbox</div>
+        <div class="chip chip-extra" onclick="sendSuggestion('/ai-lockbox-search oracle')">Search .AI recall</div>
+        <div class="chip chip-extra" onclick="sendSuggestion('/help')">Show commands</div>
       </div>
     </div>
   </div>
@@ -712,6 +1435,9 @@
         </button>
         <button class="tool-btn" id="mic-btn" onclick="toggleMic()" title="Speak to ORACLE">
           <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+        </button>
+        <button class="tool-btn" id="sandbox-edit-btn" onclick="prepareSandboxEdit()" title="Read, diff, and confirm an edit inside sandbox only">
+          <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
         </button>
         <button class="tool-btn active" id="voice-btn" onclick="toggleVoice()" title="ORACLE speaks her replies aloud">
           <svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
@@ -728,7 +1454,23 @@
         <svg viewBox="0 0 24 24"><path d="M2 21L23 12 2 3v7l15 2-15 2z"/></svg>
       </button>
     </div>
-    <div id="input-hint">Enter to send · 👁 webcam · 🎤 voice in · 🔊 voice out · /help for commands</div>
+    <div id="durability-strip" aria-live="polite">
+      <span class="durability-chip pending" id="dur-save-state" role="button" tabindex="0" data-durability-detail="save">checking save</span>
+      <span class="durability-chip pending" id="dur-history-source" role="button" tabindex="0" data-durability-detail="history">history unknown</span>
+      <span class="durability-chip pending" id="dur-session-count" role="button" tabindex="0" data-durability-detail="thread">thread --</span>
+      <span class="durability-chip pending dur-extra" id="dur-custody-count" role="button" tabindex="0" data-durability-detail="custody">custody --</span>
+      <span class="durability-chip pending dur-extra" id="dur-index-count" role="button" tabindex="0" data-durability-detail="index">index --</span>
+      <span class="durability-chip pending dur-extra" id="dur-ellie-domain" role="button" tabindex="0" onclick="showEllieDomainDetail()" title="Ellie Rendered Reality read-domain">ellie domain --</span>
+      <span class="durability-chip pending" id="dur-receipt" role="button" tabindex="0" data-durability-detail="receipt">receipt --</span>
+    </div>
+    <div id="durability-detail" aria-live="polite">
+      <div class="durability-detail-head">
+        <span id="durability-detail-title">Durability Receipt</span>
+        <button type="button" onclick="hideDurabilityDetail()">Close</button>
+      </div>
+      <div id="durability-detail-body">Select a durability chip to inspect its receipt.</div>
+    </div>
+    <div id="input-hint">Enter to send · ✎ confirmed sandbox edit · 👁 webcam · 🎤 voice in · 🔊 voice out · /help for commands</div>
   </div>
 </div>
 
@@ -738,16 +1480,60 @@
   if (window.location.protocol === 'file:') {
     document.body.innerHTML =
       '<div style="font-family:monospace;color:#ef4444;padding:40px;background:#0a0a0c;height:100vh">' +
-      '<h2>ORACLE must be opened through http://127.0.0.1:7777</h2>' +
-      '<p>Run <code>oracle_desktop.bat</code> or start the server and navigate to that URL.<br>' +
+      '<h2>ORACLE must be opened through the active local ORACLE port</h2>' +
+      '<p>Run <code>oracle_desktop.bat</code> or start the server and navigate to the operator console URL.<br>' +
+      'For this workstation session, use <code>http://127.0.0.1:7781</code>.<br>' +
       'Opening <code>index.html</code> directly as a file:// URL breaks all fetch calls.</p></div>';
     throw new Error('file:// origin — fetch calls would fail');
   }
 })();
 
 // ── Safe API base — resolves fetch calls against the correct HTTP origin ──────
-const API_ORIGIN = window.location.origin;  // e.g. http://127.0.0.1:7777
+const API_ORIGIN = window.location.origin;  // e.g. http://127.0.0.1:7781
 function apiUrl(path) { return API_ORIGIN + path; }
+
+const UI_ADVANCED_STORAGE_KEY = 'oracle_ui_advanced_open';
+
+function setAdvancedControlsOpen(open) {
+  const enabled = !!open;
+  document.body.classList.toggle('ui-advanced-open', enabled);
+  // Keep already-rendered diagnostic chips honest: their inline display is set
+  // at render time, so re-sync existing ones when the mode flips.
+  document.querySelectorAll('.route-receipt').forEach(el => {
+    el.style.display = enabled ? 'flex' : 'none';
+  });
+  const btn = document.getElementById('ui-advanced-btn');
+  if (btn) {
+    btn.textContent = enabled ? 'Less' : 'More';
+    btn.setAttribute('aria-expanded', enabled ? 'true' : 'false');
+    btn.title = enabled
+      ? 'Hide diagnostics, receipts, and operator tools'
+      : 'Show diagnostics, receipts, and operator tools';
+  }
+  try {
+    localStorage.setItem(UI_ADVANCED_STORAGE_KEY, enabled ? '1' : '0');
+  } catch {}
+}
+
+function toggleAdvancedControls() {
+  setAdvancedControlsOpen(!document.body.classList.contains('ui-advanced-open'));
+}
+
+function initUiDensity() {
+  let open = false;
+  try {
+    // One-time reset to the calm default. Older sessions could leave advanced
+    // mode stuck on, burying every message under diagnostic chips and a wall of
+    // operator buttons. Force the simple view once; after that, honor the choice
+    // the user makes with the More/Less button.
+    if (localStorage.getItem('oracle_ui_density_v2') !== '1') {
+      localStorage.setItem(UI_ADVANCED_STORAGE_KEY, '0');
+      localStorage.setItem('oracle_ui_density_v2', '1');
+    }
+    open = localStorage.getItem(UI_ADVANCED_STORAGE_KEY) === '1';
+  } catch {}
+  setAdvancedControlsOpen(open);
+}
 
 // ── Pre-fill from MiracleDrive ?q= param ──────────────────────────────────────
 (function() {
@@ -760,18 +1546,39 @@ function apiUrl(path) { return API_ORIGIN + path; }
 })();
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let currentMode = 'companion';
+let currentMode = 'unified_oracle';
+let currentLane = 'talk_lane';
+let currentSafety = 'Safe';
 let noRoute = false;
 let isStreaming = false;
+const CHAT_REQUEST_TIMEOUT_MS = 45000;
 let conversationStarted = false;
 let historyItems = [];
+let lastHistorySource = 'unknown';
+let lastDurabilityData = null;
+let lastEllieDomainData = null;
+let lastPreferencesData = null;
+let lastReadAccessData = null;
+let lastAiLockboxData = null;
+let lastConnectorStatusData = null;
 
 // ── Marked config ─────────────────────────────────────────────────────────────
 marked.setOptions({ breaks: true, gfm: true });
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('collapsed');
+  const sidebar = document.getElementById('sidebar');
+  sidebar.classList.toggle('collapsed');
+  document.body.classList.toggle('sidebar-collapsed', sidebar.classList.contains('collapsed'));
+}
+
+function initSidebarState() {
+  const sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
+  if (window.matchMedia && window.matchMedia('(max-width: 760px)').matches) {
+    sidebar.classList.add('collapsed');
+  }
+  document.body.classList.toggle('sidebar-collapsed', sidebar.classList.contains('collapsed'));
 }
 
 // ── Mode ──────────────────────────────────────────────────────────────────────
@@ -779,14 +1586,28 @@ function setMode(mode) {
   sendSuggestion('/' + mode);
 }
 
-function updateModeUI(mode) {
-  if (mode !== 'companion' && mode !== 'builder') return;
-  currentMode = mode;
+function _safetyClass(value) {
+  const low = String(value || '').toLowerCase();
+  if (low.includes('blocked')) return 'blocked';
+  if (low.includes('approval')) return 'approval';
+  if (low.includes('receipt')) return 'receipt';
+  return 'safe';
+}
+
+function updateModeUI(mode, lane, safety) {
+  currentMode = 'unified_oracle';
+  currentLane = lane || (mode && mode.endsWith('_lane') ? mode : currentLane) || 'talk_lane';
+  currentSafety = safety || currentSafety || 'Safe';
   document.querySelectorAll('.mode-pill').forEach(p => p.classList.remove('active'));
-  document.getElementById('pill-' + mode)?.classList.add('active');
   const ind = document.getElementById('mode-indicator');
-  ind.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
-  ind.className = mode;
+  const label = currentLane.replace('_lane', '').replace(/^\w/, c => c.toUpperCase());
+  ind.textContent = label;
+  ind.className = currentLane;
+  const safetyEl = document.getElementById('safety-indicator');
+  if (safetyEl) {
+    safetyEl.textContent = currentSafety;
+    safetyEl.className = _safetyClass(currentSafety);
+  }
 }
 
 function updateNoRouteUI(value) {
@@ -798,9 +1619,1036 @@ async function syncModeState() {
   const r = await fetch(apiUrl('/api/mode'));
   if (!r.ok) throw new Error(`Mode sync failed (${r.status})`);
   const data = await r.json();
-  updateModeUI(data.mode || 'companion');
+  updateModeUI(data.mode || 'unified_oracle', data.current_lane || 'talk_lane', data.safety_status || 'Safe');
   updateNoRouteUI(data.no_route || false);
   return data;
+}
+
+function setDurabilityChip(id, text, state, title) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'durability-chip ' + (state || 'pending');
+  const clickHint = el.dataset && el.dataset.durabilityDetail ? ' | click for live receipt details' : '';
+  el.title = (title || '') + clickHint;
+}
+
+function shortPath(path) {
+  const value = String(path || '');
+  if (!value) return 'none';
+  const parts = value.split(/[\\/]/).filter(Boolean);
+  return parts.slice(-2).join('/') || value;
+}
+
+function detailValue(value) {
+  if (value === undefined || value === null || value === '') return 'none';
+  if (Array.isArray(value)) return value.length ? value.join(', ') : 'none';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  return String(value);
+}
+
+function detailLines(title, rows) {
+  const head = document.getElementById('durability-detail-title');
+  const body = document.getElementById('durability-detail-body');
+  const panel = document.getElementById('durability-detail');
+  if (!head || !body || !panel) return;
+  head.textContent = title;
+  body.textContent = rows.map(([key, value]) => key + ': ' + detailValue(value)).join('\n');
+  panel.classList.add('visible');
+}
+
+function hideDurabilityDetail() {
+  const panel = document.getElementById('durability-detail');
+  if (panel) panel.classList.remove('visible');
+}
+
+function durabilityRows(kind, data) {
+  const payload = data || {};
+  const sqlite = payload.sqlite || {};
+  const capture = payload.thread_capture || {};
+  const facts = payload.thread_evidence_facts || {};
+  if (kind === 'history') {
+    return ['History Source', [
+      ['ui_history_source', lastHistorySource],
+      ['api_history_endpoint', '/api/history'],
+      ['current_session_id', payload.session_id],
+      ['current_session_messages', sqlite.current_session_message_count],
+      ['latest_sqlite_session_id', sqlite.latest_session_id],
+      ['sqlite_path', sqlite.path],
+    ]];
+  }
+  if (kind === 'thread') {
+    return ['Thread Persistence', [
+      ['current_session_id', payload.session_id],
+      ['current_session_messages', sqlite.current_session_message_count],
+      ['total_message_count', sqlite.message_count],
+      ['valid_session_count', sqlite.valid_session_count],
+      ['malformed_session_rows_isolated', sqlite.malformed_session_rows],
+      ['persistence_safe_to_refresh', payload.persistence_safe_to_refresh],
+    ]];
+  }
+  if (kind === 'custody') {
+    return ['Custody Archive', [
+      ['raw_artifact_count', capture.raw_artifact_count],
+      ['parsed_transcript_count', capture.parsed_transcript_count],
+      ['custody_receipt_count', capture.custody_receipt_count],
+      ['source_manifest_rows', capture.source_manifest_rows],
+      ['raw_transcripts_dir', capture.raw_transcripts_dir],
+      ['custody_receipts_dir', capture.custody_receipts_dir],
+      ['canon_status_for_new_captures', capture.canon_status_for_new_captures || payload.canon_status_for_captures],
+      ['promotion_status_for_new_captures', capture.promotion_status_for_new_captures || payload.promotion_status_for_captures],
+    ]];
+  }
+  if (kind === 'index') {
+    return ['Search Index', [
+      ['search_index_rows', capture.search_index_rows],
+      ['thread_recall_facts', facts.thread_recall],
+      ['thread_capture_facts', facts.thread_capture],
+      ['total_thread_evidence', facts.total_thread_evidence],
+      ['search_index_jsonl', capture.search_index_jsonl],
+      ['source_manifest_jsonl', capture.source_manifest_jsonl],
+    ]];
+  }
+  if (kind === 'receipt') {
+    return ['Latest Custody Receipt', [
+      ['last_custody_receipt_path', payload.last_custody_receipt_path],
+      ['cloud_upload', payload.cloud_upload],
+      ['git_commit', payload.git_commit],
+      ['git_push', payload.git_push],
+      ['account_scraping', capture.account_scraping],
+      ['new_capture_canon_status', payload.canon_status_for_captures],
+      ['new_capture_promotion_status', payload.promotion_status_for_captures],
+    ]];
+  }
+  return ['Durable Save', [
+    ['persistence_safe_to_refresh', payload.persistence_safe_to_refresh],
+    ['sqlite_exists', sqlite.exists],
+    ['sqlite_path', sqlite.path],
+    ['message_count', sqlite.message_count],
+    ['current_session_id', payload.session_id],
+    ['current_session_messages', sqlite.current_session_message_count],
+    ['generated_at', payload.generated_at],
+  ]];
+}
+
+async function showDurabilityDetail(kind) {
+  if (!lastDurabilityData) {
+    await refreshDurability(lastHistorySource).catch(() => {});
+  }
+  const [title, rows] = durabilityRows(kind || 'save', lastDurabilityData || {});
+  detailLines(title, rows);
+}
+
+function ellieDomainRows(data) {
+  const payload = data || {};
+  const layers = payload.layers || {};
+  const families = payload.source_family_counts || {};
+  const prompts = payload.suggested_prompts || [];
+  return ['Ellie Rendered Reality Domain', [
+    ['endpoint', '/api/domains/ellie'],
+    ['domain', payload.domain],
+    ['status', payload.status],
+    ['canon_status', payload.canon_status],
+    ['promotion_status', payload.promotion_status],
+    ['sensitivity', payload.sensitivity],
+    ['read_allowed', payload.read_allowed],
+    ['write_allowed', payload.write_allowed],
+    ['source_count', payload.source_count],
+    ['hash_verified_source_count', payload.hash_verified_source_count],
+    ['verified_source_count', payload.verified_source_count],
+    ['pending_source_count', payload.pending_source_count],
+    ['layers', Object.entries(layers).map(([k, v]) => k + '=' + v).join(', ')],
+    ['source_families', Object.entries(families).map(([k, v]) => k + '=' + v).join(', ')],
+    ['profile_path', payload.profile_path],
+    ['manifest_path', payload.manifest_path],
+    ['domain_document_path', payload.domain_document_path],
+    ['answer_policy', payload.answer_policy],
+    ['suggested_prompts', prompts.join(' | ')],
+    ['cloud_upload', payload.no_write_actions && payload.no_write_actions.cloud_upload],
+    ['git_commit', payload.no_write_actions && payload.no_write_actions.git_commit],
+    ['git_push', payload.no_write_actions && payload.no_write_actions.git_push],
+  ]];
+}
+
+async function refreshEllieDomainStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/domains/ellie'));
+    if (!r.ok) throw new Error(`ellie domain ${r.status}`);
+    const data = await r.json();
+    lastEllieDomainData = data;
+    const count = Number(data.source_count || 0);
+    const verified = Number(data.verified_source_count || 0);
+    const pending = Number(data.pending_source_count || 0);
+    const state = data.ok && count > 0 ? 'saved' : 'pending';
+    setDurabilityChip(
+      'dur-ellie-domain',
+      'ellie domain ' + count,
+      state,
+      'verified ' + verified + ', pending ' + pending + ' | read-only candidate domain'
+    );
+  } catch (e) {
+    lastEllieDomainData = { ok: false, domain: 'ellie', error: e.message };
+    setDurabilityChip('dur-ellie-domain', 'ellie domain ?', 'warn', e.message);
+  }
+}
+
+async function showEllieDomainDetail() {
+  if (!lastEllieDomainData) {
+    await refreshEllieDomainStatus().catch(() => {});
+  }
+  const [title, rows] = ellieDomainRows(lastEllieDomainData || {});
+  detailLines(title, rows);
+}
+
+function escapeAttr(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function preferenceBadge(pref) {
+  if (pref.blocked_reason) return 'blocked: ' + pref.blocked_reason;
+  return pref.active ? 'active' : 'disabled';
+}
+
+function preferenceListHtml(title, prefs) {
+  const rows = (prefs || []).map(pref => {
+    const canDisable = pref.active && !pref.blocked_reason;
+    return (
+      '<div style="border:1px solid var(--border);border-radius:8px;padding:8px;background:rgba(255,255,255,0.03);margin-top:6px">' +
+        '<div style="display:flex;gap:8px;align-items:flex-start;justify-content:space-between">' +
+          '<div>' +
+            '<div style="font-size:11px;color:var(--text);font-weight:700">' + escapeHtml(pref.preference_id || 'unknown') + '</div>' +
+            '<div style="font-size:12px;color:var(--text-dim);margin-top:4px">' + escapeHtml(pref.preference || '') + '</div>' +
+          '</div>' +
+          (canDisable ? '<button data-pref-disable="' + escapeAttr(pref.preference_id) + '" style="border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;padding:4px 7px;font-size:11px;cursor:pointer">Disable</button>' : '') +
+        '</div>' +
+        '<div style="font-size:10px;color:var(--text-dim);margin-top:6px">' +
+          'scope=' + escapeHtml(pref.scope || '') +
+          ' | category=' + escapeHtml(pref.category || '') +
+          ' | priority=' + escapeHtml(pref.priority || '') +
+          ' | ' + escapeHtml(preferenceBadge(pref)) +
+          ' | canon_status=' + escapeHtml(pref.canon_status || '') +
+        '</div>' +
+        '<div style="font-size:10px;color:var(--text-dim);margin-top:3px">receipt=' + escapeHtml(pref.receipt_id || 'none') + '</div>' +
+      '</div>'
+    );
+  }).join('');
+  return '<h3 style="font-size:12px;margin-top:12px">' + escapeHtml(title) + ' (' + (prefs || []).length + ')</h3>' + (rows || '<div style="font-size:12px;color:var(--text-dim);margin-top:6px">none</div>');
+}
+
+function preferencesReceiptsHtml(receipts) {
+  const lines = (receipts || []).slice(-5).reverse().map(r =>
+    '<div style="font-size:10px;color:var(--text-dim);margin-top:3px">' +
+      escapeHtml(r.timestamp || '') + ' | ' +
+      escapeHtml(r.action || '') + ' | ' +
+      escapeHtml(r.preference_id || '') + ' | ' +
+      escapeHtml(r.receipt_id || '') +
+    '</div>'
+  ).join('');
+  return '<h3 style="font-size:12px;margin-top:12px">Receipts</h3>' + (lines || '<div style="font-size:12px;color:var(--text-dim)">none</div>');
+}
+
+async function refreshPreferencesStatus() {
+  const r = await fetch(apiUrl('/api/preferences'));
+  if (!r.ok) throw new Error(`preferences ${r.status}`);
+  const data = await r.json();
+  lastPreferencesData = data;
+  const btn = document.getElementById('preferences-btn');
+  if (btn) {
+    btn.textContent = 'Preferences ' + Number(data.active_count || 0);
+    btn.title = 'active ' + Number(data.active_count || 0) + ', blocked ' + Number(data.blocked_count || 0);
+  }
+  return data;
+}
+
+function _selfPromptButtonClass(state) {
+  const low = String(state || '').toUpperCase();
+  if (low === 'SANDBOX_AUTONOMOUS_ENABLED' || low === 'MANUAL_ONCE') return 'active';
+  if (low === 'SAFE_SLEEP') return 'safe';
+  return 'pending';
+}
+
+function _selfPromptButtonLabel(state) {
+  const low = String(state || '').toUpperCase();
+  if (low === 'SANDBOX_AUTONOMOUS_ENABLED') return 'Writer ON';
+  if (low === 'MANUAL_ONCE') return 'Writer Once';
+  if (low === 'SAFE_SLEEP') return 'Writer Sleep';
+  return 'Writer OFF';
+}
+
+// ── Live Runtime Mirror ───────────────────────────────────────────────────────
+// The capability panel is a snapshot from its last smoke run. On 2026-07-18 it
+// showed OBS as ConnectionRefused for twelve hours while OBS was recording fine,
+// and reported a candidate count that matched neither the live queue nor the
+// real store. Three different numbers, one of them shown as truth.
+//
+// The fix is not a fresher cache. It is showing the age of every reading, so a
+// stale number can never impersonate a current one.
+function _lmAge(iso) {
+  if (!iso) return 'age unknown';
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return 'age unknown';
+  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (secs < 60) return `${secs}s ago`;
+  if (secs < 3600) return `${Math.round(secs / 60)}m ago`;
+  return `${Math.round(secs / 3600)}h ago`;
+}
+
+function _lmSet(id, text, stale) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = stale ? '#ff9a4d' : '';
+}
+
+function _lmDuration(secs) {
+  const s = Math.max(0, Math.round(Number(secs) || 0));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+
+async function refreshLiveMirror() {
+  const readAt = new Date();
+
+  // OBS: read live rather than trusting the smoke snapshot.
+  try {
+    const r = await fetch(apiUrl('/api/context/obs'));
+    const d = await r.json();
+    if (d && d.available) {
+      const rec = d.recording
+        ? `RECORDING ${_lmDuration(d.recording_duration_seconds)}`
+        : 'connected, not recording';
+      _lmSet('lm-obs', `${rec} · read ${_lmAge(d.observed_at)}`, false);
+      _lmSet('lm-obs-scene', String(d.scene || 'unknown'), false);
+      const vis = (d.sources || []).filter(s => s && s.visible).map(s => String(s.name).trim());
+      _lmSet('lm-obs-sources', vis.length ? vis.join(', ') : 'none visible', false);
+    } else {
+      const why = (d && d.last_obs_error) ? String(d.last_obs_error) : 'not reachable';
+      _lmSet('lm-obs', `unavailable: ${why}`, true);
+      _lmSet('lm-obs-scene', 'UNKNOWN', true);
+      _lmSet('lm-obs-sources', 'UNKNOWN', true);
+    }
+  } catch (e) {
+    _lmSet('lm-obs', `read failed: ${e.message}`, true);
+  }
+
+  // Self-prompt: her thinking loop is either on or it is not.
+  try {
+    const r = await fetch(apiUrl('/api/self-prompt/status'));
+    const d = await r.json();
+    const state = String(d.current_state || 'OFF');
+    _lmSet('lm-selfprompt', `${state} · ${Number(d.daily_count || 0)}/${Number(d.daily_cap || 0)} today`,
+           state === 'OFF');
+  } catch (e) {
+    _lmSet('lm-selfprompt', `read failed: ${e.message}`, true);
+  }
+
+  // Continuity health: open loops, receipts, evidence ratio.
+  try {
+    const r = await fetch(apiUrl('/api/continuity/health'));
+    const d = await r.json();
+    const loops = d.open_loop_pressure || {};
+    const by = loops.by_status || {};
+    const waiting = Number(by.waiting || 0);
+    _lmSet('lm-loops', `${Number(loops.total || 0)} total · ${waiting} waiting`, waiting > 10);
+    const rd = d.receipt_density_24h || {};
+    _lmSet('lm-receipts', `${Number(rd.count || 0)} in 24h`, false);
+    const eq = d.evidence_quality || {};
+    const ratio = Number(eq.ratio || 0);
+    _lmSet('lm-evidence',
+           `${Math.round(ratio * 100)}% receipted (${Number(eq.objects_with_receipts_or_external_evidence || 0)}/${Number(eq.objects_total || 0)})`,
+           ratio < 0.9);
+  } catch (e) {
+    _lmSet('lm-loops', `read failed: ${e.message}`, true);
+  }
+
+  // Runtime identity: which process is actually answering.
+  try {
+    const r = await fetch(apiUrl('/api/diagnostics/runtime'));
+    const d = await r.json();
+    _lmSet('lm-pid', `${d.pid || 'unknown'} · ${String(d.active_runtime_command || '').slice(0, 48)}`, false);
+  } catch (e) {
+    _lmSet('lm-pid', `read failed: ${e.message}`, true);
+  }
+
+  _lmSet('lm-readat', readAt.toLocaleTimeString(), false);
+}
+
+async function refreshSelfPromptStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/self-prompt/status'));
+    if (!r.ok) throw new Error(`self-prompt ${r.status}`);
+    const data = await r.json();
+    const btn = document.getElementById('self-prompt-btn');
+    if (btn) {
+      const state = data.current_state || 'OFF';
+      btn.textContent = _selfPromptButtonLabel(state);
+      btn.className = _selfPromptButtonClass(state);
+      btn.title = `state ${state} · daily ${Number(data.daily_count || 0)}/${Number(data.daily_cap || 0)} · click to change`;
+    }
+    const notesBtn = document.getElementById('self-notes-btn');
+    if (notesBtn) {
+      const count = Number(data.journal_entry_count || 0);
+      notesBtn.textContent = count ? `Notes ${count}` : 'Self Notes';
+      notesBtn.className = count ? 'active' : '';
+      notesBtn.title = count ? `${count} self-written journal entries. Click to inspect read-only.` : 'No self-written journal entries reported yet.';
+    }
+    return data;
+  } catch (e) {
+    const btn = document.getElementById('self-prompt-btn');
+    if (btn) {
+      btn.textContent = 'Writer ?';
+      btn.className = 'pending';
+      btn.title = e.message;
+    }
+    const notesBtn = document.getElementById('self-notes-btn');
+    if (notesBtn) {
+      notesBtn.textContent = 'Notes ?';
+      notesBtn.className = '';
+      notesBtn.title = e.message;
+    }
+    return { ok: false, error: e.message };
+  }
+}
+
+async function toggleSelfPromptMode() {
+  const status = await refreshSelfPromptStatus();
+  const current = String(status.current_state || 'OFF').toUpperCase();
+  try {
+    if (current === 'SANDBOX_AUTONOMOUS_ENABLED') {
+      await fetch(apiUrl('/api/self-prompt/disable'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caller: 'Noah.Physical' }) });
+    } else {
+      await fetch(apiUrl('/api/self-prompt/enable'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caller: 'Noah.Physical' }) });
+    }
+    await refreshSelfPromptStatus();
+    await showRuntimeDetail().catch(() => {});
+  } catch (e) {
+    detailLines('Self-Prompt Control', [['error', e.message], ['state', current]]);
+  }
+}
+
+function _connectorStatusColor(status) {
+  const low = String(status || '').toLowerCase();
+  if (low === 'verified') return '#22c55e';
+  if (low === 'degraded') return '#f59e0b';
+  if (low === 'missing' || low === 'blocked') return '#ef4444';
+  return 'var(--text-dim)';
+}
+
+function _renderConnectorList(connectors) {
+  const items = connectors || [];
+  if (!items.length) return '<div style="font-size:12px;color:var(--text-dim)">none</div>';
+  return items.map(item => {
+    const color = _connectorStatusColor(item.status);
+    const holes = (item.holes || []).length
+      ? '<div style="font-size:11px;color:#fbbf24;margin-top:5px">' + escapeHtml((item.holes || []).join(' | ')) + '</div>'
+      : '';
+    return '<div class="witness-card" style="margin-top:8px">' +
+      '<b>' + escapeHtml(item.label || item.id || 'connector') +
+        ' <span style="color:' + color + ';font-size:10px">' + escapeHtml(item.status || 'unknown') + '</span></b>' +
+      '<span>' + escapeHtml(item.detail || '') + '</span>' +
+      '<span>records: ' + escapeHtml(String(item.records || 0)) + ' | ' + escapeHtml(item.endpoint || '') + '</span>' +
+      holes +
+      '<div style="font-size:10px;color:var(--text-dim);margin-top:5px">' + escapeHtml(item.boundary || 'read-only') + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function _renderSelfPromptEntry(entry, index) {
+  const response = entry.child_response || 'no child response captured';
+  const seed = entry.seed_prompt_excerpt || 'no seed';
+  const prompt = entry.child_prompt_excerpt || 'no prompt excerpt';
+  const boundary = entry.boundary || {};
+  return '<div class="witness-card" style="margin-top:10px">' +
+    '<b>Cycle ' + escapeHtml(String(index + 1)) + ' <span style="font-size:10px;color:var(--text-dim)">' + escapeHtml(entry.timestamp || 'unknown time') + '</span></b>' +
+    '<span>' + escapeHtml(entry.source_route || entry.caller || 'ORACLE.self_prompt') + ' | model ' + escapeHtml(entry.model_name || 'unknown') + '</span>' +
+    '<div style="font-size:11px;color:var(--text-dim);margin-top:7px">seed</div>' +
+    '<pre style="white-space:pre-wrap;font-family:monospace;font-size:11px;line-height:1.35;margin-top:4px;color:var(--text)">' + escapeHtml(seed) + '</pre>' +
+    '<div style="font-size:11px;color:var(--text-dim);margin-top:7px">ORACLE response</div>' +
+    '<pre style="white-space:pre-wrap;font-family:monospace;font-size:11px;line-height:1.35;margin-top:4px;color:var(--text)">' + escapeHtml(response) + '</pre>' +
+    '<details style="margin-top:8px"><summary style="cursor:pointer;color:#58d0c8;font-size:11px">prompt excerpt and hashes</summary>' +
+      '<pre style="white-space:pre-wrap;font-family:monospace;font-size:11px;line-height:1.35;margin-top:6px;color:var(--text-dim)">' + escapeHtml(prompt) + '</pre>' +
+      '<div style="font-size:10px;color:var(--text-dim);margin-top:6px">prompt_sha256: ' + escapeHtml(entry.child_prompt_sha256 || '') + '</div>' +
+      '<div style="font-size:10px;color:var(--text-dim);margin-top:3px">response_sha256: ' + escapeHtml(entry.child_response_sha256 || '') + '</div>' +
+    '</details>' +
+    '<div style="font-size:10px;color:var(--text-dim);margin-top:7px">sandbox_only=' + escapeHtml(String(boundary.sandbox_only)) +
+      ' external_send=' + escapeHtml(String(boundary.external_send)) +
+      ' git_push=' + escapeHtml(String(boundary.git_push)) +
+      ' canon_promotion=' + escapeHtml(String(boundary.canon_promotion)) + '</div>' +
+  '</div>';
+}
+
+async function showSelfPromptJournal() {
+  const head = document.getElementById('durability-detail-title');
+  const body = document.getElementById('durability-detail-body');
+  const panel = document.getElementById('durability-detail');
+  if (!head || !body || !panel) return;
+  head.textContent = 'ORACLE Self Notes';
+  body.innerHTML = '<div style="font-size:12px;color:var(--text-dim)">Reading self-written sandbox journal...</div>';
+  panel.classList.add('visible');
+  try {
+    const [statusRes, journalRes] = await Promise.all([
+      fetch(apiUrl('/api/self-prompt/status'), { cache: 'no-store' }),
+      fetch(apiUrl('/api/self-prompt/journal?limit=6'), { cache: 'no-store' }),
+    ]);
+    if (!statusRes.ok) throw new Error(`self-prompt status ${statusRes.status}`);
+    if (!journalRes.ok) throw new Error(`self-prompt journal ${journalRes.status}`);
+    const status = await statusRes.json();
+    const journal = await journalRes.json();
+    await refreshSelfPromptStatus();
+    const entries = journal.entries || [];
+    body.innerHTML =
+      '<div style="font-size:12px;color:var(--text-dim);line-height:1.45">' +
+        'Read-only view of ORACLE self-prompt journal. No sandbox write, no canon promotion, no external action.' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px">' +
+        '<div class="witness-card"><b>State</b><span>' + escapeHtml(status.current_state || 'UNKNOWN') + '</span></div>' +
+        '<div class="witness-card"><b>Loop</b><span>' + escapeHtml(status.loop_running ? 'running' : 'not running') + '</span></div>' +
+        '<div class="witness-card"><b>Daily count</b><span>' + escapeHtml(String(status.daily_count || 0)) + ' / ' + escapeHtml(String(status.daily_cap || 0)) + '</span></div>' +
+        '<div class="witness-card"><b>Journal entries</b><span>' + escapeHtml(String(journal.entry_count || 0)) + '</span></div>' +
+      '</div>' +
+      '<div style="font-size:10px;color:var(--text-dim);margin-top:10px">journal_path: ' + escapeHtml(journal.journal_path || '') + '</div>' +
+      '<div style="font-size:10px;color:var(--text-dim);margin-top:3px">latest_receipt: ' + escapeHtml(journal.latest_receipt_path || 'none') + '</div>' +
+      (entries.length ? entries.map(_renderSelfPromptEntry).join('') : '<div style="font-size:12px;color:var(--text-dim);margin-top:10px">No self-written cycles found yet.</div>');
+  } catch (e) {
+    body.innerHTML = '<div style="font-size:12px;color:#f87171">Self Notes unavailable: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+async function refreshConnectorStatus() {
+  const btn = document.getElementById('tuneup-btn');
+  try {
+    const r = await fetch(apiUrl('/api/connectors/status'), { cache: 'no-store' });
+    if (!r.ok) throw new Error(`connectors ${r.status}`);
+    const data = await r.json();
+    lastConnectorStatusData = data;
+    const summary = data.summary || {};
+    if (btn) {
+      btn.textContent = 'Tune ' + Number(summary.verified || 0) + '/' + Number(summary.total || 0);
+      btn.className = Number(summary.degraded || 0) || Number(summary.missing || 0) ? 'warn' : 'active';
+      btn.title = 'verified ' + Number(summary.verified || 0) + ', degraded ' + Number(summary.degraded || 0) + ', missing ' + Number(summary.missing || 0);
+    }
+    return data;
+  } catch (e) {
+    if (btn) {
+      btn.textContent = 'Tune ?';
+      btn.className = 'warn';
+      btn.title = e.message;
+    }
+    return { ok: false, error: e.message, connectors: [], priorities: [] };
+  }
+}
+
+async function showTuneupPanel() {
+  const head = document.getElementById('durability-detail-title');
+  const body = document.getElementById('durability-detail-body');
+  const panel = document.getElementById('durability-detail');
+  if (!head || !body || !panel) return;
+  head.textContent = 'ORACLE Tune-Up';
+  body.innerHTML = '<div style="font-size:12px;color:var(--text-dim)">Checking connector status...</div>';
+  panel.classList.add('visible');
+  const data = await refreshConnectorStatus();
+  const summary = data.summary || {};
+  const priorities = data.priorities || [];
+  body.innerHTML =
+    '<div style="font-size:12px;color:var(--text-dim);line-height:1.45">' +
+      'Read-only tune-up: what works, what is degraded, what to fix next. No connector action is executed from this panel.' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px">' +
+      '<div class="witness-card"><b>Verified</b><span>' + escapeHtml(String(summary.verified || 0)) + '</span></div>' +
+      '<div class="witness-card"><b>Degraded</b><span>' + escapeHtml(String(summary.degraded || 0)) + '</span></div>' +
+      '<div class="witness-card"><b>Missing</b><span>' + escapeHtml(String(summary.missing || 0)) + '</span></div>' +
+      '<div class="witness-card"><b>Total</b><span>' + escapeHtml(String(summary.total || 0)) + '</span></div>' +
+    '</div>' +
+    '<h3 style="font-size:12px;margin-top:12px">Priorities</h3>' +
+    _briefList(priorities) +
+    '<h3 style="font-size:12px;margin-top:12px">Connectors</h3>' +
+    _renderConnectorList(data.connectors || []) +
+    '<div style="font-size:10px;color:var(--text-dim);margin-top:10px">boundary: read-only, no sandbox write, no Drive mutation, no external send, no canon promotion</div>';
+}
+
+let lastHumanStateData = null;
+let lastReentryBriefData = null;
+
+function _humanModeLabel(mode) {
+  const value = String(mode || 'UNKNOWN').replace(/^WORK_/, '').replace(/_/g, ' ');
+  return value.length > 16 ? value.slice(0, 15) + '...' : value;
+}
+
+async function refreshHumanStateStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/human-state'), { cache: 'no-store' });
+    if (!r.ok) throw new Error(`human-state ${r.status}`);
+    const data = await r.json();
+    lastHumanStateData = data;
+    const btn = document.getElementById('human-state-btn');
+    if (btn) {
+      const mode = data.current_mode || 'UNKNOWN';
+      btn.textContent = 'Human ' + _humanModeLabel(mode);
+      btn.className = mode === 'UNKNOWN' ? 'pending' : 'active';
+      const last = data.last_transition || {};
+      btn.title = 'mode ' + mode + ' | last ' + (last.timestamp || 'none') + ' | click for re-entry brief';
+    }
+    return data;
+  } catch (e) {
+    const btn = document.getElementById('human-state-btn');
+    if (btn) {
+      btn.textContent = 'Human ?';
+      btn.className = 'pending';
+      btn.title = e.message;
+    }
+    return { ok: false, error: e.message };
+  }
+}
+
+function _briefList(items) {
+  if (!items || !items.length) return '<div style="color:var(--text-dim);font-size:12px">none</div>';
+  return '<ul style="margin:6px 0 0 18px;padding:0;color:var(--text-dim);font-size:12px;line-height:1.45">' +
+    items.map(item => '<li>' + escapeHtml(typeof item === 'string' ? item : ((item.id ? item.id + ': ' : '') + (item.summary || JSON.stringify(item)))) + '</li>').join('') +
+    '</ul>';
+}
+
+async function showHumanStatePanel() {
+  let state = lastHumanStateData;
+  try {
+    const results = await Promise.all([
+      fetch(apiUrl('/api/human-state'), { cache: 'no-store' }).then(r => r.json()),
+      fetch(apiUrl('/api/reentry-brief'), { cache: 'no-store' }).then(r => r.json()),
+    ]);
+    state = results[0];
+    lastHumanStateData = state;
+    lastReentryBriefData = results[1];
+    await refreshHumanStateStatus();
+  } catch (e) {
+    detailLines('Human State', [['endpoint', '/api/human-state'], ['error', e.message]]);
+    return;
+  }
+  const brief = lastReentryBriefData || {};
+  const event = (state && state.last_transition) || {};
+  const head = document.getElementById('durability-detail-title');
+  const body = document.getElementById('durability-detail-body');
+  const panel = document.getElementById('durability-detail');
+  if (!head || !body || !panel) return;
+  head.textContent = 'Human State and Re-entry';
+  body.innerHTML =
+    '<div style="font-size:12px;color:var(--text-dim);line-height:1.45">' +
+      'Explicit statements and verified local events only. No mood inference, no ambient monitoring. read-only brief; no build action triggered.' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px">' +
+      '<div class="witness-card"><b>Current mode</b><span>' + escapeHtml(state.current_mode || 'UNKNOWN') + '</span></div>' +
+      '<div class="witness-card"><b>Last transition</b><span>' + escapeHtml(event.timestamp || 'none') + '</span></div>' +
+      '<div class="witness-card"><b>Active project</b><span>' + escapeHtml(brief.project_noah_was_working_on || event.related_project || 'none') + '</span></div>' +
+      '<div class="witness-card"><b>Elapsed</b><span>' + escapeHtml(brief.time_since_last_explicit_transition || 'none') + '</span></div>' +
+    '</div>' +
+    '<h3 style="font-size:12px;margin-top:12px">Source</h3>' +
+    '<div style="font-size:12px;color:var(--text-dim);line-height:1.45;white-space:pre-wrap">' + escapeHtml(event.source_text || 'none') + '</div>' +
+    '<h3 style="font-size:12px;margin-top:12px">Open loops</h3>' + _briefList(brief.open_loops || []) +
+    '<h3 style="font-size:12px;margin-top:12px">Waiting for approval</h3>' + _briefList(brief.items_waiting_for_approval || []) +
+    '<h3 style="font-size:12px;margin-top:12px">Resume brief</h3>' +
+    '<div style="font-size:12px;color:var(--text-dim);line-height:1.45">' +
+      '<div><b style="color:var(--text)">Last completed:</b> ' + escapeHtml(brief.last_completed_action || 'none') + '</div>' +
+      '<div style="margin-top:5px"><b style="color:var(--text)">Recommended:</b> ' + escapeHtml(brief.recommended_next_action || 'Ask Noah.Physical which lane to resume.') + '</div>' +
+    '</div>' +
+    '<h3 style="font-size:12px;margin-top:12px">Continuity gaps</h3>' + _briefList(brief.continuity_gaps || []) +
+    '<div class="witness-actions" style="margin-top:12px">' +
+      '<button class="primary" onclick="showHumanStatePanel()">Resume Brief</button>' +
+    '</div>';
+  panel.classList.add('visible');
+}
+
+function _operatorList(items, mapFn) {
+  const rows = (items || []).slice(0, 5).map(item => mapFn(item)).filter(Boolean);
+  if (!rows.length) return '<div style="color:var(--text-dim);font-size:12px">none</div>';
+  return '<ul style="margin:6px 0 0 18px;padding:0;color:var(--text-dim);font-size:12px;line-height:1.45">' +
+    rows.map(row => '<li>' + escapeHtml(row) + '</li>').join('') +
+    '</ul>';
+}
+
+async function showOperatorDashboard() {
+  let data = null;
+  try {
+    const r = await fetch(apiUrl('/api/continuity/operator-dashboard'), { cache: 'no-store' });
+    if (!r.ok) throw new Error(`operator-dashboard ${r.status}`);
+    data = await r.json();
+  } catch (e) {
+    detailLines('Operator Dashboard', [['endpoint', '/api/continuity/operator-dashboard'], ['error', e.message]]);
+    return;
+  }
+  const head = document.getElementById('durability-detail-title');
+  const body = document.getElementById('durability-detail-body');
+  const panel = document.getElementById('durability-detail');
+  if (!head || !body || !panel) return;
+  head.textContent = 'Operator Dashboard';
+  body.innerHTML =
+    '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">' +
+      '<div class="witness-card"><b>Human state</b><span>' + escapeHtml(data.current_human_state || 'UNKNOWN') + '</span></div>' +
+      '<div class="witness-card"><b>Project</b><span>' + escapeHtml(data.current_project || 'none') + '</span></div>' +
+    '</div>' +
+    '<h3 style="font-size:12px;margin-top:12px">Top five open loops</h3>' +
+      _operatorList(data.top_open_loops, item => (item.status || 'unknown') + ': ' + (item.title || 'untitled')) +
+    '<h3 style="font-size:12px;margin-top:12px">Recent receipts</h3>' +
+      _operatorList(data.recent_receipts, item => ((item.preview && item.preview.operation) || item.source || 'receipt') + ' | ' + (item.modified_at || 'unknown')) +
+    '<h3 style="font-size:12px;margin-top:12px">Pending approvals</h3>' +
+      _operatorList(data.pending_approvals, item => (item.id || 'pending') + ': ' + (item.summary || 'approval')) +
+    '<h3 style="font-size:12px;margin-top:12px">Suggested resume action</h3>' +
+    '<div style="font-size:12px;color:var(--text-dim);line-height:1.45">' + escapeHtml(data.suggested_resume_action || 'Ask Noah.Physical which lane to resume.') + '</div>' +
+    '<div style="font-size:10px;color:var(--text-dim);margin-top:10px">' + escapeHtml(data.boundary || 'read-only') + '</div>';
+  panel.classList.add('visible');
+}
+
+async function showPreferencesDrawer() {
+  let data = lastPreferencesData;
+  try {
+    data = await refreshPreferencesStatus();
+  } catch (e) {
+    detailLines('Preferences', [['endpoint', '/api/preferences'], ['error', e.message]]);
+    return;
+  }
+  const head = document.getElementById('durability-detail-title');
+  const body = document.getElementById('durability-detail-body');
+  const panel = document.getElementById('durability-detail');
+  if (!head || !body || !panel) return;
+  head.textContent = 'ORACLE Preferences';
+  body.innerHTML =
+    '<div style="font-size:12px;color:var(--text-dim);line-height:1.45">' +
+      'Behavior layer only. Preferences are not canon and do not override safety, provenance, or Noah.Physical approval.' +
+    '</div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">' +
+      '<button id="preferences-upload-btn" style="border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;padding:6px 9px;cursor:pointer">Upload</button>' +
+      '<button onclick="pastePreferenceText()" style="border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;padding:6px 9px;cursor:pointer">Paste</button>' +
+    '</div>' +
+    '<textarea id="preferences-paste" placeholder="Paste .txt/.md/.ai preference lines here" style="width:100%;min-height:64px;margin-top:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-family:inherit;font-size:12px"></textarea>' +
+    '<div style="font-size:10px;color:var(--text-dim);margin-top:8px">preferences_path: ' + escapeHtml(data.preferences_path || '') + '</div>' +
+    '<div style="font-size:10px;color:var(--text-dim);margin-top:3px">receipt_path: ' + escapeHtml(data.receipt_path || '') + '</div>' +
+    preferenceListHtml('Active', data.active_preferences || []) +
+    preferenceListHtml('Disabled', data.disabled_preferences || []) +
+    preferenceListHtml('Blocked', data.blocked_preferences || []) +
+    preferencesReceiptsHtml(data.recent_receipts || []);
+  panel.classList.add('visible');
+  const uploadBtn = body.querySelector('#preferences-upload-btn');
+  if (uploadBtn) {
+    uploadBtn.addEventListener('click', () => document.getElementById('preferences-upload-input')?.click());
+  }
+  body.querySelectorAll('[data-pref-disable]').forEach(btn => {
+    btn.addEventListener('click', () => disablePreference(btn.getAttribute('data-pref-disable')));
+  });
+}
+
+async function uploadPreferencesPayload(filename, content) {
+  const r = await fetch(apiUrl('/api/preferences/upload'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, content, source: 'Noah.Physical' }),
+  });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(text || `preferences upload ${r.status}`);
+  }
+  await refreshPreferencesStatus();
+  await showPreferencesDrawer();
+}
+
+async function uploadPreferencesFile(input) {
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  try {
+    const content = await file.text();
+    await uploadPreferencesPayload(file.name, content);
+  } catch (e) {
+    detailLines('Preferences Upload', [['error', e.message]]);
+  } finally {
+    if (input) input.value = '';
+  }
+}
+
+async function pastePreferenceText() {
+  const el = document.getElementById('preferences-paste');
+  const text = (el && el.value || '').trim();
+  if (!text) return;
+  try {
+    await uploadPreferencesPayload('pasted_preferences.txt', text);
+  } catch (e) {
+    detailLines('Preferences Paste', [['error', e.message]]);
+  }
+}
+
+async function disablePreference(preferenceId) {
+  if (!preferenceId) return;
+  try {
+    const r = await fetch(apiUrl('/api/preferences/disable'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preference_id: preferenceId, reason: 'disabled from ORACLE UI' }),
+    });
+    if (!r.ok) throw new Error(`disable ${r.status}`);
+    await refreshPreferencesStatus();
+    await showPreferencesDrawer();
+  } catch (e) {
+    detailLines('Preferences Disable', [['preference_id', preferenceId], ['error', e.message]]);
+  }
+}
+
+async function showRuntimeDetail() {
+  try {
+    const r = await fetch(apiUrl('/api/status'));
+    if (!r.ok) throw new Error(`status ${r.status}`);
+    const status = await r.json();
+    const boot = status.boot || {};
+    let selfPrompt = { current_state: 'OFF', daily_count: 0, daily_cap: 0, model_called: false };
+    try {
+      selfPrompt = await refreshSelfPromptStatus();
+    } catch {}
+    detailLines('Runtime Status', [
+      ['endpoint', '/api/status'],
+      ['session_id', status.session_id],
+      ['paused', status.paused],
+      ['notifications_queued', status.notifications_queued],
+      ['mode', currentMode],
+      ['lane', currentLane],
+      ['safety', currentSafety],
+      ['local_model', boot.verified_model_name],
+      ['local_engine', boot.verified_local_engine],
+      ['network_boundary', boot.network_boundary],
+      ['boot_receipt_path', boot.boot_receipt_path],
+      ['self_prompt_state', selfPrompt.current_state],
+      ['self_prompt_daily_count', selfPrompt.daily_count],
+      ['self_prompt_daily_cap', selfPrompt.daily_cap],
+      ['self_prompt_model_called', selfPrompt.model_called],
+      ['read_access', (status.read_access || {}).access_status],
+      ['read_access_mode', (status.read_access || {}).access_mode],
+      ['read_approval_required', (status.read_access || {}).approval_required_for_read],
+      ['read_access_receipt', (status.read_access || {}).receipt_path],
+      ['warnings', boot.warnings || []],
+    ]);
+  } catch (e) {
+    detailLines('Runtime Status', [['endpoint', '/api/status'], ['error', e.message]]);
+  }
+}
+
+async function refreshReadAccessStatus() {
+  const btn = document.getElementById('read-access-btn');
+  try {
+    const r = await fetch(apiUrl('/api/read-access'), { cache: 'no-store' });
+    if (!r.ok) throw new Error(`read-access ${r.status}`);
+    const data = await r.json();
+    lastReadAccessData = data;
+    if (btn) {
+      const granted = data.access_status === 'granted' && data.approval_required_for_read === false;
+      btn.textContent = granted ? 'Read All' : 'Read ?';
+      btn.title = granted
+        ? 'Full-PC read-only access granted. Actions still require approval.'
+        : 'Read access receipt unavailable';
+      btn.classList.toggle('ok', granted);
+      btn.classList.toggle('warn', !granted);
+    }
+    return data;
+  } catch (e) {
+    if (btn) {
+      btn.textContent = 'Read ?';
+      btn.title = e.message;
+      btn.classList.remove('ok');
+      btn.classList.add('warn');
+    }
+    return null;
+  }
+}
+
+async function showReadAccessDetail() {
+  let data = lastReadAccessData;
+  if (!data) data = await refreshReadAccessStatus();
+  if (!data) {
+    detailLines('Read Access', [['endpoint', '/api/read-access'], ['error', 'unreachable']]);
+    return;
+  }
+  detailLines('Read Access', [
+    ['endpoint', '/api/read-access'],
+    ['authority', data.authority],
+    ['status', data.access_status],
+    ['mode', data.access_mode],
+    ['approval_required_for_read', data.approval_required_for_read],
+    ['approval_required_for_search', data.approval_required_for_local_search],
+    ['sandbox_candidate_write_approval', data.approval_required_for_sandbox_candidate_write],
+    ['read_roots', data.read_roots || []],
+    ['actions_still_gated', data.approval_required_for_actions || []],
+    ['receipt_path', data.receipt_path],
+  ]);
+}
+
+async function refreshAiLockboxStatus() {
+  const btn = document.getElementById('ai-lockbox-btn');
+  try {
+    const r = await fetch(apiUrl('/api/ai-lockbox/status'), { cache: 'no-store' });
+    if (!r.ok) throw new Error(`ai-lockbox ${r.status}`);
+    const data = await r.json();
+    lastAiLockboxData = data;
+    if (btn) {
+      const count = Number(data.capsule_count || 0);
+      btn.textContent = count ? `Recall ${count}` : 'Recall 0';
+      btn.title = count
+        ? `${count} local .AI shorthand capsules available`
+        : 'No .AI shorthand capsules yet. Click to ingest/search.';
+      btn.classList.toggle('ok', count > 0);
+      btn.classList.toggle('warn', count === 0);
+      btn.classList.toggle('active', count > 0);
+    }
+    return data;
+  } catch (e) {
+    if (btn) {
+      btn.textContent = 'Recall ?';
+      btn.title = e.message;
+      btn.classList.remove('ok', 'active');
+      btn.classList.add('warn');
+    }
+    return null;
+  }
+}
+
+async function showAiLockboxDetail(extraRows) {
+  let data = await refreshAiLockboxStatus();
+  if (!data) {
+    detailLines('.AI Lockbox', [['endpoint', '/api/ai-lockbox/status'], ['error', 'unreachable']]);
+    return;
+  }
+  const latest = data.latest_receipt || {};
+  const rows = [
+    ['endpoint', '/api/ai-lockbox/status'],
+    ['capsule_count', data.capsule_count],
+    ['receipt_count', data.receipt_count],
+    ['manifest_path', data.manifest_path],
+    ['capsule_dir', data.capsule_dir],
+    ['latest_created_count', latest.created_count],
+    ['latest_query', latest.query],
+    ['roots', data.roots || []],
+    ['commands', '/ai-lockbox-ingest <query> | /ai-lockbox-search <query> | /ai-shorthand <path>'],
+  ];
+  (extraRows || []).forEach(row => rows.push(row));
+  detailLines('.AI Lockbox Recall', rows);
+  const body = document.getElementById('durability-detail-body');
+  if (body) {
+    const controls = document.createElement('div');
+    controls.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:10px';
+    controls.innerHTML =
+      '<button type="button" onclick="runAiLockboxIngest()" style="padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">Ingest .AI</button>' +
+      '<button type="button" onclick="searchAiLockbox(null,false)" style="padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">Search</button>' +
+      '<button type="button" onclick="searchAiLockbox(null,true)" style="padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">Search + Speak</button>';
+    body.appendChild(controls);
+  }
+}
+
+async function runAiLockboxIngest(query, limit) {
+  const q = query == null ? prompt('Ingest files matching what query? Leave blank for first readable batch.', '') : query;
+  if (q === null) return;
+  try {
+    const r = await fetch(apiUrl('/api/ai-lockbox/ingest'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: q || '', limit: limit || 25 })
+    });
+    const data = await r.json();
+    if (!r.ok || data.ok === false) throw new Error(data.error || `ai-lockbox ingest ${r.status}`);
+    await showAiLockboxDetail([
+      ['ingest_created_count', data.created_count],
+      ['sensitive_metadata_matches', data.sensitive_metadata_matches],
+      ['receipt_path', data.receipt_path],
+    ]);
+  } catch (e) {
+    detailLines('.AI Lockbox Ingest', [['endpoint', '/api/ai-lockbox/ingest'], ['error', e.message]]);
+  }
+}
+
+async function searchAiLockbox(query, speakFirst) {
+  const q = query == null ? prompt('Search .AI lockbox for:', '') : query;
+  if (!q) return;
+  try {
+    const r = await fetch(apiUrl('/api/ai-lockbox/search?q=' + encodeURIComponent(q) + '&limit=5'), { cache: 'no-store' });
+    const data = await r.json();
+    if (!r.ok || data.ok === false) throw new Error(data.error || `ai-lockbox search ${r.status}`);
+    const rows = [
+      ['query', data.query],
+      ['result_count', data.result_count],
+      ['manifest_path', data.manifest_path],
+    ];
+    (data.results || []).slice(0, 5).forEach((item, idx) => {
+      rows.push([`result_${idx + 1}`, `${item.name} | ${item.source_path}`]);
+    });
+    detailLines('.AI Lockbox Search', rows);
+    if (speakFirst && data.results && data.results[0]) {
+      speak(`AI Lockbox found ${data.result_count} result. Top result: ${data.results[0].name}. ${data.results[0].ai_preview || ''}`);
+    }
+    return data;
+  } catch (e) {
+    detailLines('.AI Lockbox Search', [['endpoint', '/api/ai-lockbox/search'], ['error', e.message]]);
+    return null;
+  }
+}
+
+function bindDurabilityControls() {
+  document.querySelectorAll('[data-durability-detail]').forEach(el => {
+    const kind = el.dataset.durabilityDetail || 'save';
+    el.addEventListener('click', () => showDurabilityDetail(kind));
+    el.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        showDurabilityDetail(kind);
+      }
+    });
+  });
+  ['mode-indicator', 'safety-indicator'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        showRuntimeDetail();
+      }
+    });
+  });
+  const ellie = document.getElementById('dur-ellie-domain');
+  if (ellie) {
+    ellie.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        showEllieDomainDetail();
+      }
+    });
+  }
+}
+
+async function refreshDurability(historySource) {
+  if (historySource) lastHistorySource = historySource;
+  try {
+    const r = await fetch(apiUrl('/api/durability'));
+    if (!r.ok) throw new Error(`durability ${r.status}`);
+    const data = await r.json();
+    lastDurabilityData = data;
+    const sqlite = data.sqlite || {};
+    const capture = data.thread_capture || {};
+    const facts = data.thread_evidence_facts || {};
+    const safe = !!data.persistence_safe_to_refresh;
+    const sessionMessages = Number(sqlite.current_session_message_count || 0);
+    const totalMessages = Number(sqlite.message_count || 0);
+    const rawCount = Number(capture.raw_artifact_count || 0);
+    const indexRows = Number(capture.search_index_rows || 0);
+    const factCount = Number(facts.total_thread_evidence || 0);
+    const receipt = data.last_custody_receipt_path || '';
+
+    setDurabilityChip('dur-save-state', safe ? 'saved' : 'save pending', safe ? 'saved' : 'pending', sqlite.path || '');
+    setDurabilityChip('dur-history-source', 'history ' + (lastHistorySource || 'unknown'), lastHistorySource === 'error' ? 'warn' : (lastHistorySource === 'empty' ? 'pending' : 'saved'));
+    setDurabilityChip('dur-session-count', 'thread ' + sessionMessages + '/' + totalMessages, sessionMessages > 0 ? 'saved' : 'pending', 'session ' + (data.session_id || '?') + ', latest ' + (sqlite.latest_session_id || '?'));
+    setDurabilityChip('dur-custody-count', 'custody ' + rawCount, rawCount > 0 ? 'saved' : 'pending', capture.raw_transcripts_dir || '');
+    setDurabilityChip('dur-index-count', 'index ' + indexRows + ' / facts ' + factCount, indexRows > 0 ? 'saved' : 'pending', capture.search_index_jsonl || '');
+    setDurabilityChip('dur-receipt', 'receipt ' + shortPath(receipt), receipt ? 'saved' : 'pending', receipt || 'no custody receipt found');
+  } catch (e) {
+    setDurabilityChip('dur-save-state', 'save unknown', 'warn', e.message);
+    setDurabilityChip('dur-history-source', 'history ' + (lastHistorySource || 'unknown'), 'pending');
+    setDurabilityChip('dur-session-count', 'thread --', 'pending');
+    setDurabilityChip('dur-custody-count', 'custody --', 'pending');
+    setDurabilityChip('dur-index-count', 'index --', 'pending');
+    setDurabilityChip('dur-receipt', 'receipt --', 'pending');
+  }
 }
 
 // ── New chat ──────────────────────────────────────────────────────────────────
@@ -814,6 +2662,11 @@ async function newChat() {
       <div class="suggestion-chips" id="welcome-chips"></div>
     </div>`;
   conversationStarted = false;
+  lastHistorySource = 'empty';
+  refreshDurability('empty').catch(() => {});
+  refreshEllieDomainStatus().catch(() => {});
+  refreshPreferencesStatus().catch(() => {});
+  refreshHumanStateStatus().catch(() => {});
   _applyLearnedUI();
 }
 
@@ -882,6 +2735,11 @@ function addMessage(role, content, streaming = false) {
     };
 
     wrap.appendChild(bubble);
+    const routeReceipt = document.createElement('div');
+    routeReceipt.className = 'route-receipt';
+    routeReceipt.style.display = 'none';
+    bubble._routeReceiptEl = routeReceipt;
+    wrap.appendChild(routeReceipt);
     wrap.appendChild(copyBtn);
     row.appendChild(avatar);
     row.appendChild(wrap);
@@ -899,6 +2757,37 @@ function addMessage(role, content, streaming = false) {
   }
 
   return bubble;
+}
+
+function updateRouteReceipt(bubble, patch) {
+  if (!bubble || !bubble._routeReceiptEl) return;
+  const next = Object.assign({}, bubble._routeReceipt || {}, patch || {});
+  bubble._routeReceipt = next;
+  const lane = next.lane || next.effective_route || 'unknown';
+  const routeType = next.route_type || next.effective_route || 'unknown';
+  const reason = next.reason || 'no reason supplied';
+  const fallback = next.fallback_used === true ? 'true' : 'false';
+  const evidence = next.evidence || {};
+  const evidenceMode = evidence.mode || 'unknown';
+  const proven = Array.isArray(evidence.sources_proven_used) ? evidence.sources_proven_used.join(', ') : 'unknown';
+  const records = Number(evidence.records_used_count || 0);
+  const unknowns = Array.isArray(evidence.unknowns) ? evidence.unknowns.length : 0;
+  bubble._routeReceiptEl.innerHTML =
+    '<span>route_type: ' + escapeHtml(String(routeType)) + '</span>' +
+    '<span>lane: ' + escapeHtml(String(lane)) + '</span>' +
+    '<span>reason: ' + escapeHtml(String(reason)) + '</span>' +
+    '<span>fallback_used: ' + fallback + '</span>' +
+    (evidence.ok ? (
+      '<span>evidence_mode: ' + escapeHtml(String(evidenceMode)) + '</span>' +
+      '<span>records_used: ' + records + '</span>' +
+      '<span>proven_sources: ' + escapeHtml(String(proven)) + '</span>' +
+      '<span>unknowns: ' + unknowns + '</span>'
+    ) : '');
+  // Honor the calm view: the CSS gate (body:not(.ui-advanced-open) .route-receipt)
+  // is defeated by an inline style, so gate the inline value too. Chips appear
+  // only in advanced mode; in simple mode the message stands on its own.
+  bubble._routeReceiptEl.style.display =
+    document.body.classList.contains('ui-advanced-open') ? 'flex' : 'none';
 }
 
 function escapeHtml(str) {
@@ -924,6 +2813,227 @@ function addHistoryItem(text) {
   }
 }
 
+// ── Audited sandbox edit ─────────────────────────────────────────────────────
+// This is deliberately a browser-mediated confirmation flow. The chat command
+// never writes by itself: it reads through /api/sandbox/read, renders the
+// proposal, and only the explicit confirmation button calls /api/sandbox/edit.
+function prepareSandboxEdit() {
+  const input = document.getElementById('input');
+  input.value = '/sandbox-edit workbench/notes.md | ';
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+  autoResize(input);
+}
+
+function parseSandboxEditCommand(text) {
+  const match = String(text || '').match(/^\/sandbox-edit(?:\s+([\s\S]*))?$/i);
+  if (!match) return null;
+  const payload = match[1] || '';
+  const divider = payload.indexOf('|');
+  if (divider < 0) {
+    return { recognized: true, error: 'Usage: /sandbox-edit <sandbox path> | <complete proposed content>' };
+  }
+  const path = payload.slice(0, divider).trim();
+  let content = payload.slice(divider + 1);
+  if (content.startsWith(' ')) content = content.slice(1);
+  if (!path) {
+    return { recognized: true, error: 'A path below sandbox/ is required.' };
+  }
+  return { recognized: true, path, content };
+}
+
+async function sandboxApiJson(path, body) {
+  const response = await fetch(apiUrl(path), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  let data = {};
+  try { data = await response.json(); } catch (_) {}
+  if (!response.ok || !data.ok) {
+    throw new Error(data.error || `${path} returned ${response.status}`);
+  }
+  return data;
+}
+
+function sandboxUnifiedDiff(before, after, path) {
+  const oldLines = String(before).split('\n');
+  const newLines = String(after).split('\n');
+  let prefix = 0;
+  while (prefix < oldLines.length && prefix < newLines.length && oldLines[prefix] === newLines[prefix]) prefix++;
+  let suffix = 0;
+  while (
+    suffix < oldLines.length - prefix &&
+    suffix < newLines.length - prefix &&
+    oldLines[oldLines.length - 1 - suffix] === newLines[newLines.length - 1 - suffix]
+  ) suffix++;
+  if (prefix === oldLines.length && prefix === newLines.length) return '(no content change)';
+
+  const contextStart = Math.max(0, prefix - 2);
+  const oldEnd = oldLines.length - suffix;
+  const newEnd = newLines.length - suffix;
+  const tailEnd = Math.min(oldLines.length, oldEnd + 2);
+  const lines = [`--- ${path}:before`, `+++ ${path}:proposed`];
+  if (contextStart > 0) lines.push(' ...');
+  oldLines.slice(contextStart, prefix).forEach(line => lines.push(' ' + line));
+  oldLines.slice(prefix, oldEnd).forEach(line => lines.push('-' + line));
+  newLines.slice(prefix, newEnd).forEach(line => lines.push('+' + line));
+  oldLines.slice(oldEnd, tailEnd).forEach(line => lines.push(' ' + line));
+  if (tailEnd < oldLines.length) lines.push(' ...');
+  return lines.join('\n');
+}
+
+function sandboxEditElement(tag, className, text) {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  if (text !== undefined) element.textContent = text;
+  return element;
+}
+
+function renderSandboxEditRefusal(bubble, message) {
+  bubble.innerHTML = '';
+  const card = sandboxEditElement('div', 'sandbox-edit-card');
+  card.appendChild(sandboxEditElement('h3', '', 'SANDBOX EDIT REFUSED'));
+  card.appendChild(sandboxEditElement('div', 'sandbox-edit-status error', message));
+  card.appendChild(sandboxEditElement(
+    'div',
+    'sandbox-edit-boundary',
+    'Hard boundary: C:\\Oracle\\ORACLE.AI-runtime\\sandbox\\ only. No source-code edit, computer control, Drive write, Git action, or external action was attempted.'
+  ));
+  bubble.appendChild(card);
+  bubble.dataset.raw = `SANDBOX EDIT REFUSED\n${message}`;
+  updateRouteReceipt(bubble, {
+    route_type: 'sandbox_edit_refused',
+    lane: 'sandbox_only',
+    reason: 'path failed the confined sandbox read boundary',
+    fallback_used: false
+  });
+}
+
+async function confirmSandboxEdit(card, command, initialRead, controls) {
+  controls.confirm.disabled = true;
+  controls.cancel.disabled = true;
+  controls.status.className = 'sandbox-edit-status';
+  controls.status.textContent = 'Writing confirmed proposal through /api/sandbox/edit…';
+  let writeResult = null;
+  try {
+    writeResult = await sandboxApiJson('/api/sandbox/edit', {
+      path: command.path,
+      content: command.content,
+      expected_sha256: initialRead.sha256,
+      caller: 'ORACLE.web.confirmed_sandbox_edit'
+    });
+    controls.status.textContent = 'Write receipted; re-reading through /api/sandbox/read…';
+    const reread = await sandboxApiJson('/api/sandbox/read', { path: command.path });
+    if (reread.sha256 !== writeResult.post_operation_sha256 || reread.content !== command.content) {
+      throw new Error('post-write re-read did not match the confirmed proposal');
+    }
+    controls.status.className = 'sandbox-edit-status ok';
+    controls.status.textContent = 'Confirmed, written, and re-read successfully.';
+    controls.confirm.textContent = 'Written ✓';
+
+    const receipt = sandboxEditElement('div', 'sandbox-edit-meta');
+    receipt.textContent =
+      `Receipt: ${writeResult.receipt_path}\n` +
+      `Before SHA-256: ${writeResult.pre_operation_sha256}\n` +
+      `After SHA-256: ${writeResult.post_operation_sha256}`;
+    receipt.style.whiteSpace = 'pre-wrap';
+    card.appendChild(receipt);
+
+    const finalDetails = document.createElement('details');
+    const summary = sandboxEditElement('summary', '', 'Verified re-read content');
+    const finalContent = sandboxEditElement('pre', '', reread.content);
+    finalDetails.appendChild(summary);
+    finalDetails.appendChild(finalContent);
+    card.appendChild(finalDetails);
+  } catch (error) {
+    controls.status.className = 'sandbox-edit-status error';
+    controls.status.textContent = writeResult
+      ? `Write returned a receipt, but verification failed: ${error.message}`
+      : `Not written: ${error.message}. Re-run the proposal to read the current file again.`;
+    controls.confirm.disabled = !!writeResult;
+    controls.cancel.disabled = false;
+  }
+}
+
+function renderSandboxEditProposal(bubble, command, readResult) {
+  bubble.innerHTML = '';
+  const card = sandboxEditElement('div', 'sandbox-edit-card');
+  card.appendChild(sandboxEditElement('h3', '', 'SANDBOX EDIT PROPOSAL'));
+  card.appendChild(sandboxEditElement(
+    'div',
+    'sandbox-edit-meta',
+    `Read: ${readResult.path}\nSHA-256: ${readResult.sha256}\nState: not written`
+  ));
+  card.lastChild.style.whiteSpace = 'pre-wrap';
+
+  const originalDetails = document.createElement('details');
+  originalDetails.appendChild(sandboxEditElement('summary', '', 'Original file read'));
+  originalDetails.appendChild(sandboxEditElement('pre', '', readResult.content));
+  card.appendChild(originalDetails);
+
+  card.appendChild(sandboxEditElement('pre', 'sandbox-edit-diff', sandboxUnifiedDiff(readResult.content, command.content, command.path)));
+  card.appendChild(sandboxEditElement(
+    'div',
+    'sandbox-edit-boundary',
+    'Confirmation writes only this file under sandbox/. The original SHA guard prevents overwriting a file that changed after this read.'
+  ));
+
+  const actions = sandboxEditElement('div', 'sandbox-edit-actions');
+  const confirm = sandboxEditElement('button', 'confirm', 'Confirm sandbox write');
+  const cancel = sandboxEditElement('button', '', 'Cancel');
+  const status = sandboxEditElement('div', 'sandbox-edit-status', 'Awaiting explicit confirmation; no mutation has occurred.');
+  if (readResult.content === command.content) {
+    confirm.disabled = true;
+    status.textContent = 'No content change; nothing will be written.';
+  }
+  const controls = { confirm, cancel, status };
+  confirm.onclick = () => confirmSandboxEdit(card, command, readResult, controls);
+  cancel.onclick = () => {
+    confirm.disabled = true;
+    cancel.disabled = true;
+    status.textContent = 'Cancelled; no mutation occurred.';
+  };
+  actions.appendChild(confirm);
+  actions.appendChild(cancel);
+  card.appendChild(actions);
+  card.appendChild(status);
+  bubble.appendChild(card);
+  bubble.dataset.raw = `SANDBOX EDIT PROPOSAL\n${sandboxUnifiedDiff(readResult.content, command.content, command.path)}\nState: not written`;
+  updateRouteReceipt(bubble, {
+    route_type: 'sandbox_edit_proposal',
+    lane: 'sandbox_only',
+    reason: 'read complete; explicit confirmation required before write',
+    fallback_used: false
+  });
+}
+
+async function runSandboxEditFlow(text, command) {
+  const input = document.getElementById('input');
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('send-btn').disabled = true;
+  isStreaming = true;
+  stopSpeaking();
+  addMessage('user', text);
+  const bubble = addMessage('oracle', '', true);
+  try {
+    if (command.error) {
+      renderSandboxEditRefusal(bubble, command.error);
+      return;
+    }
+    const readResult = await sandboxApiJson('/api/sandbox/read', { path: command.path });
+    renderSandboxEditProposal(bubble, command, readResult);
+  } catch (error) {
+    renderSandboxEditRefusal(bubble, error.message || String(error));
+  } finally {
+    isStreaming = false;
+    document.getElementById('send-btn').disabled = false;
+    input.focus();
+    scrollToBottom();
+  }
+}
+
 // ── Send message ──────────────────────────────────────────────────────────────
 async function sendMessage() {
   if (isStreaming) return;
@@ -931,10 +3041,17 @@ async function sendMessage() {
   const text = input.value.trim();
   if (!text) return;
 
+  const sandboxEditCommand = parseSandboxEditCommand(text);
+  if (sandboxEditCommand) {
+    await runSandboxEditFlow(text, sandboxEditCommand);
+    return;
+  }
+
   input.value = '';
   input.style.height = 'auto';
   document.getElementById('send-btn').disabled = true;
   isStreaming = true;
+  setDurabilityChip('dur-save-state', 'saving', 'pending');
   stopSpeaking(); // cut any in-progress speech when Noah sends something new
 
   // Show user message
@@ -945,12 +3062,15 @@ async function sendMessage() {
 
   let accumulated = '';
   let firstToken = true;
+  const chatController = new AbortController();
+  const chatTimeout = setTimeout(() => chatController.abort(), CHAT_REQUEST_TIMEOUT_MS);
 
   try {
     const resp = await fetch(apiUrl('/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: text, mode: currentMode }),
+      signal: chatController.signal,
     });
 
     if (!resp.ok) throw new Error(`/chat returned ${resp.status}`);
@@ -977,11 +3097,29 @@ async function sendMessage() {
         }
 
         if (event.type === 'mode') {
-          updateModeUI(event.mode);
+          updateModeUI(event.mode, event.lane || event.current_lane, event.safety_status);
+        }
+
+        if (event.type === 'route') {
+          updateModeUI(event.mode, event.lane, event.safety_status);
+          updateRouteReceipt(bubble, {
+            route_type: event.route_type || 'unified_intent',
+            lane: event.lane || event.current_lane,
+            reason: event.reason,
+            fallback_used: !!event.fallback_used
+          });
         }
 
         if (event.type === 'done') {
-          if (event.mode) updateModeUI(event.mode);
+          if (event.mode) updateModeUI(event.mode, event.lane || event.current_lane, event.safety_status);
+          const existingRouteReceipt = bubble._routeReceipt || {};
+          updateRouteReceipt(bubble, {
+            route_type: event.route_type || existingRouteReceipt.route_type || event.effective_route || 'unknown',
+            lane: event.lane || event.current_lane || existingRouteReceipt.lane || event.effective_route,
+            reason: event.reason || existingRouteReceipt.reason,
+            fallback_used: !!event.fallback_used,
+            evidence: event.evidence || existingRouteReceipt.evidence
+          });
         }
       } catch {}
     }
@@ -1000,12 +3138,19 @@ async function sendMessage() {
     }
 
     if (buffer.trim()) processLine(buffer.trim());
+    if (!accumulated.trim()) throw new Error('/chat ended without content');
   } catch (err) {
     firstToken = false;
     bubble.dataset.raw = '';
-    bubble.innerHTML = `<em style="color:#ef4444">Connection error: ${err.message}</em>`;
+    const message = err && err.name === 'AbortError'
+      ? `ORACLE backend did not answer /chat within ${Math.round(CHAT_REQUEST_TIMEOUT_MS / 1000)}s; runtime may need a clean relight.`
+      : (err && err.message ? err.message : String(err));
+    bubble.innerHTML = `<em style="color:#ef4444">Connection error: ${message}</em>`;
+    setDurabilityChip('dur-save-state', 'chat blocked', 'warn');
   } finally {
+    clearTimeout(chatTimeout);
     syncModeState().catch(() => {});
+    refreshDurability(lastHistorySource).catch(() => {});
   }
 
   isStreaming = false;
@@ -1025,15 +3170,21 @@ const _CHIP_MAP = {
   "/self-patch":              "/self-patch",
   "/focus":                   "/focus",
   "/help":                    "/help",
+  "/ellie-domain":            "Who is Ellie from the grounded Ellie Rendered Reality domain?",
   "/review-learned":          "/review-learned",
   "/pending":                 "/pending",
+  "/ai-lockbox-status":       "/ai-lockbox-status",
+  "/ai-lockbox-search":       "/ai-lockbox-search oracle",
 };
 const _CHIP_LABELS = {
   "/self-patch":       "Propose a self-improvement",
   "/focus":            "Show current focus",
   "/help":             "Show commands",
+  "/ellie-domain":     "Ask Ellie domain",
   "/review-learned":   "What have you learned?",
   "/pending":          "Review pending items",
+  "/ai-lockbox-status": "Recall lockbox",
+  "/ai-lockbox-search": "Search .AI recall",
 };
 
 function _renderChips(order) {
@@ -1087,6 +3238,789 @@ async function _applyLearnedUI() {
 // ── Voice out: ORACLE speaks her replies aloud ────────────────────────────────
 let voiceOn = true;          // default on — Noah wants her to talk
 let _selectedVoice = null;
+
+function toggleSourceMapPanel(force) {
+  const panel = document.getElementById('sourcemap-panel');
+  const visible = force === undefined ? !panel.classList.contains('visible') : !!force;
+  panel.classList.toggle('visible', visible);
+  if (visible) {
+    loadRenderedRealityStatus();
+    loadWitnessGovernanceStatus();
+    loadBuildWitnessTimeline();
+    loadLootDropsStatus();
+    loadActiveContextStatus();
+    loadObsTranscriptStatus();
+    loadIntakeStatus();
+    loadCensusRoots();
+  }
+}
+
+function _setWitnessText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text || 'none';
+}
+
+function renderRenderedReality(data) {
+  if (!data) return;
+  const mode = data.mode || 'off';
+  _setWitnessText('rr-mode', mode);
+  _setWitnessText('rr-status', data.enabled ? 'enabled' : 'off');
+  _setWitnessText('rr-receipt', data.last_session_receipt_path || 'none');
+
+  const context = data.last_context || data;
+  const obs = context.obs || null;
+  const win = context.window || null;
+  if (obs) {
+    const scene = obs.current_scene_name || 'no scene';
+    const flags = [
+      obs.obs_running ? 'OBS running' : 'OBS not running',
+      obs.obs_websocket_available ? 'websocket available' : 'websocket unavailable',
+      'scene: ' + scene,
+      'recording: ' + String(obs.recording_active),
+      'streaming: ' + String(obs.streaming_active)
+    ];
+    _setWitnessText('rr-obs', flags.join(' | '));
+  } else {
+    _setWitnessText('rr-obs', mode === 'off' ? 'not observed while off' : 'not observed');
+  }
+
+  if (win) {
+    const processName = win.active_process_name || 'unknown process';
+    const title = win.active_window_title || 'unknown title';
+    _setWitnessText('rr-window', processName + ' | ' + title);
+  } else {
+    _setWitnessText('rr-window', mode === 'off' ? 'not observed while off' : 'not observed');
+  }
+
+  const warnings = []
+    .concat(data.warnings || [])
+    .concat(context.warnings || [])
+    .filter(Boolean);
+  _setWitnessText('rr-warnings', warnings.length ? warnings.join(' | ') : 'none');
+}
+
+async function loadRenderedRealityStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/rendered-reality'));
+    renderRenderedReality(await r.json());
+  } catch (e) {
+    _setWitnessText('rr-status', 'unavailable: ' + e.message);
+  }
+}
+
+async function setRenderedRealityMode(mode) {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/rendered-reality/mode'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode })
+    });
+    const data = await r.json();
+    renderRenderedReality(data);
+  } catch (e) {
+    _setWitnessText('rr-warnings', e.message);
+  }
+}
+
+async function refreshRenderedReality() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/rendered-reality/refresh'), { method: 'POST' });
+    const data = await r.json();
+    renderRenderedReality(data);
+  } catch (e) {
+    _setWitnessText('rr-warnings', e.message);
+  }
+}
+
+async function writeRenderedRealityReceipt() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/rendered-reality/receipt'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: 'Manual SourceMap UI receipt request' })
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('rr-warnings', data.error || 'receipt blocked');
+      return;
+    }
+    _setWitnessText('rr-receipt', data.receipt_path || data.receipt_id || 'written');
+    await loadRenderedRealityStatus();
+  } catch (e) {
+    _setWitnessText('rr-warnings', e.message);
+  }
+}
+
+function _policySummary(policy) {
+  if (!policy || typeof policy !== 'object') return 'none';
+  return Object.entries(policy)
+    .slice(0, 4)
+    .map(([key, value]) => key + ': ' + String(value))
+    .join(' | ');
+}
+
+function renderWitnessGovernance(data) {
+  if (!data) return;
+  if (data.error) {
+    _setWitnessText('gov-known', data.error);
+    return;
+  }
+  const governance = data.governance || {};
+  _setWitnessText('gov-watch-state', data.current_watch_state || governance.current_watch_state || 'watch_off');
+  _setWitnessText('gov-storage-tier', data.current_storage_tier || governance.current_storage_tier || 'do_not_store');
+  _setWitnessText('gov-receipt', data.last_receipt_path || governance.last_receipt_path || 'none');
+  _setWitnessText('gov-consent', data.consent_status || 'explicit consent required');
+  _setWitnessText('gov-observe', _policySummary(data.allowed_to_observe || governance.observation_policy));
+  _setWitnessText('gov-store', _policySummary(data.allowed_to_store || governance.storage_policy));
+  _setWitnessText('gov-forbidden', (data.forbidden_to_capture || governance.forbidden_behaviors || []).slice(0, 5).join(' | ') || 'none');
+}
+
+async function loadWitnessGovernanceStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/witness-governance'));
+    renderWitnessGovernance(await r.json());
+  } catch (e) {
+    _setWitnessText('gov-known', e.message);
+  }
+}
+
+function _governanceCommandBody(command) {
+  const body = {
+    command,
+    source_reference: '',
+    linked_path: '',
+    artifact_type: 'source_map_witness_governance',
+    why_it_mattered: '',
+    notes: 'Manual SourceMap Witness Governance UI command'
+  };
+  if (['link_this', 'write_receipt', 'preserve_this', 'forget_this'].includes(command)) {
+    const ref = window.prompt('Source reference or path for this governance receipt:', '');
+    if (ref === null) return null;
+    body.source_reference = ref;
+    body.linked_path = ref;
+  }
+  if (['write_receipt', 'preserve_this', 'forget_this'].includes(command)) {
+    const why = window.prompt('Why does this matter?', '');
+    if (why === null) return null;
+    body.why_it_mattered = why;
+  }
+  return body;
+}
+
+async function sendGovernanceCommand(command) {
+  const body = _governanceCommandBody(command);
+  if (!body) return;
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/witness-governance/command'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('gov-known', data.error || 'governance command blocked');
+      return;
+    }
+    renderWitnessGovernance(data);
+    if (data.receipt && data.receipt.receipt_path) {
+      _setWitnessText('gov-receipt', data.receipt.receipt_path);
+    }
+  } catch (e) {
+    _setWitnessText('gov-known', e.message);
+  }
+}
+
+async function showGovernanceKnown() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/witness-governance/known'));
+    const data = await r.json();
+    if (data.error) {
+      _setWitnessText('gov-known', data.error);
+      return;
+    }
+    const parts = [
+      'governance: ' + (data.governance_path || 'none'),
+      'sources: ' + (data.source_manifest_source_count == null ? 'unknown' : data.source_manifest_source_count),
+      'receipts: ' + ((data.recent_receipts || []).length),
+      data.uncertainty || ''
+    ];
+    _setWitnessText('gov-known', parts.join(' | '));
+  } catch (e) {
+    _setWitnessText('gov-known', e.message);
+  }
+}
+
+function renderBuildWitness(data) {
+  if (!data) return;
+  if (data.error) {
+    _setWitnessText('build-event', data.error);
+    return;
+  }
+  const latest = data.latest_receipt || {};
+  const events = data.events || [];
+  const files = latest.files_changed || [];
+  const hash = latest.receipt_hash_sha256 || '';
+  _setWitnessText('build-event', latest.reason || latest.receipt_id || 'none');
+  _setWitnessText('build-test-result', latest.test_result || 'unverified');
+  _setWitnessText('build-files-changed', String(files.length || 0));
+  _setWitnessText('build-approval', latest.approval_status || 'candidate');
+  _setWitnessText('build-hash', hash ? hash.slice(0, 16) + '...' : 'none');
+  _setWitnessText('build-timeline-count', String(events.length || 0) + ' events');
+  const lines = events.slice(0, 10).map(ev => {
+    const when = ev.observed_at || '';
+    if (ev.kind === 'build_receipt') {
+      return when + '  BUILD  ' + (ev.reason || ev.task_id || 'build_change') +
+        '  files=' + (ev.files_changed_count || 0) +
+        '  tests=' + (ev.test_result || 'unverified');
+    }
+    return when + '  FILE   ' + (ev.event_type || 'event') + '  ' + (ev.path || '');
+  });
+  const box = document.getElementById('build-witness-results');
+  if (box) box.textContent = lines.join('\n') || 'No build witness events yet.';
+}
+
+async function loadBuildWitnessTimeline() {
+  try {
+    const r = await fetch(apiUrl('/api/build-witness/timeline?limit=50'), { cache: 'no-store' });
+    renderBuildWitness(await r.json());
+  } catch (e) {
+    _setWitnessText('build-event', e.message);
+  }
+}
+
+async function writeBuildWitnessReceipt() {
+  const reason = window.prompt('Build receipt reason:', 'Manual Build Witness UI receipt request');
+  if (reason === null) return;
+  try {
+    const r = await fetch(apiUrl('/api/build-witness/receipt'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reason,
+        task_id: 'manual-build-witness',
+        test_result: 'unverified',
+        tests_run: [],
+        notes: 'Manual SourceMap Build Witness UI command'
+      })
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('build-event', data.error || 'receipt blocked');
+      return;
+    }
+    renderBuildWitness(data.timeline || data);
+  } catch (e) {
+    _setWitnessText('build-event', e.message);
+  }
+}
+
+function renderLootDrops(data) {
+  if (!data) return;
+  if (data.error) {
+    _setWitnessText('loot-warnings', data.error);
+    return;
+  }
+  const latest = data.latest_lootdrop || null;
+  const ledger = data.ledger || {};
+  _setWitnessText('loot-latest', latest ? (latest.title || latest.lootdrop_id || 'LootDrop') : 'none');
+  _setWitnessText('loot-total', String(data.mindcoin_total ?? ledger.mindcoin_total ?? 0));
+  _setWitnessText('loot-reason', data.last_award_reason || ledger.last_award_reason || 'none');
+  _setWitnessText('loot-receipt', data.linked_receipt || 'none');
+  _setWitnessText('loot-artifact', latest ? (latest.artifact_path || 'written') : 'none');
+  _setWitnessText('lootdrop-notice', data.nonfinancial_notice || 'MindCoin is symbolic, local-only, nonfinancial, nontransferable, and has no cash, crypto, market, or exchange value.');
+  _setWitnessText('loot-warnings', 'none');
+}
+
+async function loadLootDropsStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/lootdrops'));
+    renderLootDrops(await r.json());
+  } catch (e) {
+    _setWitnessText('loot-warnings', e.message);
+  }
+}
+
+async function createManualLootDrop() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/lootdrops/manual'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('loot-warnings', data.error || 'LootDrop creation blocked');
+      return;
+    }
+    await loadLootDropsStatus();
+  } catch (e) {
+    _setWitnessText('loot-warnings', e.message);
+  }
+}
+
+async function writeLootDropReceipt() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/lootdrops/receipt'), { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('loot-warnings', data.error || 'LootDrop receipt blocked');
+      return;
+    }
+    _setWitnessText('loot-receipt', data.receipt_path || data.receipt_id || 'written');
+    await loadLootDropsStatus();
+  } catch (e) {
+    _setWitnessText('loot-warnings', e.message);
+  }
+}
+
+async function awardLootDropMindCoin() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/lootdrops/award'), { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('loot-warnings', data.error || 'MindCoin award blocked');
+      return;
+    }
+    _setWitnessText('loot-reason', data.reason || 'awarded');
+    await loadLootDropsStatus();
+  } catch (e) {
+    _setWitnessText('loot-warnings', e.message);
+  }
+}
+
+function renderActiveContext(data) {
+  if (!data) return;
+  if (data.error) {
+    _setWitnessText('ctx-warnings', data.error);
+    return;
+  }
+  const latest = data.latest || {};
+  const diff = latest.diff || {};
+  const sources = data.sources_loaded || [];
+  const warnings = data.warnings || latest.active_warnings || [];
+  _setWitnessText('ctx-refresh-time', data.last_refresh_time || latest.timestamp || 'none');
+  _setWitnessText('ctx-sources-loaded', String(sources.length || 0));
+  _setWitnessText('ctx-new-changes', String(data.new_changes_since_last_refresh ?? diff.new_items_detected ?? 0));
+  _setWitnessText('ctx-warnings', warnings.length ? warnings.join(' | ') : 'none');
+  _setWitnessText('ctx-reset-status', data.reset_status || (latest.conversation_reset ? 'Reset' : 'Not reset'));
+  _setWitnessText('ctx-latest-path', data.latest_context_path || 'none');
+}
+
+async function loadActiveContextStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/active-context'));
+    renderActiveContext(await r.json());
+  } catch (e) {
+    _setWitnessText('ctx-warnings', e.message);
+  }
+}
+
+async function refreshActiveContext() {
+  try {
+    const r = await fetch(apiUrl('/api/active-context/refresh'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: 'Manual SourceMap UI active context refresh' })
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('ctx-warnings', data.error || 'Active Context refresh blocked');
+      return;
+    }
+    renderActiveContext({
+      latest_context_path: data.latest_context_path,
+      latest: data.snapshot,
+      sources_loaded: data.sources_loaded || [],
+      last_refresh_time: data.snapshot && data.snapshot.timestamp,
+      new_changes_since_last_refresh: data.diff && data.diff.new_items_detected,
+      warnings: data.diff && data.diff.warnings,
+      reset_status: data.conversation_reset ? 'Reset' : 'Not reset'
+    });
+  } catch (e) {
+    _setWitnessText('ctx-warnings', e.message);
+  }
+}
+
+async function showActiveContextDiff() {
+  try {
+    const r = await fetch(apiUrl('/api/active-context/diff'));
+    const data = await r.json();
+    if (!r.ok || data.error) {
+      _setWitnessText('ctx-warnings', data.error || 'Context diff unavailable');
+      return;
+    }
+    const diff = data.diff || {};
+    const parts = [
+      'sources +' + ((diff.new_sources || []).length),
+      'updated ' + ((diff.updated_sources || []).length),
+      'receipts +' + ((diff.new_receipts || []).length),
+      'captures +' + ((diff.new_game_captures || []).length),
+      'loot +' + ((diff.new_lootdrops || []).length),
+      'tasks +' + ((diff.new_pending_tasks || []).length)
+    ];
+    _setWitnessText('ctx-new-changes', String(diff.new_items_detected || 0));
+    _setWitnessText('ctx-warnings', parts.join(' | '));
+    _setWitnessText('ctx-reset-status', data.conversation_reset ? 'Reset' : 'Not reset');
+  } catch (e) {
+    _setWitnessText('ctx-warnings', e.message);
+  }
+}
+
+function _formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (!bytes) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = bytes;
+  let idx = 0;
+  while (size >= 1024 && idx < units.length - 1) {
+    size = size / 1024;
+    idx += 1;
+  }
+  return (idx === 0 ? String(size) : size.toFixed(1)) + ' ' + units[idx];
+}
+
+function renderObsTranscript(data) {
+  if (!data) return;
+  if (data.error) {
+    _setWitnessText('obs-transcript-warnings', data.error);
+    return;
+  }
+  const scan = data.recording_scan || {};
+  const active = scan.active_recording || {};
+  if (data.active_recording_path) {
+    const size = active.size_bytes == null ? '' : ' | ' + _formatBytes(active.size_bytes);
+    _setWitnessText('obs-transcript-recording', data.active_recording_path + size);
+  } else {
+    _setWitnessText('obs-transcript-recording', 'no active OBS recording found');
+  }
+
+  const stack = data.local_transcript_stack || {};
+  const engines = stack.ready_engines || {};
+  const ready = Object.entries(engines).filter(([, enabled]) => enabled).map(([name]) => name);
+  _setWitnessText(
+    'obs-transcript-stack',
+    stack.can_transcribe_locally ? ('ready: ' + ready.join(', ')) : 'unavailable; cloud transcription refused'
+  );
+
+  const sidecars = data.transcript_sidecars || [];
+  _setWitnessText(
+    'obs-transcript-sidecars',
+    sidecars.length ? sidecars.map(item => item.path || item.suffix || 'sidecar').slice(0, 2).join(' | ') : 'none'
+  );
+
+  const latest = data.latest_transcript || {};
+  _setWitnessText('obs-transcript-latest', latest.path || latest.markdown_path || 'none');
+  const receipt = data.latest_receipt || {};
+  _setWitnessText('obs-transcript-receipt', receipt.receipt_path || 'none');
+  const warnings = data.warnings || [];
+  _setWitnessText('obs-transcript-warnings', warnings.length ? warnings.join(' | ') : 'none');
+}
+
+async function loadObsTranscriptStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/obs-transcript'));
+    renderObsTranscript(await r.json());
+  } catch (e) {
+    _setWitnessText('obs-transcript-warnings', e.message);
+  }
+}
+
+async function pullObsTranscript() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/obs-transcript/pull'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: 'Manual SourceMap UI pull request' })
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('obs-transcript-warnings', data.error || 'OBS transcript pull blocked');
+      return;
+    }
+    if (data.receipt && data.receipt.receipt_path) {
+      _setWitnessText('obs-transcript-receipt', data.receipt.receipt_path);
+    }
+    if (data.transcript && data.transcript.path) {
+      _setWitnessText('obs-transcript-latest', data.transcript.path);
+    }
+    const blocker = data.receipt && data.receipt.blocker;
+    if (blocker) _setWitnessText('obs-transcript-warnings', blocker);
+    await loadObsTranscriptStatus();
+  } catch (e) {
+    _setWitnessText('obs-transcript-warnings', e.message);
+  }
+}
+
+async function writeObsTranscriptReceipt() {
+  try {
+    const r = await fetch(apiUrl('/api/sourcemap/obs-transcript/receipt'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: 'Manual SourceMap UI transcript status receipt' })
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      _setWitnessText('obs-transcript-warnings', data.error || 'OBS transcript receipt blocked');
+      return;
+    }
+    _setWitnessText('obs-transcript-receipt', data.receipt_path || data.receipt_id || 'written');
+    await loadObsTranscriptStatus();
+  } catch (e) {
+    _setWitnessText('obs-transcript-warnings', e.message);
+  }
+}
+
+function _fmtBytes(n) {
+  n = Number(n) || 0;
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function renderIntakeStatus(data) {
+  if (!data) return;
+  const counts = data.counts || {};
+  _setWitnessText('intake-received', counts.received != null ? counts.received : 0);
+  _setWitnessText('intake-quarantined', counts.quarantined != null ? counts.quarantined : 0);
+  _setWitnessText('intake-rejected', counts.rejected != null ? counts.rejected : 0);
+  _setWitnessText('intake-manifest', data.latest_manifest_path || 'none');
+  if (data.credential_risk_detected) {
+    _setWitnessText('intake-warnings', 'credential-risk file detected, rotation/quarantine required');
+  }
+}
+
+async function loadIntakeStatus() {
+  try {
+    const r = await fetch(apiUrl('/api/intake/latest'));
+    renderIntakeStatus(await r.json());
+  } catch (e) {
+    _setWitnessText('intake-warnings', e.message);
+  }
+}
+
+function _renderIntakeResult(data) {
+  if (!data) return;
+  if (data.error) {
+    _setWitnessText('intake-warnings', data.error + (data.needs ? ' (needs ' + data.needs + ')' : ''));
+    document.getElementById('intake-results').textContent = data.error + (data.hint ? '\n' + data.hint : '');
+    return;
+  }
+  const manifest = data.manifest || {};
+  const entries = manifest.entries || [];
+  _setWitnessText('intake-time', manifest.created_at || 'now');
+  _setWitnessText('intake-receipt', data.receipt_path || 'none');
+  renderIntakeStatus({
+    counts: manifest.counts,
+    latest_manifest_path: data.manifest_path,
+    credential_risk_detected: manifest.credential_risk_detected,
+  });
+  const lines = entries.map(e => {
+    const rel = e.relative_path ? e.relative_path : e.original_filename;
+    const flags = (e.risk_flags && e.risk_flags.length) ? e.risk_flags.join(',') : '-';
+    return [
+      e.status.toUpperCase().padEnd(11),
+      rel,
+      _fmtBytes(e.size_bytes),
+      e.extension || '-',
+      e.mime_guess || '-',
+      'sha256:' + String(e.sha256 || '').slice(0, 12),
+      'risk:' + flags,
+      '=> ' + (e.recommended_action || '-'),
+    ].join('  ');
+  });
+  let header = (data.oracle_response || '');
+  document.getElementById('intake-results').textContent =
+    (header ? header + '\n\n' : '') + lines.join('\n');
+}
+
+async function _postIntake(path, formData) {
+  _setWitnessText('intake-warnings', 'uploading…');
+  try {
+    const r = await fetch(apiUrl(path), { method: 'POST', body: formData });
+    const data = await r.json();
+    if (!r.ok) {
+      _renderIntakeResult(data);
+      return;
+    }
+    _setWitnessText('intake-warnings', 'none');
+    _renderIntakeResult(data);
+    await loadIntakeStatus();
+  } catch (e) {
+    _setWitnessText('intake-warnings', e.message);
+  }
+}
+
+function handleIntakeFiles(input) {
+  const files = Array.from(input.files || []);
+  if (!files.length) return;
+  const fd = new FormData();
+  files.forEach(f => fd.append('files', f, f.name));
+  _postIntake('/api/intake/files', fd);
+  input.value = '';
+}
+
+function handleIntakeFolder(input) {
+  const files = Array.from(input.files || []);
+  if (!files.length) return;
+  const fd = new FormData();
+  const relpaths = [];
+  files.forEach(f => {
+    fd.append('files', f, f.name);
+    relpaths.push(f.webkitRelativePath || f.name);
+  });
+  fd.append('relpaths', JSON.stringify(relpaths));
+  _postIntake('/api/intake/folder', fd);
+  input.value = '';
+}
+
+async function reviewIntake() {
+  try {
+    const r = await fetch(apiUrl('/api/intake/review'), { method: 'POST' });
+    const data = await r.json();
+    if (!data.has_intake) {
+      document.getElementById('intake-results').textContent = data.message || 'No intake yet.';
+      return;
+    }
+    const flagged = (data.flagged || []).map(f =>
+      f.status.toUpperCase() + '  ' + f.original_filename + '  risk:' + (f.risk_flags || []).join(',') + '  => ' + f.recommended_action
+    );
+    const status = Object.entries(data.by_status || {}).map(([k, v]) => k + '=' + v).join('  ');
+    document.getElementById('intake-results').textContent =
+      'Status: ' + status + '\nPromotion requires Noah.Physical approval.\n\n' +
+      (flagged.length ? 'Flagged:\n' + flagged.join('\n') : 'No risk-flagged files.');
+  } catch (e) {
+    _setWitnessText('intake-warnings', e.message);
+  }
+}
+
+function clearIntakeView() {
+  // UI-only: clears the on-screen list. Does not delete any stored file.
+  document.getElementById('intake-results').textContent = 'Intake view cleared (UI only — no files deleted).';
+}
+
+async function showIntakeManifest() {
+  try {
+    const r = await fetch(apiUrl('/api/intake/latest'));
+    const data = await r.json();
+    document.getElementById('intake-results').textContent =
+      JSON.stringify(data.manifest || data, null, 2);
+  } catch (e) {
+    _setWitnessText('intake-warnings', e.message);
+  }
+}
+
+function _censusBlocked(data) {
+  if (data && data.blocked) {
+    _setWitnessText('census-governance', 'BLOCKED');
+    document.getElementById('census-results').textContent = data.message || 'Storage Census blocked: governance state unavailable.';
+    return true;
+  }
+  return false;
+}
+
+async function loadCensusRoots() {
+  try {
+    const r = await fetch(apiUrl('/api/storage-census/roots'));
+    const data = await r.json();
+    if (_censusBlocked(data)) return;
+    _setWitnessText('census-governance', data.governance_loaded ? 'loaded' : 'unknown');
+    _setWitnessText('census-gov-source', data.governance_source || 'none');
+    _setWitnessText('census-approved', (data.approved_roots || []).join(', ') || 'none');
+    const known = (data.known_roots_not_scanned || []).map(k => k.path + ' (' + k.kind + ')');
+    _setWitnessText('census-known', known.join(' | ') || 'none');
+    document.getElementById('census-results').textContent =
+      'Approved roots:\n  ' + (data.approved_roots || []).join('\n  ') +
+      '\n\nKnown but NOT scanned by metadata census (read-only recall remains granted):\n  ' + known.join('\n  ');
+  } catch (e) {
+    _setWitnessText('census-warnings', e.message);
+  }
+}
+
+async function scanApprovedCensus() {
+  _setWitnessText('census-warnings', 'scanning metadata census roots...');
+  try {
+    const r = await fetch(apiUrl('/api/storage-census/scan-approved'), { method: 'POST' });
+    const data = await r.json();
+    if (_censusBlocked(data)) return;
+    const c = data.counts || {};
+    _setWitnessText('census-governance', 'loaded');
+    _setWitnessText('census-gov-source', data.governance_source || 'none');
+    _setWitnessText('census-approved', (data.approved_roots_scanned || []).join(', ') || 'none');
+    _setWitnessText('census-known', (data.known_roots_not_scanned || []).join(' | ') || 'none');
+    _setWitnessText('census-candidates', c.oracle_related_candidates != null ? c.oracle_related_candidates : 0);
+    _setWitnessText('census-credrisk', c.credential_risk != null ? c.credential_risk : 0);
+    _setWitnessText('census-dupes', c.duplicate_candidates != null ? c.duplicate_candidates : 0);
+    _setWitnessText('census-manifest', data.manifest_path || 'none');
+    _setWitnessText('census-receipt', data.receipt_path || 'none');
+    _setWitnessText('census-warnings', (data.warnings || []).join(' | ') || 'none');
+    document.getElementById('census-results').textContent =
+      'Census complete (metadata roots only). Files seen: ' + (c.files_seen || 0) +
+      '\nManifest: ' + (data.manifest_path || '') +
+      '\nReport: ' + (data.report_path || '') +
+      '\nCandidates: ' + (data.candidates_path || '') +
+      '\nReceipt: ' + (data.receipt_path || '') +
+      '\nNo content ingested. No files moved/deleted/renamed/uploaded/synced/committed/pushed.';
+  } catch (e) {
+    _setWitnessText('census-warnings', e.message);
+  }
+}
+
+async function loadCensusReport() {
+  try {
+    const r = await fetch(apiUrl('/api/storage-census/report'));
+    const data = await r.json();
+    if (_censusBlocked(data)) return;
+    if (!data.has_census) {
+      document.getElementById('census-results').textContent = data.message || 'No census yet.';
+      return;
+    }
+    const largest = (data.largest_folders || []).map(f => '  ' + f.folder + ' — ' + (f.bytes / (1024 * 1024)).toFixed(1) + ' MB');
+    const newest = (data.newest_files || []).map(f => '  ' + f.modified + '  ' + f.name + ' (' + f.classification + ')');
+    document.getElementById('census-results').textContent =
+      'Largest folders:\n' + largest.join('\n') + '\n\nNewest files:\n' + newest.join('\n') +
+      '\n\nCredential-risk (count only): ' + (data.credential_risk_count || 0);
+  } catch (e) {
+    _setWitnessText('census-warnings', e.message);
+  }
+}
+
+async function loadCensusRisks() {
+  try {
+    const r = await fetch(apiUrl('/api/storage-census/risks'));
+    const data = await r.json();
+    if (_censusBlocked(data)) return;
+    _setWitnessText('census-credrisk', data.credential_risk_count != null ? data.credential_risk_count : 0);
+    document.getElementById('census-results').textContent =
+      'Credential-risk files: ' + (data.credential_risk_count || 0) + ' (count only — contents never read).' +
+      (data.message ? '\n' + data.message : '');
+  } catch (e) {
+    _setWitnessText('census-warnings', e.message);
+  }
+}
+
+async function _censusRootAction(path) {
+  const input = document.getElementById('census-root-input');
+  const value = (input && input.value || '').trim();
+  if (!value) { _setWitnessText('census-warnings', 'enter a root path first'); return null; }
+  try {
+    const r = await fetch(apiUrl(path), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: value })
+    });
+    const data = await r.json();
+    if (_censusBlocked(data)) return null;
+    document.getElementById('census-results').textContent = JSON.stringify(data, null, 2);
+    await loadCensusRoots();
+    return data;
+  } catch (e) {
+    _setWitnessText('census-warnings', e.message);
+    return null;
+  }
+}
+
+function approveCensusRoot() { _censusRootAction('/api/storage-census/approve-root'); }
+function rejectCensusRoot() { _censusRootAction('/api/storage-census/reject-root'); }
 
 function _pickVoice() {
   const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
@@ -1373,7 +4307,24 @@ async function refreshPresence() {
     const r = await fetch(apiUrl('/api/presence'));
     if (!r.ok) return;
     const d = await r.json();
-    document.getElementById('pr-mode').textContent = d.mode || '—';
+    const live = d.live_transmission || {};
+    document.getElementById('pr-mode').textContent =
+      live.live_transmission_active ? 'Capture' : (d.lane_label || d.current_lane || 'Unified');
+    const boot = d.boot || {};
+    const fabric = d.cognition_fabric || {};
+    const cogEl = document.getElementById('pr-cognition');
+    cogEl.textContent = fabric.status_label || boot.cognition_mode || '—';
+    cogEl.title = [
+      fabric.current_cognition_tier ? ('tier: ' + fabric.current_cognition_tier) : '',
+      fabric.last_local_model_status ? ('local: ' + fabric.last_local_model_status) : '',
+      fabric.last_fallback_reason ? ('fallback: ' + fabric.last_fallback_reason) : '',
+      'cloud_api_used: false',
+      'conversation_reset: false'
+    ].filter(Boolean).join(' | ');
+    document.getElementById('pr-heartbeat').textContent =
+      live.live_transmission_active
+        ? 'LIVE PRIVACY ELEVATED · RAW RECORDING OFF · LOCAL ONLY'
+        : (boot.network_boundary ? ('boundary ' + boot.network_boundary) : 'grounded');
     document.getElementById('pr-mem').textContent = (d.memory_count == null ? '—' : d.memory_count);
     const ll = d.law_life || {};
     document.getElementById('pr-law').textContent = ll.law_status || '—';
@@ -1394,15 +4345,71 @@ async function refreshPresence() {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+// ── Rehydrate the conversation on load so a refresh retains the thread ────────
+async function restoreHistory() {
+  try {
+    const r = await fetch(apiUrl('/api/history'));
+    const data = await r.json();
+    lastHistorySource = (data && data.source) || 'unknown';
+    await refreshDurability(lastHistorySource).catch(() => {});
+    const turns = (data && data.history) || [];
+    if (!turns.length) {
+      lastHistorySource = 'empty';
+      await refreshDurability('empty').catch(() => {});
+      return;
+    }
+    // Clear the welcome panel and replay the durable thread.
+    document.getElementById('messages').innerHTML = '';
+    conversationStarted = true;
+    turns.forEach(t => {
+      const role = (t.role === 'assistant' || t.role === 'oracle') ? 'oracle' : 'user';
+      if (t.content && String(t.content).trim()) addMessage(role, String(t.content));
+    });
+    scrollToBottom();
+  } catch (e) {
+    lastHistorySource = 'error';
+    refreshDurability('error').catch(() => {});
+    /* offline: leave the welcome screen, no fake thread */
+  }
+}
+
 async function init() {
+  initSidebarState();
+  initUiDensity();
+  bindDurabilityControls();
+
   try {
     await syncModeState();
   } catch {}
 
+  await restoreHistory();
+  refreshDurability(lastHistorySource).catch(() => {});
+  refreshEllieDomainStatus().catch(() => {});
+  refreshPreferencesStatus().catch(() => {});
+  refreshSelfPromptStatus().catch(() => {});
+  refreshConnectorStatus().catch(() => {});
+  refreshHumanStateStatus().catch(() => {});
   await _applyLearnedUI();
+  loadRenderedRealityStatus().catch(() => {});
+  loadWitnessGovernanceStatus().catch(() => {});
+  loadLootDropsStatus().catch(() => {});
+  loadActiveContextStatus().catch(() => {});
+  loadObsTranscriptStatus().catch(() => {});
+  refreshReadAccessStatus().catch(() => {});
+  refreshAiLockboxStatus().catch(() => {});
 
   refreshPresence();
+  refreshLiveMirror().catch(() => {});
+  setInterval(() => refreshLiveMirror().catch(() => {}), 20000);
   setInterval(refreshPresence, 5000);
+  setInterval(() => refreshDurability(lastHistorySource).catch(() => {}), 15000);
+  setInterval(() => refreshEllieDomainStatus().catch(() => {}), 30000);
+  setInterval(() => refreshPreferencesStatus().catch(() => {}), 30000);
+  setInterval(() => refreshSelfPromptStatus().catch(() => {}), 30000);
+  setInterval(() => refreshConnectorStatus().catch(() => {}), 30000);
+  setInterval(() => refreshHumanStateStatus().catch(() => {}), 30000);
+  setInterval(() => refreshReadAccessStatus().catch(() => {}), 30000);
+  setInterval(() => refreshAiLockboxStatus().catch(() => {}), 30000);
 
   document.getElementById('input').focus();
 }
@@ -1419,6 +4426,383 @@ function _refreshLearnCount() {
 }
 
 init();
+</script>
+
+<!-- ============================================================= -->
+<!-- Operator Console (Bridge) — honest ship status. Additive: this -->
+<!-- block is self-contained and does not modify existing UI.       -->
+<!-- ============================================================= -->
+<button id="rr-bridge-fab" onclick="rrBridgeToggle()" title="Operator Console — honest ship status"
+  style="position:fixed;bottom:18px;right:18px;z-index:9000;background:#0b1220;color:#22d3ee;
+  border:1px solid rgba(34,211,238,0.45);border-radius:10px;padding:9px 14px;font-size:12px;
+  letter-spacing:0.14em;text-transform:uppercase;cursor:pointer;font-family:inherit;
+  box-shadow:0 4px 18px rgba(0,0,0,0.45);">⌬ Bridge</button>
+
+<div id="rr-bridge-panel" style="position:fixed;top:0;right:0;height:100vh;width:390px;max-width:92vw;
+  z-index:9001;background:#070b14;border-left:1px solid rgba(34,211,238,0.22);
+  box-shadow:-8px 0 30px rgba(0,0,0,0.55);transform:translateX(100%);transition:transform 0.22s ease;
+  display:flex;flex-direction:column;font-family:inherit;color:#e5edf5;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;
+    border-bottom:1px solid rgba(255,255,255,0.08);">
+    <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#22d3ee;">
+      Operator Console</div>
+    <div>
+      <button onclick="rrBridgeLoad(true)" title="Re-run live smoke probes"
+        style="background:transparent;color:rgba(255,255,255,0.55);border:1px solid rgba(255,255,255,0.14);
+        border-radius:6px;padding:4px 9px;font-size:10px;cursor:pointer;font-family:inherit;">RE-TEST</button>
+      <button onclick="rrBridgeToggle()"
+        style="background:transparent;color:rgba(255,255,255,0.55);border:none;font-size:18px;
+        cursor:pointer;padding:0 4px;">×</button>
+    </div>
+  </div>
+  <div id="rr-bridge-runtime" style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);
+    font-size:12px;line-height:1.7;color:rgba(255,255,255,0.78);">loading runtime…</div>
+  <div id="rr-bridge-summary" style="display:flex;gap:8px;padding:12px 16px;flex-wrap:wrap;"></div>
+  <div id="rr-bridge-list" style="flex:1;overflow-y:auto;padding:4px 12px 16px;"></div>
+  <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,0.06);font-size:10px;
+    color:rgba(255,255,255,0.4);line-height:1.5;">
+    Live from the capability broker. States are verified, not decorative. A capability shows
+    its real status and sandbox level; "—" means no fresh receipt.</div>
+</div>
+
+<script>
+function rrBridgeToggle(){
+  var p=document.getElementById('rr-bridge-panel');
+  var open=p.style.transform==='translateX(0%)'||p.style.transform==='translateX(0px)';
+  if(open){p.style.transform='translateX(100%)';}
+  else{p.style.transform='translateX(0%)';rrBridgeLoad(false);}
+}
+function rrBridgeColor(s){
+  if(s==='verified')return '#22c55e';
+  if(s==='degraded')return '#f59e0b';
+  if(s==='blocked')return '#ef4444';
+  return '#64748b';
+}
+function rrBridgeLabel(s){
+  if(s==='verified')return 'available';
+  if(s==='degraded')return 'degraded';
+  if(s==='blocked')return 'blocked';
+  return s||'untested';
+}
+function rrBridgeChip(label,n,color){
+  return '<span style="background:rgba(255,255,255,0.04);border:1px solid '+color+';color:'+color+
+    ';border-radius:20px;padding:3px 11px;font-size:11px;letter-spacing:0.06em;">'+label+' '+n+'</span>';
+}
+async function rrBridgeFetchJson(path){
+  var url=(typeof apiUrl==='function')?apiUrl(path):path;
+  var response=await fetch(url,{cache:'no-store'});
+  if(!response.ok){
+    var body='';
+    try{body=await response.text();}catch(_e){}
+    throw new Error(path+' returned '+response.status+(body?': '+body.slice(0,160):''));
+  }
+  return await response.json();
+}
+async function rrBridgeLoad(smokes){
+  var rt=document.getElementById('rr-bridge-runtime');
+  var sum=document.getElementById('rr-bridge-summary');
+  var list=document.getElementById('rr-bridge-list');
+  list.innerHTML='<div style="padding:18px;color:rgba(255,255,255,0.4);font-size:12px;">'+
+    (smokes?'running live smoke probes…':'reading verified status…')+'</div>';
+  try{
+    var st=await rrBridgeFetchJson('/api/status');
+    var b=st.boot||{};
+    rt.innerHTML=
+      '<div><b style="color:#22d3ee;">ORACLE</b> · session '+(st.session_id||'?')+
+      (st.paused?' · <span style="color:#f59e0b;">paused</span>':' · <span style="color:#22c55e;">live</span>')+'</div>'+
+      '<div>model: '+(b.verified_model_name||'?')+' via '+(b.verified_local_engine||'?')+'</div>'+
+      '<div>network: '+(b.network_boundary||'?')+
+      ((b.warnings&&b.warnings.length)?' · <span style="color:#f59e0b;">'+b.warnings.length+' warning(s)</span>':'')+'</div>';
+  }catch(e){ rt.innerHTML='<span style="color:#ef4444;">runtime unreachable: '+e+'</span>'; }
+  try{
+    var data=await rrBridgeFetchJson('/api/capabilities'+(smokes?'?smokes=true':''));
+    var s=data.summary||{};
+    sum.innerHTML=
+      rrBridgeChip('available',s.verified||0,'#22c55e')+
+      rrBridgeChip('degraded',s.degraded||0,'#f59e0b')+
+      rrBridgeChip('blocked',s.blocked||0,'#ef4444');
+    var caps=(data.capabilities||[]).slice().sort(function(a,bb){
+      var ord={blocked:0,degraded:1,verified:2};
+      return (ord[a.current_status]||3)-(ord[bb.current_status]||3);
+    });
+    list.innerHTML=caps.map(function(c){
+      var col=rrBridgeColor(c.current_status);
+      var perm=(c.permitted&&c.permitted!=='read_only')?
+        '<span style="color:rgba(255,255,255,0.4);font-size:10px;"> · '+c.permitted+'</span>':'';
+      var blocker=(c.blocker&&c.blocker!=='NONE'&&c.current_status!=='verified')?
+        '<div style="font-size:10.5px;color:rgba(255,255,255,0.45);margin-top:2px;">'+c.blocker+'</div>':'';
+      var when=c.last_tested?('<span style="font-size:10px;color:rgba(255,255,255,0.3);">'+
+        (c.last_tested.split('T')[1]||'').slice(0,8)+'</span>'):'<span style="font-size:10px;color:rgba(255,255,255,0.25);">—</span>';
+      return '<div style="padding:9px 6px;border-bottom:1px solid rgba(255,255,255,0.04);">'+
+        '<div style="display:flex;align-items:center;gap:9px;">'+
+        '<span style="width:9px;height:9px;border-radius:50%;background:'+col+';flex:none;box-shadow:0 0 8px '+col+';"></span>'+
+        '<span style="flex:1;font-size:12.5px;">'+c.component+perm+'</span>'+
+        '<span style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:'+col+';">'+rrBridgeLabel(c.current_status)+'</span>'+
+        '&nbsp;'+when+'</div>'+blocker+'</div>';
+    }).join('');
+  }catch(e){
+    list.innerHTML='<div style="padding:18px;color:#ef4444;font-size:12px;">capabilities unreachable: '+e+'</div>';
+  }
+}
+function rrBridgePrime(){
+  var rt=document.getElementById('rr-bridge-runtime');
+  if(rt && /loading runtime/i.test(rt.textContent||'')){
+    rrBridgeLoad(false);
+  }
+}
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',rrBridgePrime);
+}else{
+  setTimeout(rrBridgePrime,0);
+}
+</script>
+
+<!-- ============================================================= -->
+<!-- Continuity UX Enhancements (additive, self-contained).         -->
+<!-- 15 improvements to Noah's ORACLE interface. Every hook is       -->
+<!-- guarded so a failure here can never break the base UI.          -->
+<!-- Built 2026-07-12. Reuses shared globals: addMessage, apiUrl,    -->
+<!-- isStreaming, scrollToBottom, conversationStarted.               -->
+<!-- ============================================================= -->
+<style>
+  #ce-bar{position:fixed;left:12px;bottom:12px;z-index:9998;display:flex;gap:8px;align-items:center;
+    background:rgba(12,16,24,.82);border:1px solid rgba(120,160,220,.22);border-radius:10px;
+    padding:5px 9px;font:11px/1.3 -apple-system,Segoe UI,sans-serif;color:#9db4d0;backdrop-filter:blur(6px);}
+  #ce-bar .ce-dot{width:8px;height:8px;border-radius:50%;background:#3fb950;box-shadow:0 0 6px #3fb95088;}
+  #ce-bar .ce-dot.off{background:#f85149;box-shadow:0 0 6px #f8514988;}
+  #ce-bar .ce-sess{opacity:.85;font-variant-numeric:tabular-nums;}
+  #ce-bar button{background:rgba(90,130,200,.14);border:1px solid rgba(120,160,220,.25);color:#bcd0ea;
+    border-radius:7px;padding:3px 7px;cursor:pointer;font:11px -apple-system,Segoe UI,sans-serif;}
+  #ce-bar button:hover{background:rgba(90,130,200,.28);}
+  #ce-newmsg{position:fixed;right:24px;bottom:96px;z-index:9998;display:none;background:#1f6feb;color:#fff;
+    border:none;border-radius:16px;padding:7px 14px;font:12px -apple-system,Segoe UI,sans-serif;cursor:pointer;
+    box-shadow:0 4px 14px rgba(0,0,0,.4);}
+  #ce-banner{position:fixed;top:0;left:0;right:0;z-index:9999;background:#1f6feb;color:#fff;text-align:center;
+    padding:6px;font:12px -apple-system,Segoe UI,sans-serif;transform:translateY(-100%);transition:transform .3s;}
+  #ce-banner.show{transform:translateY(0);}
+  #ce-charcount{opacity:.6;font-variant-numeric:tabular-nums;}
+  .msg-row{position:relative;}
+</style>
+<div id="ce-bar">
+  <span class="ce-dot" id="ce-dot" title="ORACLE connection"></span>
+  <span class="ce-sess" id="ce-sess">session —</span>
+  <button id="ce-copyall" title="Copy the whole conversation to clipboard">Copy thread</button>
+  <button id="ce-fdn" title="Smaller text">A-</button>
+  <button id="ce-fup" title="Larger text">A+</button>
+  <span id="ce-charcount" title="Draft length">0</span>
+</div>
+<button id="ce-newmsg" title="Jump to newest">↓ new</button>
+<div id="ce-banner"></div>
+
+<script>
+(function(){
+  "use strict";
+  var _msgs = function(){ return document.getElementById('messages'); };
+  var _input = function(){ return document.getElementById('input'); };
+  var lastSession = null, unread = 0, baseTitle = document.title;
+
+  function nearBottom(){ var m=_msgs(); if(!m) return true; return (m.scrollHeight - m.scrollTop - m.clientHeight) < 140; }
+  function rowCount(){ var m=_msgs(); return m ? m.querySelectorAll('.msg-row').length : 0; }
+  function setConn(ok){ var d=document.getElementById('ce-dot'); if(d) d.className='ce-dot'+(ok?'':' off'); if(d) d.title = ok?'ORACLE live on 7781':'ORACLE offline — reconnecting'; }
+  function setSess(id,n){ var s=document.getElementById('ce-sess'); if(s) s.textContent='session '+(id==null?'—':id)+' · '+n+' turns'; }
+  function banner(msg){ var b=document.getElementById('ce-banner'); if(!b) return; b.textContent=msg; b.classList.add('show'); setTimeout(function(){b.classList.remove('show');},3200); }
+  function bumpTitle(){ if(document.hidden){ unread++; document.title='('+unread+') '+baseTitle; } }
+  function stampRow(){ // #8 timestamp — tag the newest unstamped row
+    var m=_msgs(); if(!m) return; var rows=m.querySelectorAll('.msg-row:not([data-ts])');
+    var t=new Date(); var label=t.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    rows.forEach(function(r){ r.setAttribute('data-ts',label); r.title='rendered '+label; });
+  }
+
+  // #1 + #4 + #12 live thread sync: append new turns, handle relight, reconnect
+  var syncing=false;
+  async function liveSync(){
+    if(syncing) return; if(typeof isStreaming!=='undefined' && isStreaming) return;
+    syncing=true;
+    try{
+      var r=await fetch(apiUrl('/api/history'),{cache:'no-store'}); var d=await r.json();
+      setConn(true);
+      var turns=(d&&d.history)||[]; var sid=(d&&d.session_id);
+      if(lastSession!==null && sid!=null && sid!==lastSession){
+        // relight: session rolled — re-render instead of silently orphaning
+        var m=_msgs(); if(m){ m.innerHTML=''; try{conversationStarted=true;}catch(e){}
+          turns.forEach(function(t){ var role=(t.role==='assistant'||t.role==='oracle')?'oracle':'user';
+            if(t.content&&String(t.content).trim()) addMessage(role,String(t.content)); }); stampRow(); }
+        banner('ORACLE restarted — your thread was carried forward');
+      } else {
+        var rows=rowCount();
+        if(turns.length>rows){
+          var wasNear=nearBottom(); var m2=_msgs(); var keepTop=m2?m2.scrollTop:0;
+          turns.slice(rows).forEach(function(t){ var role=(t.role==='assistant'||t.role==='oracle')?'oracle':'user';
+            if(t.content&&String(t.content).trim()) addMessage(role,String(t.content)); });
+          stampRow(); bumpTitle();
+          if(wasNear){ scrollToBottom(); } else { if(m2) m2.scrollTop=keepTop; showNew(true); }
+        }
+      }
+      lastSession=sid; setSess(sid,turns.length);
+    }catch(e){ setConn(false); }
+    finally{ syncing=false; }
+  }
+
+  // #6 new-message jump button
+  function showNew(on){ var b=document.getElementById('ce-newmsg'); if(b) b.style.display=on?'block':'none'; }
+  var nb=document.getElementById('ce-newmsg');
+  if(nb) nb.onclick=function(){ scrollToBottom(); showNew(false); };
+  var mm=_msgs(); if(mm) mm.addEventListener('scroll',function(){ if(nearBottom()) showNew(false); });
+
+  // #7 copy entire thread
+  var ca=document.getElementById('ce-copyall');
+  if(ca) ca.onclick=function(){
+    var out=[]; var m=_msgs(); if(!m) return;
+    m.querySelectorAll('.msg-row').forEach(function(r){
+      var who=r.querySelector('.avatar.oracle')?'ORACLE':'Noah';
+      var b=r.querySelector('.msg-bubble'); if(b) out.push(who+': '+(b.dataset.raw||b.innerText).trim());
+    });
+    navigator.clipboard.writeText(out.join('\n\n')).then(function(){ ca.textContent='✓ copied'; setTimeout(function(){ca.textContent='Copy thread';},1600); });
+  };
+
+  // #9 + #13 font size, persisted; respects reading position
+  function applyFont(px){ var m=_msgs(); if(m) m.style.fontSize=px+'px'; try{localStorage.setItem('ce_fontpx',px);}catch(e){} }
+  var fpx=16; try{ fpx=parseInt(localStorage.getItem('ce_fontpx')||'16',10)||16; }catch(e){} applyFont(fpx);
+  var fu=document.getElementById('ce-fup'), fd=document.getElementById('ce-fdn');
+  if(fu) fu.onclick=function(){ fpx=Math.min(fpx+1,24); applyFont(fpx); };
+  if(fd) fd.onclick=function(){ fpx=Math.max(fpx-1,12); applyFont(fpx); };
+
+  // #5 draft persistence + #10 char counter
+  var inp=_input(); var cc=document.getElementById('ce-charcount');
+  if(inp){
+    try{ var saved=localStorage.getItem('ce_draft'); if(saved && !inp.value){ inp.value=saved; if(cc) cc.textContent=saved.length; } }catch(e){}
+    inp.addEventListener('input',function(){
+      if(cc) cc.textContent=inp.value.length;
+      try{ if(inp.value) localStorage.setItem('ce_draft',inp.value); else localStorage.removeItem('ce_draft'); }catch(e){}
+    });
+  }
+
+  // #11 keyboard: "/" focuses input, Esc clears it
+  document.addEventListener('keydown',function(e){
+    var tag=(document.activeElement&&document.activeElement.tagName||'').toLowerCase();
+    if(e.key==='/' && tag!=='input' && tag!=='textarea'){ var i=_input(); if(i){ e.preventDefault(); i.focus(); } }
+    if(e.key==='Escape' && document.activeElement===_input()){ var i2=_input(); if(i2){ i2.value=''; i2.style.height='auto'; if(cc) cc.textContent=0; try{localStorage.removeItem('ce_draft');}catch(x){} } }
+  });
+
+  // #14 tab-title notification reset on focus
+  window.addEventListener('focus',function(){ unread=0; document.title=baseTitle; });
+
+  // #2 + #3 + #15 connection pill, session badge, and the live loop
+  function boot(){ liveSync(); setInterval(liveSync, 4000); stampRow(); }
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,600);}); }
+  else { setTimeout(boot,600); }
+})();
+</script>
+<!-- ============================================================= -->
+<!-- ORACLE Activity Feed — makes self-prompt pulses VISIBLE.        -->
+<!-- This is not the full sandbox mirror; it shows self-prompt        -->
+<!-- heartbeat entries selected from receipts. Full sandbox files     -->
+<!-- and receipt metadata live at /sandbox-mirror.                    -->
+<!-- Reads /api/activity (falls back to /api/self-prompt/status      -->
+<!-- until that endpoint is live). Read-only. Honest liveness: no     -->
+<!-- green unless a recent, receipted pulse exists. Dedup by          -->
+<!-- action_id. Directive: ORACLE_OUTWARD_LIFE_PROOF/2026-07-11.      -->
+<!-- ============================================================= -->
+<style>
+  #af-fab{position:fixed;left:12px;bottom:52px;z-index:9998;background:rgba(12,16,24,.9);
+    border:1px solid rgba(120,160,220,.3);color:#bcd0ea;border-radius:10px;padding:6px 11px;cursor:pointer;
+    font:12px -apple-system,Segoe UI,sans-serif;display:flex;gap:7px;align-items:center;}
+  #af-fab .af-heart{width:9px;height:9px;border-radius:50%;background:#6b7280;}
+  #af-fab .af-heart.beating{background:#3fb950;box-shadow:0 0 8px #3fb95099;animation:afpulse 2s infinite;}
+  #af-fab .af-heart.stale{background:#d29922;}
+  @keyframes afpulse{0%,100%{opacity:1}50%{opacity:.45}}
+  #af-panel{position:fixed;left:12px;bottom:92px;z-index:9998;width:390px;max-width:92vw;max-height:62vh;
+    display:none;flex-direction:column;background:rgba(10,14,22,.97);border:1px solid rgba(120,160,220,.28);
+    border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.5);backdrop-filter:blur(8px);}
+  #af-panel h4{margin:0;padding:11px 14px;font:600 13px -apple-system,Segoe UI,sans-serif;color:#dbe7f5;
+    border-bottom:1px solid rgba(120,160,220,.18);display:flex;justify-content:space-between;align-items:center;}
+  #af-note{padding:8px 14px;border-bottom:1px solid rgba(120,160,220,.12);font:11px/1.4 -apple-system,Segoe UI,sans-serif;color:#8aa4c4;}
+  #af-note a{color:#8fd3ff;text-decoration:none;}
+  #af-live{font:11px/1 -apple-system,Segoe UI,sans-serif;padding:3px 8px;border-radius:20px;}
+  #af-live.on{background:rgba(63,185,80,.16);color:#5fd47a;} #af-live.off{background:rgba(210,153,34,.16);color:#e3b341;}
+  #af-list{overflow-y:auto;padding:6px 10px 12px;}
+  .af-ev{border-left:2px solid rgba(120,160,220,.35);margin:8px 0;padding:5px 0 5px 10px;font:12px/1.45 -apple-system,Segoe UI,sans-serif;color:#c3d2e6;}
+  .af-ev .af-t{color:#8aa4c4;font-size:11px;}
+  .af-ev .af-task{color:#eaf1fb;font-weight:600;margin:2px 0;}
+  .af-ev .af-meta{color:#7f95b3;font-size:11px;}
+  .af-ev .af-r{font-size:11px;margin-top:2px;} .af-ev .af-r.ok{color:#5fd47a;} .af-ev .af-r.no{color:#e3785b;}
+  .af-ev .af-cog{font-size:10px;opacity:.7;}
+</style>
+<button id="af-fab" onclick="afToggle()" title="ORACLE self-prompt pulse feed — not the full sandbox mirror">
+  <span class="af-heart" id="af-heart"></span> Activity
+</button>
+<div id="af-panel">
+  <h4><span>ORACLE Activity — self-prompt pulses</span><span id="af-live" class="off">—</span></h4>
+  <div id="af-note">Shows receipted self-prompt heartbeat entries only. Full sandbox files, journal tail, and receipts: <a href="/sandbox-mirror" target="_blank" rel="noopener">Sandbox Mirror</a>.</div>
+  <div id="af-list"><div style="padding:14px;color:#7f95b3;font:12px sans-serif">loading…</div></div>
+</div>
+<script>
+(function(){
+  "use strict";
+  var seen = {}, open = false;
+  window.afToggle = function(){ open=!open; var p=document.getElementById('af-panel'); if(p) p.style.display=open?'flex':'none'; if(open) afPoll(); };
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function timeLabel(iso){ try{ var d=new Date(iso); return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+' '+d.toLocaleDateString([], {month:'numeric',day:'numeric'}); }catch(e){ return iso||'?'; } }
+  function minsSince(iso){ try{ return (Date.now()-new Date(iso).getTime())/60000; }catch(e){ return 1e9; } }
+
+  function renderEvent(ev){
+    var recOk = ev.user_visible_status==='verified_receipt';
+    var el=document.createElement('div'); el.className='af-ev';
+    el.innerHTML =
+      '<div class="af-t">'+esc(timeLabel(ev.trigger_time))+' · <span class="af-cog">'+esc(ev.cognition||'')+'</span></div>'+
+      '<div class="af-task">'+esc(ev.task_selected)+'</div>'+
+      '<div class="af-meta">'+esc(ev.action_taken)+' · '+esc(ev.boundary_state||'')+'</div>'+
+      (recOk
+        ? '<div class="af-r ok">✓ receipt verified'+(ev.sha256?(' · sha '+esc(String(ev.sha256).slice(0,10))):'')+'</div>'
+        : '<div class="af-r no">⚠ '+esc(ev.user_visible_status||'no_receipt')+'</div>');
+    return el;
+  }
+
+  function setLive(on, label){ var b=document.getElementById('af-live'); var h=document.getElementById('af-heart');
+    if(b){ b.className=on?'on':'off'; b.textContent=label; }
+    if(h){ h.className='af-heart '+(on?'beating':(label==='dormant'?'':'stale')); } }
+
+  async function afPoll(){
+    var list=document.getElementById('af-list'); if(!list) return;
+    try{
+      var r=await fetch(apiUrl('/api/activity'),{cache:'no-store'});
+      if(r.ok){
+        var d=await r.json(); var evs=(d&&d.events)||[];
+        var mins = evs.length ? minsSince(evs[0].trigger_time) : 1e9;
+        var beating = evs.length && mins<15 && evs[0].user_visible_status==='verified_receipt';
+        setLive(beating, evs.length ? (beating?('beating · '+Math.round(mins)+'m ago'):('stale · '+Math.round(mins)+'m ago')) : 'dormant');
+        // dedup by action_id; render newest-first
+        var frag=document.createDocumentFragment(), added=0;
+        evs.forEach(function(ev){ if(!seen[ev.action_id]){ seen[ev.action_id]=1; } });
+        list.innerHTML='';
+        evs.forEach(function(ev){ frag.appendChild(renderEvent(ev)); added++; });
+        if(added) list.appendChild(frag); else list.innerHTML='<div style="padding:14px;color:#7f95b3">no pulses yet</div>';
+        return;
+      }
+    }catch(e){}
+    // Fallback: /api/activity not live yet — show her current state + last beat honestly.
+    try{
+      var s=await (await fetch(apiUrl('/api/self-prompt/status'),{cache:'no-store'})).json();
+      var alive = String(s.current_state||'').indexOf('AUTONOMOUS')>=0;
+      setLive(false, alive?'enabled (feed lights up after restart)':'dormant');
+      list.innerHTML='<div style="padding:10px 4px;color:#c3d2e6;font:12px sans-serif">'+
+        '<div>state: <b>'+esc(s.current_state||'?')+'</b></div>'+
+        '<div>pulses today: '+esc(s.daily_count!=null?s.daily_count:'?')+'</div>'+
+        '<div style="margin-top:6px;color:#8aa4c4">Full activity feed activates after the next clean restart. Her heartbeat is '+(alive?'ON':'OFF')+'.</div></div>';
+    }catch(e2){ setLive(false,'offline'); list.innerHTML='<div style="padding:14px;color:#e3785b">ORACLE offline</div>'; }
+  }
+
+  function boot(){ afPoll(); setInterval(function(){ if(open) afPoll(); afHeartTick(); }, 10000); afHeartTick(); }
+  async function afHeartTick(){ // keep the FAB heart honest even when panel closed
+    try{ var r=await fetch(apiUrl('/api/activity'),{cache:'no-store'});
+      if(r.ok){ var d=await r.json(); var evs=(d&&d.events)||[];
+        var beating = evs.length && minsSince(evs[0].trigger_time)<15 && evs[0].user_visible_status==='verified_receipt';
+        var h=document.getElementById('af-heart'); if(h) h.className='af-heart '+(beating?'beating':(evs.length?'stale':'')); }
+    }catch(e){}
+  }
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,900);}); }
+  else { setTimeout(boot,900); }
+})();
 </script>
 </body>
 </html>

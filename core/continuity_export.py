@@ -292,8 +292,13 @@ def _checksum(data: str) -> str:
 
 # ── Main export ───────────────────────────────────────────────────────────────
 
-def build_export() -> dict:
-    """Assemble the full continuity export payload."""
+def build_export() -> tuple[dict, str]:
+    """Assemble the full continuity export payload.
+
+    Returns (payload, ts_str) — ts_str is the filename-safe timestamp the
+    writers expect. Callers that assumed a bare dict got a tuple and crashed;
+    the annotation now matches the actual return.
+    """
     ts = datetime.now(timezone.utc)
     ts_str = ts.strftime("%Y-%m-%dT%H-%M-%S")
 

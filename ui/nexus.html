@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Oracle Nexus</title>
+  <style>
+    :root {
+      --ink:#e9e7df; --muted:#8d918e; --line:rgba(255,255,255,.09);
+      --panel:rgba(17,21,20,.78); --gold:#f1c66f; --green:#76d6a2;
+      --red:#f18b84; --bg:#080a0a;
+    }
+    *{box-sizing:border-box} html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink)}
+    body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;background:
+      radial-gradient(circle at 82% 5%,rgba(45,116,93,.16),transparent 28rem),
+      radial-gradient(circle at 14% 4%,rgba(173,122,37,.12),transparent 25rem),#080a0a}
+    body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.2;background-image:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);background-size:44px 44px}
+    a{color:inherit}.shell{max-width:1480px;margin:auto;padding:24px 28px 60px;position:relative}
+    nav{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:0 0 18px}
+    .brand{display:flex;gap:12px;align-items:center}.sigil{width:34px;height:34px;border:1px solid rgba(241,198,111,.55);display:grid;place-items:center;transform:rotate(45deg)}
+    .sigil span{transform:rotate(-45deg);font:600 12px Georgia;color:var(--gold)}
+    .eyebrow{font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted)}
+    .wordmark{font:500 16px Georgia,serif;letter-spacing:.18em}.navlinks{display:flex;gap:8px}.navlinks a{text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:8px 13px;color:var(--muted);font-size:12px}.navlinks a:hover{color:var(--ink);border-color:rgba(241,198,111,.35)}
+    header{display:grid;grid-template-columns:1.2fr .8fr;gap:40px;padding:72px 0 48px;align-items:end}
+    h1{font:400 clamp(54px,8vw,112px)/.86 Georgia,serif;letter-spacing:-.065em;margin:12px 0 25px;max-width:850px}.gold{color:var(--gold);font-style:italic}
+    .lede{max-width:670px;color:#aeb2ae;font-size:17px;line-height:1.65;margin:0}.statuscard{border-left:1px solid rgba(241,198,111,.35);padding:8px 0 8px 30px}
+    .statusline{display:flex;justify-content:space-between;gap:24px;padding:12px 0;border-bottom:1px solid var(--line);font-size:12px}.statusline span:first-child{color:var(--muted);text-transform:uppercase;letter-spacing:.1em}.statusline b{font-weight:500}
+    .pulse{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 14px var(--green);margin-right:8px;animation:pulse 2.6s infinite}@keyframes pulse{50%{opacity:.35}}
+    .flow{display:grid;grid-template-columns:repeat(7,1fr);border:1px solid var(--line);background:rgba(255,255,255,.018);margin-bottom:44px}.flow div{padding:16px 12px;border-right:1px solid var(--line);text-align:center;color:var(--muted);font:10px/1.3 ui-monospace,monospace;text-transform:uppercase;letter-spacing:.09em;position:relative}.flow div:last-child{border:0}.flow div:not(:last-child):after{content:"→";position:absolute;right:-6px;color:var(--gold);z-index:2}
+    .sectionhead{display:flex;justify-content:space-between;align-items:end;margin:42px 0 18px}.sectionhead h2{font:400 32px Georgia,serif;margin:0}.sectionhead p{margin:0;color:var(--muted);font-size:12px}
+    .livegrid{display:grid;grid-template-columns:1.3fr .8fr .8fr .8fr;gap:12px;margin-bottom:44px}.livecard,.module{border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(14px)}
+    .livecard{padding:24px;min-height:190px}.livecard .kicker,.module .kicker{font:10px ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+    .bigread{font:400 30px Georgia,serif;margin:20px 0 8px}.subread{color:var(--muted);font-size:13px;line-height:1.5}.metric{font:500 40px Georgia,serif;color:var(--gold);margin:20px 0 4px}
+    .modules{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.module{padding:22px;min-height:245px;position:relative;overflow:hidden;transition:.2s ease}.module:hover{transform:translateY(-2px);border-color:rgba(241,198,111,.25)}
+    .module:before{content:"";position:absolute;width:130px;height:130px;border-radius:50%;background:var(--glow,rgba(241,198,111,.08));filter:blur(45px);right:-40px;top:-50px}.moduletop{display:flex;justify-content:space-between;gap:18px;align-items:start}.module h3{font:400 24px Georgia,serif;margin:11px 0 9px}.state{font:9px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.12em;border:1px solid rgba(118,214,162,.3);color:var(--green);border-radius:99px;padding:6px 9px;white-space:nowrap}.state.spec_only{color:var(--gold);border-color:rgba(241,198,111,.3)}
+    .purpose{color:#aeb2ae;font-size:13px;line-height:1.55;min-height:42px}.law{border-top:1px solid var(--line);margin-top:20px;padding-top:15px;color:#d2cfbf;font:italic 13px/1.5 Georgia,serif}.foot{display:flex;justify-content:space-between;gap:12px;margin-top:17px;font:10px ui-monospace,monospace;color:var(--muted)}.source{text-decoration:none}.source:hover{color:var(--gold)}
+    .invariants{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);margin-top:16px}.invariant{padding:18px 20px;border-bottom:1px solid var(--line);font-size:13px;color:#bbbdb8}.invariant:nth-child(odd){border-right:1px solid var(--line)}.invariant:before{content:"◆";color:var(--gold);font-size:8px;margin-right:11px}.boundary{margin-top:28px;padding:18px 20px;border:1px solid rgba(241,139,132,.23);background:rgba(241,139,132,.035);color:#c7aaa6;font:11px ui-monospace,monospace;letter-spacing:.04em}
+    .loading{color:var(--muted)}.error{color:var(--red)}
+    @media(max-width:900px){header{grid-template-columns:1fr;padding-top:48px}.livegrid,.modules{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.flow div{border-right:0;border-bottom:1px solid var(--line)}.flow div:not(:last-child):after{content:"↓";right:50%;bottom:-8px;top:auto}.invariants{grid-template-columns:1fr}.invariant:nth-child(odd){border-right:0}.navlinks a:nth-child(2){display:none}}
+  </style>
+</head>
+<body>
+<main class="shell">
+  <nav>
+    <div class="brand"><div class="sigil"><span>O</span></div><div><div class="eyebrow">Continuity architecture</div><div class="wordmark">ORACLE / NEXUS</div></div></div>
+    <div class="navlinks"><a href="/">Conversation</a><a href="/operator">Operator</a><a href="/miracledrive">MiracleDrive</a></div>
+  </nav>
+
+  <header>
+    <div><div class="eyebrow">Unified system prototype · v0.1</div><h1>One system.<br><span class="gold">Ten witnesses.</span></h1><p class="lede">Oracle Nexus joins presence, memory, identity, continuity, governance, workspaces, salience, relational intelligence, invention records, and receipt-backed trust labor—without collapsing their boundaries.</p></div>
+    <div class="statuscard">
+      <div class="statusline"><span>Runtime</span><b><i class="pulse"></i>Local witness online</b></div>
+      <div class="statusline"><span>Integration</span><b id="coverage">Loading…</b></div>
+      <div class="statusline"><span>Authority</span><b>Read / observe only</b></div>
+      <div class="statusline"><span>Updated</span><b id="updated">—</b></div>
+    </div>
+  </header>
+
+  <section class="flow" id="flow"><div>Signal</div><div>Salience</div><div>Identity gate</div><div>Continuity</div><div>Proposal</div><div>Human approval</div><div>Receipt</div></section>
+
+  <div class="sectionhead"><h2>Live continuity</h2><p>Measured from existing Oracle engines</p></div>
+  <section class="livegrid">
+    <article class="livecard"><div class="kicker">Resume vector</div><div class="bigread" id="nextAction">Loading continuity…</div><div class="subread" id="continuityMeta">Reading the continuity spine.</div></article>
+    <article class="livecard"><div class="kicker">Open-loop pressure</div><div class="metric" id="loops">—</div><div class="subread">Top evidence-backed loops currently surfaced.</div></article>
+    <article class="livecard"><div class="kicker">MindCoin events</div><div class="metric" id="events">—</div><div class="subread">Non-financial continuity work recorded in the local ledger.</div></article>
+    <article class="livecard"><div class="kicker">Document atlas</div><div class="metric" id="atlasRecords">—</div><div class="subread" id="atlasMeta">Candidate index not loaded.</div></article>
+  </section>
+
+  <div class="sectionhead"><h2>Integrated surfaces</h2><p id="moduleSummary">Discovering adapters…</p></div>
+  <section class="modules" id="modules"><div class="loading">Loading Nexus registry…</div></section>
+
+  <div class="sectionhead"><h2>Constitutional invariants</h2><p>The rules no module may route around</p></div>
+  <section class="invariants" id="invariants"></section>
+  <div class="boundary" id="boundary">READ-ONLY COMPOSITION</div>
+</main>
+<script>
+  const esc = value => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const shortPath = value => esc(value || 'adapter pending');
+  function renderModule(m, index) {
+    const glows = ['rgba(60,190,180,.11)','rgba(240,169,70,.11)','rgba(150,100,220,.1)','rgba(80,200,120,.1)','rgba(230,190,70,.1)','rgba(230,100,120,.09)'];
+    return `<article class="module" style="--glow:${glows[index % glows.length]}"><div class="moduletop"><div><div class="kicker">${String(index+1).padStart(2,'0')} / ${esc(m.id)}</div><h3>${esc(m.name)}</h3></div><span class="state ${esc(m.status)}">${esc(m.status.replace('_',' '))}</span></div><p class="purpose">${esc(m.purpose)}</p><div class="law">“${esc(m.law)}”</div><div class="foot"><span>${shortPath(m.implementation?.path)}</span><a class="source" href="${esc(m.source_url)}" target="_blank" rel="noreferrer">Source ↗</a></div></article>`;
+  }
+  async function loadNexus(){
+    try{
+      const response=await fetch('/api/nexus',{cache:'no-store'}); const data=await response.json();
+      if(!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      document.getElementById('coverage').textContent=`${data.integration.connected} / ${data.integration.total} adapters connected`;
+      document.getElementById('updated').textContent=new Date(data.generated_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+      document.getElementById('moduleSummary').textContent=`${data.integration.connected} connected · ${data.integration.total-data.integration.connected} spec-only`;
+      document.getElementById('modules').innerHTML=data.modules.map(renderModule).join('');
+      document.getElementById('invariants').innerHTML=data.invariants.map(x=>`<div class="invariant">${esc(x)}</div>`).join('');
+      document.getElementById('boundary').textContent=`BOUNDARY · ${data.boundary}`;
+      const c=data.live?.continuity||{};
+      document.getElementById('nextAction').textContent=c.ok ? (c.next_action||'No active resume vector') : 'Continuity unavailable';
+      document.getElementById('continuityMeta').textContent=c.ok ? `${c.human_state||'UNKNOWN'} · ${c.project||'No active project'} · ${c.pending_approvals||0} pending approvals` : c.error;
+      document.getElementById('loops').textContent=c.ok ? c.open_loops : '—';
+      const mc=data.live?.mindcoin||{}; document.getElementById('events').textContent=mc.ok ? mc.event_count : '—';
+      const atlas=data.live?.document_atlas||{};
+      document.getElementById('atlasRecords').textContent=atlas.ok ? atlas.records : '—';
+      document.getElementById('atlasMeta').textContent=atlas.ok ? `${atlas.sandbox_hits} sandbox hits · ${atlas.canon_status}` : (atlas.error || 'Atlas unavailable');
+    }catch(error){
+      document.getElementById('modules').innerHTML=`<div class="error">Nexus unavailable: ${esc(error.message)}</div>`;
+      document.getElementById('coverage').textContent='Runtime unavailable';
+    }
+  }
+  loadNexus(); setInterval(loadNexus,30000);
+</script>
+</body>
+</html>

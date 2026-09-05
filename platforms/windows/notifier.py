@@ -57,7 +57,10 @@ class NotificationChannel:
 class BrowserNotificationChannel(NotificationChannel):
     """Send notifications via FastAPI /notify endpoint."""
     
-    def __init__(self, base_url: str = "http://localhost:7777"):
+    def __init__(self, base_url: str | None = None):
+        if base_url is None:
+            from runtime_config import runtime_base_url
+            base_url = runtime_base_url(host="localhost")
         self.base_url = base_url
 
     def send(self, notif: Notification) -> bool:

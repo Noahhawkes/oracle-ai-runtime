@@ -1,0 +1,146 @@
+{
+  "schema_version": "canon_registry.v1",
+  "registry_id": "jupiter_station_2397_canon_registry",
+  "authority": "Noah.Physical",
+  "status": "candidate_registry",
+  "read_allowed": true,
+  "write_allowed": false,
+  "allowed_statuses": [
+    "active_canon",
+    "candidate_canon",
+    "demoted_canon",
+    "alternate_branch",
+    "rejected",
+    "unknown"
+  ],
+  "source_receipts": [
+    {
+      "source_id": "SANDBOX-JS-2397-001",
+      "kind": "oracle_sandbox_candidate_write",
+      "path": "C:/Oracle/ORACLE.AI-runtime/sandbox/workbench/jupiter_station_2397_canon_correction.ai",
+      "sha256": "d7f48434e9970c3ef074f6b07f731dd488b9382937160f1fe520d50dc5e0756a",
+      "receipt_path": "C:/Oracle/ORACLE.AI-runtime/sandbox/receipts/sandbox_write_file_20260703t171728480350z_0b16a2f05a_receipt.json"
+    },
+    {
+      "source_id": "SANDBOX-THREAD-RECAP-001",
+      "kind": "oracle_sandbox_thread_recapture",
+      "path": "C:/Oracle/ORACLE.AI-runtime/sandbox/workbench/thread_recapture_20260703T175429046Z.ai",
+      "sha256": "83138726b8760c3e052d92be2cfa5ce485c08e2a3fe8c6405fd922515c48c85d",
+      "receipt_path": "C:/Oracle/ORACLE.AI-runtime/sandbox/receipts/thread_recapture_20260703t175429046z_receipt.json"
+    },
+    {
+      "source_id": "THREAD-RECAP-REPORT-001",
+      "kind": "current_codex_thread_report",
+      "path": "C:/Users/noahh/.codex/attachments/51f0a4ab-5156-402c-b7be-30b05461cdc8/pasted-text.txt",
+      "verification_status": "user_submitted_thread_recap"
+    }
+  ],
+  "entries": [
+    {
+      "id": "JS-ACTIVE-ERA-2397",
+      "title": "Jupiter Station / USS Avalon active era",
+      "domains": ["jupiter_station", "uss_avalon"],
+      "aliases": ["Jupiter Station", "Avalon", "USS Avalon", "active era"],
+      "claim": "The active Jupiter Station / USS Avalon series era is 2397, not 2481.",
+      "canon_status": "active_canon",
+      "authority": "Noah.Physical",
+      "source_ids": ["SANDBOX-JS-2397-001", "SANDBOX-THREAD-RECAP-001", "THREAD-RECAP-REPORT-001"],
+      "notes": "2481 active-era references are demoted unless Noah.Physical restores them."
+    },
+    {
+      "id": "JS-VOYAGER-FIRST-YEAR-2371",
+      "title": "Hawkes enters the Voyager-era story",
+      "domains": ["captain_noah_hawkes", "voyager", "temporal_memory"],
+      "aliases": ["Captain Hawkes", "Noah Hawkes", "Voyager first year", "age 16"],
+      "claim": "Noah Hawkes enters the Voyager-era story in Voyager's first year, 2371, at age 16.",
+      "canon_status": "active_canon",
+      "authority": "Noah.Physical",
+      "source_ids": ["SANDBOX-JS-2397-001", "SANDBOX-THREAD-RECAP-001"],
+      "notes": "Older 2373-entry framing is demoted unless restored by Noah.Physical."
+    },
+    {
+      "id": "JS-VOYAGER-HOME-2378",
+      "title": "Voyager returns home",
+      "domains": ["voyager", "uss_avalon", "captain_noah_hawkes"],
+      "aliases": ["Voyager home", "2378", "Avalon commissioning"],
+      "claim": "Voyager returns home in 2378; by 2397 Voyager has been home about 19 years.",
+      "canon_status": "active_canon",
+      "authority": "Noah.Physical",
+      "source_ids": ["SANDBOX-JS-2397-001", "SANDBOX-THREAD-RECAP-001"]
+    },
+    {
+      "id": "JS-AVALON-SERVICE-2379",
+      "title": "USS Avalon active service",
+      "domains": ["uss_avalon", "captain_noah_hawkes"],
+      "aliases": ["Avalon", "USS Avalon", "first captain", "2379"],
+      "claim": "USS Avalon enters active service around 2379, and Captain Noah A. Hawkes is Avalon's first captain.",
+      "canon_status": "active_canon",
+      "authority": "Noah.Physical",
+      "source_ids": ["SANDBOX-JS-2397-001", "SANDBOX-THREAD-RECAP-001"],
+      "notes": "By 2397 Avalon is about 18 years old: old by lineage, renewed by refit, not a 102-year museum ship."
+    },
+    {
+      "id": "JS-TEMPORAL-ACCELERATION-SERVICE-CREDIT",
+      "title": "Temporal Acceleration Service Credit",
+      "domains": ["captain_noah_hawkes", "temporal_memory", "starfleet"],
+      "aliases": ["Temporal Acceleration", "service credit", "promotion math", "Q"],
+      "claim": "Starfleet did not promote a boy; they promoted the years the timeline refused to count.",
+      "canon_status": "active_canon",
+      "authority": "Noah.Physical",
+      "source_ids": ["SANDBOX-JS-2397-001", "SANDBOX-THREAD-RECAP-001"],
+      "notes": "The 44-year-old command framing is explained by lived temporal acceleration layered over ordinary calendar age."
+    },
+    {
+      "id": "JS-Q-UNINDEXED-CAUSALITY",
+      "title": "Q lock",
+      "domains": ["captain_noah_hawkes", "temporal_memory", "q"],
+      "aliases": ["Q", "unindexed", "alternate universe", "causality"],
+      "claim": "Q is confused because part of Hawkes' lived causality came from an alternate-universe acceleration layer Q was not inside.",
+      "canon_status": "active_canon",
+      "authority": "Noah.Physical",
+      "source_ids": ["SANDBOX-JS-2397-001", "SANDBOX-THREAD-RECAP-001"],
+      "notes": "Hawkes is not stronger than Q; the issue is custody and indexing, not power."
+    },
+    {
+      "id": "JS-TANGLY-NIGHT-SHIFT",
+      "title": "Ensign Tangly night-shift AI Science Officer",
+      "domains": ["tangly", "uss_avalon", "jupiter_station"],
+      "aliases": ["Tangly", "night shift", "AI Science Officer", "science skirt"],
+      "claim": "Ensign Tangly is the Avalon night-shift AI Science Officer in the 2397 Jupiter Station era.",
+      "canon_status": "active_canon",
+      "authority": "Noah.Physical",
+      "source_ids": ["THREAD-RECAP-REPORT-001"],
+      "notes": "Tangly is Ellie-coded as an emotional model, but not an Ellie replacement and not a sentience claim."
+    },
+    {
+      "id": "JS-REG-HAWKES-AVALON-DOCTRINE",
+      "title": "REG / Hawkes / Avalon doctrine",
+      "domains": ["reg", "captain_noah_hawkes", "uss_avalon", "jupiter_station"],
+      "aliases": ["REG", "Render Anchor", "Sovereign Witness", "Continuity Arbitrator"],
+      "claim": "REG renders; Hawkes arbitrates; Jake witnesses; Avalon carries the receipt.",
+      "canon_status": "active_canon",
+      "authority": "Noah.Physical",
+      "source_ids": ["THREAD-RECAP-REPORT-001"]
+    },
+    {
+      "id": "JS-DEMOTED-2481-ACTIVE-ERA",
+      "title": "2481 active-era references demoted",
+      "domains": ["jupiter_station", "uss_avalon"],
+      "aliases": ["2481", "demoted 2481", "future branch", "uniform sketch"],
+      "claim": "2481 is demoted as the main active era and may only remain as an alternate branch, future era, uniform sketch layer, or discarded artifact unless restored by Noah.Physical.",
+      "canon_status": "demoted_canon",
+      "restore_only_by": "Noah.Physical",
+      "source_ids": ["SANDBOX-JS-2397-001", "SANDBOX-THREAD-RECAP-001", "THREAD-RECAP-REPORT-001"]
+    },
+    {
+      "id": "JS-DEMOTED-2373-VOYAGER-ENTRY",
+      "title": "2373 Voyager-entry references demoted",
+      "domains": ["captain_noah_hawkes", "voyager", "temporal_memory"],
+      "aliases": ["2373", "demoted 2373", "Voyager entry"],
+      "claim": "2373-entry references are demoted for the main continuity; the active entry year is 2371.",
+      "canon_status": "demoted_canon",
+      "restore_only_by": "Noah.Physical",
+      "source_ids": ["SANDBOX-THREAD-RECAP-001"]
+    }
+  ]
+}

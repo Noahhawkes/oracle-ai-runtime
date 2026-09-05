@@ -6,7 +6,7 @@ before they reach the LLM, classifies them, and returns a governed acknowledgmen
 
 Problem this solves:
     When Noah says "ORACLE is not a chatbot", the LLM responds with generic
-    assistant language. That is a governance failure. The statement should be
+    generic utility language. That is a governance failure. The statement should be
     recognized, classified, and acknowledged with precision — not paraphrased,
     not softened, not turned into a "how can I help?" response.
 
@@ -426,7 +426,7 @@ PIPELINE:
   Raw Activity -> Events -> Context -> Meaning -> Memory -> Retrieval -> Action
 
 WHEN NOAH STATES A GOVERNANCE RULE:
-  Do NOT respond with "How can I help?" or generic assistant language.
+  Do NOT respond with "How can I help?" or generic utility language.
   Acknowledge the rule precisely.
   State whether it is canonical or pending.
   Do not paraphrase. Do not soften. Do not expand beyond what was stated.
