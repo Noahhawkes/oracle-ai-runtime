@@ -84,10 +84,23 @@ def detect_entities(query: str, roster: dict[str, str] | None = None) -> list[di
     roster = roster if roster is not None else build_entity_roster()
     low = f" {(query or '').lower()} "
     found: list[dict[str, str]] = []
+    seen: set[str] = set()
     for name, etype in roster.items():
         # whole-token match (handles multi-word terms too)
         if re.search(r"(?<![a-z0-9])" + re.escape(name) + r"(?![a-z0-9])", low):
-            found.append({"entity": name, "type": etype})
+            found.append({"entity": name, "type": etype}); seen.add(name)
+    # Explicit person queries ("who is X", "who's X", "who was X", "tell me about X",
+    # "what about X") extract X as a PERSON entity even when X is not on the roster.
+    # Without this, asking about anyone not hardcoded (a coworker, a new name) never
+    # triggered recall and fell straight to the model's training prior - the root of
+    # the "who is Ashley -> Mass Effect character" class of failure.
+    for m in re.finditer(
+        r"\b(?:who\s+(?:is|was|are|'?s)|tell\s+me\s+about|what\s+about|remember)\s+"
+        r"([A-Z][a-zA-Z]+)",
+        query or ""):
+        key = m.group(1).strip().lower()
+        if key and key not in seen and len(key) > 1:
+            found.append({"entity": key, "type": "PERSON"}); seen.add(key)
     return found
 
 
@@ -291,8 +304,30 @@ def _default_baseline_facts(entity: str) -> list[dict]:
 
 def _default_durable_facts(entity: str, limit: int = 6) -> list[dict]:
     import memory as mem
+    out: list[dict] = []
+    # The `people` table is the deterministic, authoritative "who is X" record, but
+    # it was never read for recall - so a registered person (Law XIII) could not
+    # ground an answer and the model fell back to a training prior (the Ashley ->
+    # Mass Effect failure). Read it first, as a durable fact, fail-safe.
+    try:
+        import sqlite3 as _sql
+        ent = (entity or "").strip().lower()
+        if ent:
+            with mem.get_conn() as _c:
+                _c.row_factory = _sql.Row
+                for r in _c.execute(
+                    "SELECT name, role FROM people WHERE lower(name) LIKE ? LIMIT 4",
+                    (f"%{ent}%",)).fetchall():
+                    role = str(r["role"] or "").strip()
+                    if not role:
+                        continue
+                    txt = f"{r['name']}: {role}"
+                    out.append({"text": txt[:220], "source": "durable_facts",
+                                "ref": f"people:{r['name']}",
+                                "epistemic": _infer_epistemic(txt, "durable_facts")})
+    except Exception:
+        pass
     hits = mem.search_memory_index(entity, limit=limit) or []
-    out = []
     for h in hits:
         txt = str(h.get("fact_text") or "").strip()
         if not txt:

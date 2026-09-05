@@ -138,3 +138,15 @@ def test_ashley_recovered_from_real_local_sources():
                             or "child" in f["text"].lower())
                        for f in pkt.verified_facts)
     assert baseline_hit or pkt.relationships, "did not recover a real relationship fact for Ashley"
+
+
+def test_explicit_who_is_triggers_person_entity_off_roster():
+    """The root fix: an explicit 'who is X' must trigger recall for ANY name, not
+    only hardcoded roster entities - so the model can't fall straight to a prior
+    (the 'who is Ashley -> Mass Effect' failure class)."""
+    ents = dc.detect_entities("who is Jaime")
+    assert any(e["entity"] == "jaime" and e["type"] == "PERSON" for e in ents)
+    assert any(e["entity"] == "brooklyn" for e in dc.detect_entities("tell me about Brooklyn"))
+    assert any(e["entity"] == "ender" for e in dc.detect_entities("who's Ender"))
+    # a lowercase pronoun is not a person; do not over-trigger
+    assert not any(e["type"] == "PERSON" for e in dc.detect_entities("who is she"))
