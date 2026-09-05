@@ -31,20 +31,26 @@ def _now():
 
 # (name, role) — role phrasing is honest: verified relationships stated,
 # unknowns marked UNKNOWN, never guessed.
+# Corrected against the durable record (a family block repeated 3x + corroboration).
+# Relationships stated where the record shows them; holes preserved.
 PEOPLE = [
-    ("Noah Alexander Hawkes Sr.", "Noah.Physical - the human operator, authorial authority, final approval"),
-    ("Ashley Hawkes", "Noah's wife (SOV2 co-sovereign). NOT his mother, NOT a game character."),
-    ("Elijah Hawkes", "Person Noah references as 'Eli'. Relationship to Noah UNKNOWN - do NOT assume brother."),
-    ("Thomas Alvin Hawkes Jr.", "Noah's father. Died 1997 when Noah was fifteen."),
-    ("Ethan", "Person Noah references (garage/bike, EcoWater context). Relationship UNKNOWN."),
+    ("Noah Alexander Hawkes Sr.", "Noah.Physical - the human operator, authorial authority, final approval (SOV1)"),
+    ("Ashley Hawkes", "Noah's wife and co-sovereign (SOV2.AI). NOT his mother, NOT a game character. [record conflict: one corpus file lists her among 'children'; wife is far better supported - Noah confirms]"),
+    ("Elijah Hawkes", "Noah's SON (referenced as 'Eli'). Brooklyn is his fiancee. NOT a brother (earlier ORACLE hallucination)."),
+    ("Ethan Hawkes", "Noah's SON. (The 'garage selling a bike with Ethan' moment was his son, not a coworker.)"),
+    ("Ender Hawkes", "Noah's SON. Described in the record as going through real challenges."),
+    ("Brooklyn", "Elijah's fiancee."),
+    ("Thomas Alvin Hawkes Jr.", "Noah's father. Died 1997 when Noah was fifteen. Genealogy: Brigham City UT / LDS."),
 ]
 
 # (fact_text, source_type, confidence)
 FACTS = [
-    ("Ashley Hawkes is Noah's wife (SOV2 co-sovereign). She is NOT Noah's mother and NOT a Mass Effect / video-game character; that was a model hallucination.", "noah_stated", 0.95),
-    ("Elijah Hawkes is a person Noah references as 'Eli'. His relationship to Noah is UNKNOWN and must not be assumed. ORACLE previously fabricated 'brother' - that was a hallucination, not a record.", "noah_stated_hole", 0.5),
+    ("Ashley Hawkes is Noah's wife and co-sovereign (SOV2.AI). She is NOT Noah's mother and NOT a Mass Effect / video-game character (model hallucination). CONFLICT preserved: one corpus file lists her among 'children'; the wife reading is far better supported and awaits Noah's confirmation.", "source_shows_conflict", 0.9),
+    ("Noah's sons are Elijah ('Eli'), Ethan, and Ender. Brooklyn is Elijah's fiancee. (Family block repeated 3x in durable memory; Ender independently corroborated as 'your son'.) ORACLE previously fabricated Elijah as a 'brother' - that was a hallucination.", "source_shows", 0.85),
     ("Thomas Alvin Hawkes Jr. is Noah's father. He died in 1997, when Noah was fifteen.", "noah_authored_journal", 0.9),
     ("Noah's full name is Noah Alexander Hawkes Sr. He is Noah.Physical, the authorial authority and final approver.", "durable_memory_verified", 0.95),
+    ("Noah's dogs (presence anchors) are Apollo, Milo, Luna, Senna, Lizzy, and Tripp. ('Max' may be a 7th pet - UNKNOWN, not asserted.)", "source_shows", 0.8),
+    ("HOLE - Noah's mother's name is UNKNOWN in durable memory (referenced 117x as 'Mom' but never named). Do not invent it.", "preserved_hole", 0.99),
     ("When asked 'who is <a name Noah uses>', ORACLE must retrieve from durable memory FIRST and answer from the record or say UNKNOWN - never fill the gap with a model training prior (e.g. a game character).", "oracle_law_III", 0.99),
 ]
 
