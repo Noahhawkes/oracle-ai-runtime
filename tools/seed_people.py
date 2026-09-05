@@ -40,17 +40,20 @@ PEOPLE = [
     ("Ethan Hawkes", "Noah's SON. (The 'garage selling a bike with Ethan' moment was his son, not a coworker.)"),
     ("Ender Hawkes", "Noah's SON. Described in the record as going through real challenges."),
     ("Brooklyn", "Elijah's fiancee."),
+    ("Joey", "Child Ashley placed for adoption before she and Noah married (~2003). Confirmed in local corpus. Sensitive."),
     ("Thomas Alvin Hawkes Jr.", "Noah's father. Died 1997 when Noah was fifteen. Genealogy: Brigham City UT / LDS."),
+    ("Ethel Christine Robinson (Hawkes)", "Noah's mother (per Gemini relay from Human Baseline doc; NOT locally verified - Noah confirms)."),
 ]
 
 # (fact_text, source_type, confidence)
 FACTS = [
-    ("Ashley Hawkes is Noah's wife and co-sovereign (SOV2.AI). She is NOT Noah's mother and NOT a Mass Effect / video-game character (model hallucination). CONFLICT preserved: one corpus file lists her among 'children'; the wife reading is far better supported and awaits Noah's confirmation.", "source_shows_conflict", 0.9),
-    ("Noah's sons are Elijah ('Eli'), Ethan, and Ender. Brooklyn is Elijah's fiancee. (Family block repeated 3x in durable memory; Ender independently corroborated as 'your son'.) ORACLE previously fabricated Elijah as a 'brother' - that was a hallucination.", "source_shows", 0.85),
-    ("Thomas Alvin Hawkes Jr. is Noah's father. He died in 1997, when Noah was fifteen.", "noah_authored_journal", 0.9),
+    ("Ashley Hawkes is Noah's wife and co-sovereign (SOV2.AI). CONFIRMED in local corpus (noah_hawkes_complete_profile.txt: 'Ashley, Noah's wife, is the center of his stability'). NOT his mother, NOT a game character; the one file listing her among 'children' was an AI-transcript slip.", "source_shows", 0.95),
+    ("Noah's sons are Elijah ('Eli'), Ethan, and Ender. Brooklyn is Elijah's fiancee. Ender is confirmed in the local corpus as 'Noah's son, currently struggling with school, weight' and personal challenges. ORACLE previously fabricated Elijah as a 'brother' - that was a hallucination.", "source_shows", 0.9),
+    ("Joey is a child Ashley placed for adoption before she and Noah married (~2003). CONFIRMED in local corpus (29 files: 'she has just placed Joey for adoption and was suffering'). Sensitive - handle with care.", "source_shows", 0.9),
+    ("Thomas Alvin Hawkes Jr. is Noah's father. He died in 1997, when Noah was fifteen. (Per Gemini's read of the Human Baseline doc: retired US Army Colonel, Vietnam medevac pilot, orthopedic surgeon, d. 1997-12-27 - NOT independently verified in the local runtime.)", "noah_authored_journal", 0.85),
     ("Noah's full name is Noah Alexander Hawkes Sr. He is Noah.Physical, the authorial authority and final approver.", "durable_memory_verified", 0.95),
-    ("Noah's dogs (presence anchors) are Apollo, Milo, Luna, Senna, Lizzy, and Tripp. ('Max' may be a 7th pet - UNKNOWN, not asserted.)", "source_shows", 0.8),
-    ("HOLE - Noah's mother's name is UNKNOWN in durable memory (referenced 117x as 'Mom' but never named). Do not invent it.", "preserved_hole", 0.99),
+    ("Noah's dogs (presence anchors) are Apollo, Milo, Luna, Senna, Lizzy, and Tripp. 'Max' is NOT a dog - Max is 'the Silverback', Noah's satirical creative alter-ego (confirmed: 56 corpus files, 'NOAH SILVERBACK IS ETERNAL'). Keep the fiction border (Law XIV).", "source_shows", 0.9),
+    ("Noah's mother: per Gemini's read of the Human Baseline Google Doc, Ethel Christine Robinson (Hawkes), homemaker who raised 10 children. NOT independently verified in the local runtime (0 clean hits) - awaits Noah's confirmation.", "relay_awaiting_confirm", 0.55),
     ("When asked 'who is <a name Noah uses>', ORACLE must retrieve from durable memory FIRST and answer from the record or say UNKNOWN - never fill the gap with a model training prior (e.g. a game character).", "oracle_law_III", 0.99),
 ]
 
