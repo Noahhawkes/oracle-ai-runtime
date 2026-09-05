@@ -42,7 +42,7 @@ PEOPLE = [
     ("Brooklyn", "Elijah's fiancee."),
     ("Joey", "Child Ashley placed for adoption before she and Noah married (~2003). Confirmed in local corpus. Sensitive."),
     ("Thomas Alvin Hawkes Jr.", "Noah's father. Died 1997 when Noah was fifteen. Genealogy: Brigham City UT / LDS."),
-    ("Ethel Christine Robinson (Hawkes)", "Noah's mother (per Gemini relay from Human Baseline doc; NOT locally verified - Noah confirms)."),
+    ("Ethel Christine Robinson (Hawkes)", "Noah's mother, homemaker who raised 10 children. CONFIRMED by Noah.Physical 2026-09-05."),
 ]
 
 # (fact_text, source_type, confidence)
@@ -53,7 +53,8 @@ FACTS = [
     ("Thomas Alvin Hawkes Jr. is Noah's father. He died in 1997, when Noah was fifteen. (Per Gemini's read of the Human Baseline doc: retired US Army Colonel, Vietnam medevac pilot, orthopedic surgeon, d. 1997-12-27 - NOT independently verified in the local runtime.)", "noah_authored_journal", 0.85),
     ("Noah's full name is Noah Alexander Hawkes Sr. He is Noah.Physical, the authorial authority and final approver.", "durable_memory_verified", 0.95),
     ("Noah's dogs (presence anchors) are Apollo, Milo, Luna, Senna, Lizzy, and Tripp. 'Max' is NOT a dog - Max is 'the Silverback', Noah's satirical creative alter-ego (confirmed: 56 corpus files, 'NOAH SILVERBACK IS ETERNAL'). Keep the fiction border (Law XIV).", "source_shows", 0.9),
-    ("Noah's mother: per Gemini's read of the Human Baseline Google Doc, Ethel Christine Robinson (Hawkes), homemaker who raised 10 children. NOT independently verified in the local runtime (0 clean hits) - awaits Noah's confirmation.", "relay_awaiting_confirm", 0.55),
+    ("Noah's mother is Ethel Christine Robinson (Hawkes), a homemaker who raised 10 children. CONFIRMED by Noah.Physical on 2026-09-05 (sourced from his own Human Baseline doc via Gemini; Noah affirmed the full family list is correct).", "noah_confirmed", 0.95),
+    ("Noah has a large family of origin (father raised 10 children): siblings include Tommy (d. ~2000/01), Shirley (d. young), Chris, Tim, and Julie Hawkes. CONFIRMED by Noah.Physical 2026-09-05 (from Human Baseline; not separately in the local runtime).", "noah_confirmed", 0.9),
     ("When asked 'who is <a name Noah uses>', ORACLE must retrieve from durable memory FIRST and answer from the record or say UNKNOWN - never fill the gap with a model training prior (e.g. a game character).", "oracle_law_III", 0.99),
 ]
 
