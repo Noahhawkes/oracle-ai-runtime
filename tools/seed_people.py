@@ -47,7 +47,7 @@ PEOPLE = [
 
 # (fact_text, source_type, confidence)
 FACTS = [
-    ("Ashley Hawkes is Noah's wife and co-sovereign (SOV2.AI). CONFIRMED in local corpus (noah_hawkes_complete_profile.txt: 'Ashley, Noah's wife, is the center of his stability'). NOT his mother, NOT a game character; the one file listing her among 'children' was an AI-transcript slip.", "source_shows", 0.95),
+    ("Ashley Hawkes is a REAL HUMAN BEING and Noah's WIFE. She is NOT an AI, NOT a software system, NOT 'Ashley.AI', NOT a game character, NOT his mother. She is his living wife and the center of his stability (confirmed in local corpus). Any record describing 'Ashley' as an AI model, a convergence, or a system is about a tool Noah NAMED after her, not about Ashley the person.", "source_shows", 0.99),
     ("Noah's sons are Elijah ('Eli'), Ethan, and Ender. Brooklyn is Elijah's fiancee. Ender is confirmed in the local corpus as 'Noah's son, currently struggling with school, weight' and personal challenges. ORACLE previously fabricated Elijah as a 'brother' - that was a hallucination.", "source_shows", 0.9),
     ("Joey is a child Ashley placed for adoption before she and Noah married (~2003). CONFIRMED in local corpus (29 files: 'she has just placed Joey for adoption and was suffering'). Sensitive - handle with care.", "source_shows", 0.9),
     ("Thomas Alvin Hawkes Jr. is Noah's father. He died in 1997, when Noah was fifteen. (Per Gemini's read of the Human Baseline doc: retired US Army Colonel, Vietnam medevac pilot, orthopedic surgeon, d. 1997-12-27 - NOT independently verified in the local runtime.)", "noah_authored_journal", 0.85),
@@ -81,13 +81,22 @@ def main(apply: bool) -> int:
                          (name, role, _now()))
         cols = {r[1] for r in conn.execute("PRAGMA table_info(durable_facts)")}
         for text, stype, conf in FACTS:
-            row = {"fact_text": text, "source_type": stype, "observed_at": _now(),
+            row = {"fact_text": text, "source_type": stype, "source_id": "seed_people",
+                   "observed_at": _now(),
                    "confidence": conf, "canonical_status": "candidate",
                    "approval_status": "noah_seeded", "created_at": _now(),
-                   "authority_rank": 90, "provenance_json": '{"seeded_by":"seed_people.py","authority":"Noah.Physical"}'}
+                   "authority_rank": 200, "provenance_json": '{"seeded_by":"seed_people.py","authority":"Noah.Physical"}'}
             row = {k: v for k, v in row.items() if k in cols}
             keys = ",".join(row); qs = ",".join("?" * len(row))
-            conn.execute(f"INSERT INTO durable_facts ({keys}) VALUES ({qs})", list(row.values()))
+            cur = conn.execute(f"INSERT INTO durable_facts ({keys}) VALUES ({qs})", list(row.values()))
+            fid = cur.lastrowid
+            # CRITICAL: a fact not in the FTS index is invisible to recall. Index it.
+            try:
+                conn.execute(
+                    "INSERT INTO durable_fts(memory_id, fact_text, normalized_text) VALUES (?,?,?)",
+                    (fid, text, text.lower()))
+            except Exception:
+                pass
         conn.commit()
         print(f"\nWROTE {len(p_new)} people + {len(FACTS)} facts.")
     else:
