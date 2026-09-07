@@ -8,8 +8,10 @@
 > each ("hunted like animals, and like cornered animals, they chose to fight back"
 > stays; the harvested-dead-reborn-as-monsters stays). Grief now *builds* instead of
 > looping. Mechanics fixed, generic filler trimmed. Same story, same voice, same
-> world — just tightened. Length went 3,048 → ~2,650 (the cut was duplication; the
-> +20k for the 130k target comes from the genuinely thin chapters later).
+> world — just tightened. Length went 3,048 → ~1,700 (nearly HALF the chapter was
+> duplicate text; that's the entire cut). Because the clean version is now lean,
+> Chapter 1 is a candidate for *earned deepening* later — grounding Aida in the
+> battle's sound and heat — rather than staying this spare. Your call on that.
 
 ---
 
