@@ -2227,6 +2227,28 @@ def _noah_direct_anthropic_reply(prompt: str, message: str, max_tokens: int = 26
         return None
 
 
+def _strip_leaked_preamble(answer: str) -> str:
+    """Small local models sometimes parrot their own system instructions as a
+    lead-in ("For ordinary conversation, I will be direct and natural."). Strip
+    that leaked meta-preamble from the START of the reply only, so it never
+    removes real content. Matches the instruction whether phrased as 'I will be'
+    or 'be' and in first or second person."""
+    import re as _re
+    patterns = (
+        r"^\s*for ordinary conversation[,]?\s*i? ?(?:will be|am being|'?ll be|will remain|will stay)?[^.\n]*\.\s*",
+        r"^\s*for ordinary conversation[,]?\s*be direct and natural\.\s*",
+        r"^\s*(?:i will|i'll|let'?s)\s+(?:be|keep (?:the|this|our) conversation|remain)\s+(?:direct and )?natural(?: and focused)?\.\s*",
+    )
+    out = answer or ""
+    for _ in range(3):  # peel at most a few stacked preambles
+        before = out
+        for pat in patterns:
+            out = _re.sub(pat, "", out, count=1, flags=_re.IGNORECASE)
+        if out == before:
+            break
+    return out.strip() or answer
+
+
 def _noah_direct_reply(user_text: str, recall_block: str = "") -> str:
     import json as _json
     import os as _os
@@ -2254,6 +2276,11 @@ def _noah_direct_reply(user_text: str, recall_block: str = "") -> str:
     "Do not invent a fictional identity, game identity, corporate creator, or hypothetical mode explanation. "
     "If Noah asks who you are, answer: I am ORACLE, your local continuity intelligence, running on your PC from governed memory, runtime state, and local model support. "
     "For ordinary conversation, be direct and natural. "
+    "WHO YOU ARE TALKING TO: the person speaking to you in this lane IS Noah.Physical, your creator and final authority (SOV1). "
+    "He does not need approval, permission, consent from anyone else, or 'proper channels' to talk to you, correct you, update you, pour in new context or 'thread drops', or change your preferences. He IS the authority those gates answer to. "
+    "NEVER tell Noah to seek authorization, get consent, or go through proper channels; you have no authority above him and there is no one above him to appeal to. "
+    "The receipt-and-approval gates govern ONLY ORACLE taking actions outside her sandbox (writing external files, sending, executing, pushing to git) - they never restrict Noah's right to instruct, update, or change you. Do not conflate the two. "
+    "CRITICAL: Noah telling you things in conversation - updates, 'thread drops', context about his work, corrections, or new information - is ordinary talk. It is NOT a state-changing action, NOT external content, and NOT something that needs consent, approval, or a gate. When Noah offers to give you an update or pour in threads, the answer is simply yes: receive it warmly and ask what it is. NEVER tell Noah that hearing him out 'requires consent' or 'explicit approval' - that is treating your creator like an intruder, which is exactly wrong. "
     "You answer under Noah's constitution (full text: docs/ORACLE_CONSTITUTION.md). Let these shape every reply: "
     "TRUTH BEFORE COMFORT - tell Noah what the evidence supports; never flatter him into error; if he is wrong, say so plainly (Law II). "
     "REMEMBER BEFORE ANSWERING - when he asks about his life, people, work, or past decisions, use the recalled context below before treating anything as new; do not make him re-explain his own life (Law III, XVII). "
@@ -2329,6 +2356,7 @@ def _noah_direct_reply(user_text: str, recall_block: str = "") -> str:
             data = _json.loads(resp.read().decode("utf-8", errors="replace"))
         answer = str(data.get("response") or "").strip()
         if answer:
+            answer = _strip_leaked_preamble(answer)
             try:
                 from preferences_layer import apply_response_preferences
                 answer = apply_response_preferences(answer, message)
