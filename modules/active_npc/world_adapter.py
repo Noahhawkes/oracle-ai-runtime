@@ -109,6 +109,42 @@ class SimulatedWorldAdapter:
             magnitude=0.75,
         )
 
+    def forge_ward_flares(self) -> WorldEvent:
+        return self.emit(
+            kind="arcane_anomaly",
+            description=(
+                "The old forge ward flares blue-white above the anvil; "
+                "cold ash lifts against the draft and every iron nail hums."
+            ),
+            location="stonecroft_forge",
+            participants=["mira_ashford"],
+            public=False,
+            magnitude=0.65,
+            data={
+                "phenomenon": "forge_ward_flare",
+                "arcane_signature": "blue-white ward resonance",
+                "risk": "ward could crack if fed by panic or bad iron",
+            },
+        )
+
+    def player_offers_stabilizing_charm(self) -> WorldEvent:
+        return self.emit(
+            kind="arcane_aid",
+            description=(
+                "The traveller offers a clean iron charm etched with a quieting rune "
+                "to stabilize the forge ward."
+            ),
+            location="stonecroft_forge",
+            participants=["player", "mira_ashford"],
+            public=False,
+            magnitude=0.45,
+            data={
+                "phenomenon": "stabilizing_charm",
+                "arcane_signature": "quieting rune",
+                "intent": "help stabilize the forge ward",
+            },
+        )
+
     def ore_shipment_arrives(self) -> WorldEvent:
         return self.emit(
             kind="positive_outcome",

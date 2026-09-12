@@ -1,0 +1,16 @@
+{
+  "receipt_kind": "local_document_write_receipt",
+  "operation": "create_oracle_perception_boundary_note",
+  "recorded_at": "2026-07-02T19:39:45.9698674Z",
+  "requested_by": "Noah.Physical",
+  "created_by": "Codex",
+  "file_path": "C:/Oracle/ORACLE.AI-runtime/docs/oracle_perception_boundary.md",
+  "file_sha256": "1e850c2c3e24dab2c13f635af2803d3aba7f91d58097068330cd8b745e08cb15",
+  "source_capture_receipt_path": "C:/Oracle/ORACLE.AI-runtime/Memory/thread_ingest/custody_receipts/ChatGPT/oracle_userpath_mobiletech_mirror_dump_20260702_ed65c51001bc_receipt.json",
+  "source_raw_sha256": "ed65c51001bcccd4eed3efc017d9edbd2c91526b087443244cb2dd4e7d13f6bf",
+  "canon_status": "candidate",
+  "promotion_status": "not_promoted",
+  "cloud_upload": false,
+  "git_commit": false,
+  "git_push": false
+}

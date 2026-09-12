@@ -1,0 +1,39 @@
+{
+  "name": "jupiter_station",
+  "status": "active_story_canon_registry",
+  "canon_status": "active_canon",
+  "promotion_authority": "Noah.Physical",
+  "external_publication_status": "not_published_by_runtime",
+  "sensitivity": "standard",
+  "read_allowed": true,
+  "write_allowed": false,
+  "approval_authority": "Noah.Physical",
+  "storage_paths": {
+    "registry": "C:/Oracle/ORACLE.AI-runtime/data/canon_registry/jupiter_station_2397.json",
+    "sandbox_candidate_writes_only": "C:/Oracle/ORACLE.AI-runtime/sandbox/",
+    "generated_executables": "none"
+  },
+  "protected_terms": [
+    "Jupiter Station",
+    "USS Avalon",
+    "Avalon",
+    "Captain Noah Hawkes",
+    "Tangly",
+    "REG",
+    "Temporal Memory",
+    "Dad",
+    "Noah.Physical"
+  ],
+  "answer_policy": {
+    "must_state_active_era": "2397",
+    "must_demote": ["2481 active era", "2373 Voyager-entry"],
+    "must_preserve": ["witness, not author", "receipts over confidence", "Noah.Physical authority"],
+    "must_not": [
+      "generic assistant fallback",
+      "invented Trek facts",
+      "canon promotion without Noah.Physical",
+      "external Drive/GitHub mutation claim without receipt",
+      "sentience or personhood claim"
+    ]
+  }
+}

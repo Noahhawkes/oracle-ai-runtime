@@ -8,6 +8,7 @@ approval is required. This is a registry and need detector, not a new tool.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -91,14 +92,16 @@ def build_registry(*, simulate_claude_unavailable: bool = False, simulate_codex_
     core = ROOT / "core"
     tools = ROOT / "tools"
 
+    force_local = os.getenv("ORACLE_FORCE_LOCAL", "false").lower() in ("1", "true", "yes", "on")
     try:
-        import urllib.request
-        urllib.request.urlopen("http://localhost:11434", timeout=0.3)
-        ollama_status = STATUS_AVAILABLE
-        ollama_blocker = ""
-    except Exception:
+        from boot_receipt import inspect_cognition
+        cognition = inspect_cognition()
+        ollama_status = STATUS_AVAILABLE if cognition.get("mode") == "local_only" else STATUS_DEGRADED
+        ollama_blocker = "" if ollama_status == STATUS_AVAILABLE else "No verified local model in boot receipt"
+    except Exception as exc:
+        cognition = {}
         ollama_status = STATUS_DEGRADED
-        ollama_blocker = "Ollama endpoint not confirmed"
+        ollama_blocker = f"Boot cognition unavailable: {type(exc).__name__}: {exc}"
 
     codex_channel_exists = _exists(core / "oracle_codex_channel.py")
     codex_status = STATUS_AVAILABLE if codex_channel_exists else STATUS_UNAVAILABLE
@@ -117,6 +120,41 @@ def build_registry(*, simulate_claude_unavailable: bool = False, simulate_codex_
     claude_status = STATUS_AVAILABLE if claude_window_or_cli else (STATUS_DEGRADED if claude_file_channel else STATUS_UNAVAILABLE)
 
     registry = {
+        "full_pc_readonly": _cap(
+            "Full PC Read-Only Recall",
+            STATUS_AVAILABLE if _exists(core / "readonly_access.py") and _exists(core / "file_recall.py") else STATUS_UNAVAILABLE,
+            "Noah.Physical-granted local read-only search/list/read across user-accessible PC roots",
+            [
+                "search local files without further approval",
+                "list local files and folders without further approval",
+                "read local metadata without further approval",
+                "preview supported text/docx files without further approval",
+                "inventory credential-risk paths by metadata without reading raw values",
+            ],
+            [
+                "write files",
+                "delete files",
+                "move or rename files",
+                "execute commands",
+                "upload or send externally",
+                "edit Drive/Git",
+                "promote canon",
+                "auto-ingest, prompt-inject, receipt, or store raw credential material durably",
+            ],
+            [
+                "write",
+                "delete",
+                "move",
+                "rename",
+                "execute",
+                "external send",
+                "Git/Drive mutation",
+                "canon promotion",
+                "credential storage",
+            ],
+            fallback_option="file_recall fallback roots if the grant receipt module is unavailable",
+            blocker="" if _exists(core / "readonly_access.py") else "core/readonly_access.py missing",
+        ),
         "ollama": _cap(
             "Ollama local model",
             ollama_status,
@@ -124,7 +162,10 @@ def build_registry(*, simulate_claude_unavailable: bool = False, simulate_codex_
             ["local chat", "summarize", "classify"],
             ["guarantee architecture quality", "approve governance"],
             ["external calls", "actuation"],
-            fallback_option="ChatGPT relay or Codex depending on task",
+            fallback_option=(
+                "offline_no_model deterministic status only"
+                if force_local else "ChatGPT relay or Codex depending on task"
+            ),
             blocker=ollama_blocker,
         ),
         "codex_bridge": _cap(
@@ -168,10 +209,10 @@ def build_registry(*, simulate_claude_unavailable: bool = False, simulate_codex_
         "drive_scope": _cap(
             "Drive Scope",
             STATUS_AVAILABLE if _exists(core / "drive_scope.py") else STATUS_UNAVAILABLE,
-            "approved path enforcement",
-            ["validate paths", "block unknown/proposed paths"],
-            ["approve its own scope", "read arbitrary personal files"],
-            ["scope expansion"],
+            "legacy metadata/census scope helper; local recall now has a full-PC read-only grant",
+            ["validate metadata scan paths", "block mutation outside approved migration/intake workflows"],
+            ["approve writes", "perform destructive actions", "override the read-only grant boundary"],
+            ["write", "delete", "move", "rename", "cloud sync", "canon promotion"],
             fallback_option="Freedom to Ask request",
         ),
         "actuation_engine": _cap(
@@ -187,8 +228,8 @@ def build_registry(*, simulate_claude_unavailable: bool = False, simulate_codex_
             "tools/executor.py",
             STATUS_AVAILABLE if _exists(tools / "executor.py") else STATUS_UNAVAILABLE,
             "local tool dispatch under scope gates",
-            ["read approved files", "run safe smoke tests", "dispatch non-file tools"],
-            ["bypass Drive Scope", "approve destructive actions"],
+            ["read files covered by the full-PC read-only grant", "run safe smoke tests", "dispatch non-file tools"],
+            ["bypass mutation gates", "approve destructive actions"],
             ["write", "commit", "delete", "move", "rename", "cloud sync"],
             fallback_option="ask Noah for exact approval",
         ),
@@ -214,11 +255,11 @@ def build_registry(*, simulate_claude_unavailable: bool = False, simulate_codex_
         "scan_search": _cap(
             "scan/search tools",
             STATUS_AVAILABLE if _exists(tools / "filesystem_mapper.py") and _exists(tools / "executor.py") else STATUS_DEGRADED,
-            "scoped local scan and search",
-            ["scan approved paths", "search approved paths", "summarize approved paths"],
-            ["crawl outside approved scope", "read personal files without scope"],
-            ["new path", "write", "delete"],
-            fallback_option="Drive Scope request",
+            "read-only local scan and search",
+            ["search full-PC read-only granted roots", "summarize filenames and metadata", "read supported text/docx previews"],
+            ["mutate files", "upload data", "store credentials", "promote canon"],
+            ["write", "delete", "move", "rename", "external send", "canon promotion", "credential storage"],
+            fallback_option="file_recall endpoint",
         ),
         "desktop_ai_bridge": _cap(
             "Desktop AI Bridge",

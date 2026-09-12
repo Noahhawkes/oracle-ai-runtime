@@ -491,7 +491,7 @@ def format_autonomy_table() -> str:
         f"  {DIM}(through governance/approval path — not just 'yes'){W}",
         "    • delete files or folders",
         "    • git commit, push, merge, rebase",
-        "    • expand Drive Scope / access outside approved paths",
+        "    • expand mutation/census scope beyond read-only recall",
         "    • send email, post externally, or upload to cloud",
         "    • change governance, identity, or doctrine",
         "    • approve memory or approve scope paths",

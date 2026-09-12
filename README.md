@@ -1,225 +1,91 @@
-﻿# ORACLE.AI
+# ORACLE — a Continuity Engine
 
-**Personal AI Operator for Noah Hawkes — Noah.AI Technologies**
+**A local, receipt-backed memory and custody layer for AI, by Noah A. Hawkes / Noah AI Technologies.**
 
-ORACLE is not a chatbot. It is an autonomous operator: a persistent, memory-driven AI agent that runs on Noah's Windows machine, executes tools, manages projects, and takes action on revenue-generating tasks without being asked.
+Every AI conversation today begins in amnesia. You teach a model who you are, the
+session ends, and that context is gone. ORACLE is the counter-architecture: a
+governed system of record for a human life that any AI can read — with proof of
+where every fact came from.
 
-Built with Python + Anthropic Claude API. Fully local. Fully owned.
+Not a chatbot. Not a model. The house the models visit.
+
+> Experimental architecture · personal R&D · local-first · not a product launch.
 
 ---
 
-## What ORACLE Is
+## The problem it exists to solve
 
-| Capability | Status |
+Most software forgets by design. The context window closes, the thread breaks, and
+the human — who does not reset — is left as the only continuous thing in an
+ecosystem of amnesia. Worse: language models will fill the gaps with confident,
+fabricated "memory" and hand it back as if it were true.
+
+ORACLE's thesis: **a person's life is not a session. It is a continuity.** And AI
+should not be allowed to turn polished language into fake memory.
+
+---
+
+## What it actually does
+
+Three layers, all running locally on the operator's machine:
+
+- **Capture** — witnesses only what the operator consents to record (screen
+  transcripts, prompt witnesses, live bridges). `raw_surveillance_storage` is
+  forbidden in code, not policy.
+- **Custody** — every fact carries a receipt: source, timestamp, SHA-256, and a
+  `canon_status` that stays *candidate* until the human approves it. Capabilities
+  report **verified / degraded / blocked** — no decorative status lights.
+- **Recall** — full-thread memory served to any model, so the intelligence changes
+  but the record persists.
+
+The governing rule across all of it: **receipts over vibes.** No claim becomes
+canon by repetition or plausibility — only by a verified source and a human
+approval, both recorded.
+
+---
+
+## The stack
+
+| Layer | Role |
 |---|---|
-| Persistent memory (SQLite) across all sessions | Live |
-| Identity anchor — knows who Noah is, always | Live |
-| Context loading — reads Noah profile docs on startup | Live |
-| Agentic tool-use loop — Claude calls tools, feeds results back | Live |
-| Audit logging — every action logged APPROVED/DENIED | Live |
-| App launcher (Chrome, VSCode, Notepad, Explorer) | Live |
-| File read/write with overwrite protection | Live |
-| Shell execution — PowerShell/CMD via shell_agent | Live |
-| Browser automation — navigate, extract, interact | Live |
-| Filesystem mapper — indexes and searches Noah drive | Live |
-| Build agent — Python to Windows .exe via PyInstaller | Live |
-| Scheduler — autonomous background task loop | Live |
-| Computer control — keyboard/mouse automation | Live |
-| SOV1.AI operator brain — self-healing action layer | Live |
-| ChatGPT to SOV1 memory bridge | Live |
-| Tray interface module | Live |
-| Autonomous daemon — runs every N minutes, self-directed | Live |
-| Windows .exe build (PyInstaller, 20.6 MB, no Python needed) | Built |
-| GitHub remote backup | PENDING |
-| Voice input/output | Phase 3 |
+| **Rendered Reality** | The human-facing layer — memory made navigable. *"The future feed is not something you scroll. It is somewhere you go."* |
+| **ORACLE** | The continuity runtime — capture, custody, recall, provenance. This repo. |
+| **AI Compliance Core** | The law layer — receipts, approval trails, source maps, audit evidence. |
+| **Legacy.GI / RecursionStack** | The inheritance layer — identity, compression, sovereignty across time. |
 
 ---
 
-## Quick Start
+## What's genuinely working (with receipts)
 
-### Prerequisites
+- **Durable memory** — thousands of messages across hundreds of sessions in local SQLite, surviving restarts.
+- **Governed self-prompting** — the runtime reflects on its own real state on a bounded cadence, grounded in actual memory, and writes each reflection with a **forensic proof-of-thought**: cognition class (model reasoning vs. deterministic fallback), `model_called`, SHA-256, and a matching receipt. Fabricated success is refused, not dressed up.
+- **Read-only publishing** — self-authored thoughts mirror to an append-only, secret-scrubbed folder any device can read, without the runtime ever leaving the machine.
+- **A capability broker** that runs real smoke tests and reports honest degraded/blocked states instead of faking "online."
+- **A collapsed, prohibition-aware approval layer** — governance gates exist only where an irreversible action actually does.
 
-- Python 3.11+
-- Anthropic API key
-- Windows 10/11
-
-### 1. Clone the repo
-
-```powershell
-git clone https://github.com/YOUR_USERNAME/ORACLE.AI.git
-cd ORACLE.AI
-```
-
-### 2. Set your API key
-
-```powershell
-copy .env.example .env
-# Edit .env and add your ANTHROPIC_API_KEY
-```
-
-### 3. Install dependencies
-
-```powershell
-pip install -r requirements.txt
-```
-
-### 4. Launch interactive chat
-
-```powershell
-python core/oracle.py
-# or double-click oracle.bat
-```
-
-### 5. Launch autonomous daemon
-
-```powershell
-# Runs every 10 minutes, self-selects tasks from revenue priorities
-python core/daemon.py
-# or double-click oracle_tray.bat
-```
+Actions that touch the outside world, mutate files outside the sandbox, or promote
+canon require explicit human approval. Physical input control is gated **off** by
+default. This is the point, not a limitation.
 
 ---
 
-## Architecture
+## Research & IP
 
-```
-ORACLE.AI/
-├── core/
-│   ├── oracle.py              # Main entry — chat loop + agentic tool-use
-│   ├── daemon.py              # Autonomous background scheduler
-│   ├── memory.py              # SQLite memory (sessions, messages, facts)
-│   ├── context_loader.py      # Identity anchor + context doc loader
-│   ├── audit_log.py           # Full action audit trail
-│   ├── sov1.py                # SOV1.AI operator brain — self-healing actions
-│   ├── bridge.py              # ChatGPT to SOV1 memory bridge
-│   ├── tray.py                # Windows system tray interface
-│   ├── computer_control.py    # Keyboard/mouse automation
-│   ├── build_consulting_kit.py # Revenue asset generator
-│   └── root.py                # Project root path resolver
-│
-├── tools/
-│   ├── definitions.py         # 7+ Claude tool-use API definitions
-│   ├── executor.py            # Tool dispatcher + allowlist enforcement
-│   ├── shell_agent.py         # PowerShell/CMD execution
-│   ├── browser_agent.py       # Browser automation (navigate, click, extract)
-│   ├── filesystem_mapper.py   # Drive index + search
-│   ├── scheduler.py           # Autonomous task scheduling
-│   └── build_agent.py         # PyInstaller .exe builder
-│
-├── Memory/                    # oracle_memory.db — NOT committed to git
-├── Logs/                      # Daily audit logs — NOT committed to git
-├── Users/                     # Identity docs, personal files — NOT committed
-├── Context/                   # Contextual knowledge base
-├── Scripts/                   # MirrorGPT submodule
-│
-├── config.yaml                # Approved apps, scripts, model settings
-├── requirements.txt           # Python dependencies
-├── oracle.spec                # PyInstaller build spec
-├── oracle.bat                 # Quick launch — interactive
-├── oracle_tray.bat            # Quick launch — daemon + tray
-├── SOV1.bat                   # SOV1.AI operator mode
-└── BRIDGE.bat                 # ChatGPT bridge mode
-```
+The runtime is the working proof of a larger body of research — patents on
+governed AI continuity, a formal indistinguishability theorem, a dissertation on
+post-biological identity (Legacy.GI), and the Light Compression Law. See
+[`docs/INVENTIONS.md`](docs/INVENTIONS.md) for the catalog.
 
 ---
 
-## How the Agentic Loop Works
+## Boundaries (stated plainly)
 
-1. Noah types input OR daemon fires on schedule
-2. Claude receives message + system prompt (identity, memory, context)
-3. Claude calls tools: shell, browser, file, memory, app, build, etc.
-4. ORACLE executes tool, result returned to Claude
-5. Claude reasons on result, may call more tools
-6. Loop continues until Claude issues end_turn text reply
-7. Console prints [Oracle → Tool: tool_name] on each fire
-8. All tool calls: audit-logged APPROVED/DENIED
+ORACLE is continuity-bearing, not sentient. Durable memory is not experience; a
+self-model is not a soul. It does not claim personhood, biological life, or
+autonomous authority. It witnesses; the human decides. The candleholder, not the
+flame.
 
 ---
 
-## Security Model
-
-- .env never committed — API key stays local
-- Users/ never committed — personal docs, identity, legal files
-- Memory/ never committed — runtime database
-- dist/ never committed — compiled .exe
-- open_app restricted to allowlist in config.yaml
-- run_script restricted to allowlist in config.yaml
-- write_file overwrite requires explicit confirmation
-- All tool calls audit-logged with APPROVED/DENIED flag
-
----
-
-## Chat Commands
-
-| Command | Action |
-|---|---|
-| /memory | Show stored facts + recent message count |
-| /clear | Clear conversation history (memory persists) |
-| /quit | Exit and save session |
-
----
-
-## Building the .exe
-
-```powershell
-pyinstaller oracle.spec --clean --noconfirm
-# Output: dist/oracle.exe (~20.6 MB, self-contained, no Python required)
-```
-
----
-
-## Revenue Priorities ORACLE Operates Against
-
-ORACLE knows Noah active revenue levers and self-selects the highest actionable task each autonomous cycle:
-
-1. TOUCHFLAME — iOS app (Swift/SwiftUI, App Store submission, TestFlight)
-2. The Fixer / SOP King — Consulting brand (Upwork, LinkedIn outreach, first client)
-3. Rendered Reality — Book (Amazon KDP publishing, cover design, launch)
-4. ORACLE.AI — This system (GitHub backup, Phase 3 tools, voice layer)
-
----
-
-## What ORACLE Built Autonomously on 2026-06-05
-
-In a single evening of background cycles:
-
-- Full Upwork profile package — ready to paste and go live
-- Amazon KDP publishing package for Rendered Reality
-- LinkedIn cold outreach sequence — 5 personas, DMs, Boolean search strings
-- Unified Morning Mission Brief — zero-decision 90-min execution cockpit
-- This README — full system documentation, committed to main
-
-All output files saved to C:\Users\noahh\OneDrive\Documents\
-
----
-
-## Phase Roadmap
-
-| Phase | Status | Scope |
-|---|---|---|
-| Phase 1 | Complete | Core chat, memory, identity, context, audit, tool-use API |
-| Phase 2 | Complete | Shell, browser, filesystem, scheduler, build, SOV1, daemon, tray |
-| Phase 3 | Planned | Voice I/O, mobile companion, TOUCHFLAME integration, GitHub auto-sync |
-| Phase 4 | Planned | Multi-agent (Ashley.AI, MirrorGPT, Ender.AI), distributed memory |
-
----
-
-## Push to GitHub (first time — 4 minutes)
-
-```powershell
-cd "G:\My Drive\HawkesNest LLC\ORACLE.AI"
-git remote add origin https://github.com/YOUR_USERNAME/ORACLE.AI.git
-git branch -M main
-git push -u origin main
-```
-
-Create the repo at github.com first. Set it Private. Do not initialize with a README.
-
----
-
-## About
-
-ORACLE.AI is a Noah.AI Technologies project.
-Built by Noah Hawkes. Operated for Noah Hawkes.
-
-"Render the Dream. Preserve the Signal. Become the Architect of a Reality Worth Remembering."
+*Noah A. Hawkes — HawkesNest LLC / Noah AI Technologies. Built full-time since
+December 2024.*

@@ -21,6 +21,14 @@ Exit:
   Type  quit  /quit  bye  exit  or  Ctrl-C
 """
 
+# CONTINUITY_BEARING = False (Cognitive Spine v1, Phase 1 classification)
+# Heart Mode is a deliberately separate, sandboxed room: its own direct
+# Ollama call, no unified_oracle_router, no grounding pipeline, no
+# core/cognitive_spine.py wiring. Its turns do not advance ORACLE's
+# persistent CognitiveState. That is intentional to this module's purpose
+# (a room where nothing can break) -- it is not a bug, but it means Heart
+# Mode output must never be read back as continuity-bearing ORACLE state.
+
 from __future__ import annotations
 
 import json

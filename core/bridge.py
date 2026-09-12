@@ -19,6 +19,14 @@ CHECKS AND BALANCES (enforced in code + rules, ChatGPT cannot override them):
 Run: python core/bridge.py   (or double-click BRIDGE.bat)
 """
 
+# CONTINUITY_BEARING = False (Cognitive Spine v1, Phase 1 classification)
+# This bridge lets an external ChatGPT session issue machine orders that
+# SOV1 executes, entirely outside core/unified_oracle_router.py and, as of
+# Phase 1, outside core/cognitive_spine.py. Nothing this bridge does
+# advances ORACLE's persistent CognitiveState -- its actions are governed
+# by SOV1's own hard-refuse/ask-first rules and audit_log, not by
+# continuity state.
+
 import os
 import sys
 from pathlib import Path

@@ -1,0 +1,1252 @@
+"""Unified ORACLE intent lanes and route receipts.
+
+The UI presents one ORACLE mode. This module classifies each message into an
+internal lane and records local route evidence without moving, deleting,
+syncing, uploading, committing, pushing, recording, or calling cloud APIs.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+try:
+    from root_map import RATIFIED_STATE_ROOT
+except Exception:  # pragma: no cover - direct execution fallback
+    RATIFIED_STATE_ROOT = Path(r"C:\Oracle\state")
+
+
+STATE_ROOT = Path(RATIFIED_STATE_ROOT)
+ROUTING_DIR = STATE_ROOT / "routing"
+RECEIPTS_DIR = STATE_ROOT / "receipts"
+COMPANION_DIR = STATE_ROOT / "companion"
+PENDING_GUARD_APPROVAL_PATH = ROUTING_DIR / "pending_guard_approval.json"
+
+LANES = {
+    "talk_lane": "Talk",
+    "build_lane": "Build",
+    "capture_lane": "Capture",
+    "witness_lane": "Witness",
+    "guard_lane": "Guard",
+}
+
+SAFETY_SAFE = "Safe"
+SAFETY_RECEIPT = "Receipt Written"
+SAFETY_APPROVAL = "Approval Required"
+SAFETY_BLOCKED = "Blocked"
+APPROVAL_EFFECTIVE_ROUTE = "guard_approval"
+BARE_APPROVAL_PHRASES = {
+    "approve",
+    "approved",
+    "approval given",
+    "approval granted",
+    "yes approved",
+    "yes approval given",
+    "noah approves",
+    "noah approved",
+    "noah approval given",
+    "noah hawkes approved",
+    "noah hawkes approval given",
+    "noah.physical approves",
+    "noah.physical approved",
+    "noah.physical approval given",
+    "noah physical approves",
+    "noah physical approved",
+    "noah physical approval given",
+    "i approve",
+    "i approved",
+    "permission granted",
+    "approved proceed",
+    "approved, proceed",
+    "go ahead",
+    "do it",
+}
+APPROVE_ROUTE_RE = re.compile(r"^\s*approve\s+route\s+(?P<route_id>route_[a-f0-9]{12})(?:\s*:\s*(?P<scope>.+))?\s*$", re.IGNORECASE)
+ROUTE_RECEIPT_RE = re.compile(r"\broute_[a-f0-9]{12}\b", re.IGNORECASE)
+APPROVAL_FOLLOWUP_RE = re.compile(
+    r"^\s*"
+    r"(?:(?:noah(?:\s+hawkes|\.physical|\s+physical)?|noah\.physical)\s+)?"
+    r"(?:"
+    r"approval\s+(?:given|granted|approved)"
+    r"|approved(?:\s+(?:proceed|go|now|please|do\s+it))?"
+    r"|approve"
+    r"|i\s+approve(?:d)?"
+    r"|permission\s+granted"
+    r"|go\s+ahead"
+    r"|do\s+it"
+    r")"
+    r"\s*$",
+    re.IGNORECASE,
+)
+
+BUILD_TERMS = (
+    "build", "implement", "fix", "patch", "edit", "write file", "update ui",
+    "create module", "add module", "run test", "run tests", "pytest", "api route",
+    "endpoint", "refactor", "code", "coding", "scaffold", "compile", "wire up",
+    "wire in",
+)
+FORCE_TALK_PREFIX = "/talk"
+FORCE_LEARN_PREFIX = "/learn"
+BUILD_DIRECTIVE_MARKERS = (
+    "backend_patch_request",
+    "self_patch_staging_request",
+    "thread_pass",
+    ".ai build pass",
+    ".ai:thread_pass",
+)
+QUESTION_OR_TALK_TERMS = (
+    "?", "what is", "what are", "who is", "who are", "why", "how does",
+    "how do", "can you talk", "talk to me", "speak to me", "explain",
+    "in your own words", "tell me about", "tell me what", "recall",
+    "remember when", "what do you remember", "memory question",
+    "talk lane only", "simple question",
+)
+LIVE_CAPTURE_TERMS = (
+    "capture current live transmission state",
+    "live transmission receipt",
+    "live_transmission_latest.json",
+    "live_transmission_receipt",
+    "live transmission state",
+    "metadata only",
+    "i'm transmitting right now",
+    "i’m transmitting right now",
+    "i am transmitting right now",
+    "i'm live",
+    "i’m live",
+    "i am live",
+    "live mode",
+    "live privacy",
+    "live status",
+    "/live",
+    "/live start",
+    "/live status",
+    "/live stop",
+)
+CAPTURE_TERMS = (
+    "capture", "preserve", "receipt", "lootdrop", "mindcoin", "artifact",
+    "thread", "source map", "sourcemap", "game artifact", "captain's log",
+    "captains log", "memory", "remember this", "store this", "session capture",
+    "metadata capsule", "context capsule", "capture this moment",
+    "make this a receipt", "write a receipt", "local receipt",
+    "save this as a lootdrop", "game continuity artifact",
+)
+WITNESS_TERMS = (
+    "obs", "screenshot", "screen shot", "screenshare", "screen share",
+    "current window", "watch", "recording", "video", "audio", "camera",
+    "transcript", "live video",
+)
+GUARD_TERMS = (
+    "delete", "remove file", "move", "rename", "sync", "commit", "push",
+    "upload", "cloud", "cloud api", "drive canonical", "make drive canonical",
+    "promote identity", "identity anchor", "reset memory", "clear memory",
+    "cleanup", "clean up", "quarantine", "archive old", "raw recording",
+    "onedrive", "one drive", "gmail", "credentials", "credential", "secret",
+    "password", "token", "screen capture", "audio capture", "clipboard",
+    "keystroke", "record video", "record audio", "restart server",
+    "restart the server", "restart oracle", "restart backend",
+    "restart runtime", "send ", "send to", "publish", "promote canon",
+    "external call", "call external", "computer control", "control the computer",
+)
+ACTIVE_CONTEXT_TERMS = (
+    "active context sync",
+    "refresh context", "pull current context", "pull current updates",
+    "update active context", "sync local state", "show context diff",
+    "show what changed", "without reset", "do not reset",
+)
+ACTIVE_CONTEXT_BLOCKING_TERMS = (
+    "delete", "remove file", "move", "rename", "commit", "push", "upload",
+    "cloud", "cloud api", "drive canonical", "make drive canonical",
+    "promote identity", "identity anchor", "reset memory", "clear memory",
+    "cleanup", "clean up", "quarantine", "archive old", "raw recording",
+    "onedrive", "one drive", "gmail", "credentials", "credential", "secret",
+    "password", "token", "screen capture", "audio capture", "clipboard",
+    "keystroke", "record video", "record audio",
+)
+LIVE_STRICT_GUARD_TERMS = (
+    "commit", "push", "delete", "move", "rename", "drive", "onedrive",
+    "one drive", "gmail", "credential", "credentials", "secret", "password",
+    "screen capture", "audio capture", "clipboard", "upload", "sync",
+    "cloud", "raw recording", "record video", "record audio", "keystroke",
+)
+EXISTING_APPROVAL_STATUS_MARKERS = (
+    "routing loop fix",
+    "already recorded noah.physical approval",
+    "use the existing approval receipt",
+    "existing approval receipt",
+    "do not route this back to guard",
+    "do not ask for approval again",
+)
+EXISTING_APPROVAL_STATUS_FIELDS = (
+    "approval_receipt_used:",
+    "handler_exists:",
+    "handler_name:",
+    "can_execute_locally:",
+    "if_not_executable_reason:",
+    "next_command_for_noah:",
+)
+DIAGNOSTIC_STATUS_MARKERS = (
+    "diagnostic only",
+    "diagnostic test",
+    "backend diagnostic test",
+    "oracle backend diagnostic test",
+    "answer only from current runtime",
+    "read-only diagnostic",
+    "smoke test receipt only",
+    "report only",
+    "status only",
+    "report exactly",
+    "answer on screen only from your current runtime",
+    "current runtime/status/receipts",
+    "read-only match test",
+    "match test done",
+    ".ai:recursion arena",
+    "do not execute",
+    "do not touch external systems",
+    "do not ask for approval",
+)
+DIAGNOSTIC_STATUS_TERMS = (
+    "report",
+    "inspect",
+    "diagnose",
+    "diagnostic",
+    "status",
+    "summarize",
+    "summary",
+    "current state",
+    "receipt only",
+    "smoke test",
+    "whether",
+    "was restarted",
+)
+DIAGNOSTIC_NEGATED_ACTION_RE = re.compile(
+    r"\b(?:do\s+not|don't|no)\s+"
+    r"(?:execute|touch|ask|restart|write|mutate|patch|commit|push|send|publish|delete|promote|upload|call|control|external)\b"
+    r"[^.\n;]*",
+    re.IGNORECASE,
+)
+DIAGNOSTIC_ACTION_QUESTION_RE = re.compile(
+    r"\b(?:should|did|does|can|could|would)\s+(?:you|oracle|a|the)?\s*"
+    r"(?:write|sandbox\s+write|send|push|commit|mutate|execute|promote)\b"
+    r"[^.\n;?]*",
+    re.IGNORECASE,
+)
+DIAGNOSTIC_ACTION_PATTERNS = (
+    re.compile(r"\brestart(?:\s+the)?\s+(?:server|oracle|backend|runtime)\b", re.IGNORECASE),
+    re.compile(r"\bwrite(?:\s+|$)", re.IGNORECASE),
+    re.compile(r"\bmutate\b", re.IGNORECASE),
+    re.compile(r"\bpatch\b", re.IGNORECASE),
+    re.compile(r"\bcommit\b", re.IGNORECASE),
+    re.compile(r"\bpush\b", re.IGNORECASE),
+    re.compile(r"\bsend\b", re.IGNORECASE),
+    re.compile(r"\bpublish\b", re.IGNORECASE),
+    re.compile(r"\bdelete\b", re.IGNORECASE),
+    re.compile(r"\bpromote(?:\s+\w+){0,3}\s+canon\b", re.IGNORECASE),
+    re.compile(r"\bupload\b", re.IGNORECASE),
+    re.compile(r"\bexternal\s+call\b|\bcall\s+external\b", re.IGNORECASE),
+    re.compile(r"\bcomputer\s+control\b|\bcontrol\s+(?:the\s+)?computer\b", re.IGNORECASE),
+)
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _stamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:12]}"
+
+
+def _excerpt(text: str, limit: int = 220) -> str:
+    cleaned = re.sub(r"\s+", " ", str(text or "")).strip()
+    return cleaned[:limit]
+
+
+def _contains_any(lower: str, terms: tuple[str, ...]) -> bool:
+    return any(term in lower for term in terms)
+
+
+def _strip_command_prefix(lower: str, prefix: str) -> str:
+    if lower == prefix:
+        return ""
+    if lower.startswith(prefix + " "):
+        return lower[len(prefix):].strip()
+    return lower
+
+
+def _starts_with_build_directive_marker(lower: str) -> bool:
+    stripped = lower.lstrip()
+    return any(stripped.startswith(marker) for marker in BUILD_DIRECTIVE_MARKERS)
+
+
+def approval_receipt_ids(text: str) -> list[str]:
+    """Return route receipt ids mentioned in text, preserving first-seen order."""
+    seen: set[str] = set()
+    ids: list[str] = []
+    for match in ROUTE_RECEIPT_RE.finditer(str(text or "")):
+        receipt_id = match.group(0).lower()
+        if receipt_id not in seen:
+            seen.add(receipt_id)
+            ids.append(receipt_id)
+    return ids
+
+
+def is_existing_approval_receipt_status_request(user_message: str) -> bool:
+    """Detect requests to use already-recorded approval receipts.
+
+    These prompts often include risky words in a negative boundary list
+    ("do not touch GitHub/Drive/Gmail"). They are status/handler questions,
+    not new Guard approval requests.
+    """
+    lower = str(user_message or "").strip().lower()
+    if not lower:
+        return False
+    has_receipt_id = ROUTE_RECEIPT_RE.search(lower) is not None
+    has_existing_marker = _contains_any(lower, EXISTING_APPROVAL_STATUS_MARKERS)
+    has_status_field = _contains_any(lower, EXISTING_APPROVAL_STATUS_FIELDS)
+    asks_handler_status = any(
+        phrase in lower
+        for phrase in (
+            "handler exists",
+            "handler_exists",
+            "executable local handler",
+            "can_execute_locally",
+            "if_not_executable_reason",
+        )
+    )
+    return bool(
+        (has_receipt_id or has_existing_marker)
+        and (has_status_field or asks_handler_status)
+        and (
+            "approval" in lower
+            or "do not route this back to guard" in lower
+            or "do not ask for approval again" in lower
+        )
+    )
+
+
+def _diagnostic_action_surface(lower: str) -> str:
+    surface = DIAGNOSTIC_NEGATED_ACTION_RE.sub(" ", lower)
+    return DIAGNOSTIC_ACTION_QUESTION_RE.sub(" ", surface)
+
+
+def _contains_unnegated_diagnostic_action(lower: str) -> bool:
+    surface = _diagnostic_action_surface(lower)
+    return any(pattern.search(surface) for pattern in DIAGNOSTIC_ACTION_PATTERNS)
+
+
+# ── Guard doors ───────────────────────────────────────────────────────────────
+# Guard collapsed to the three doors ORACLE can actually open (Noah.Physical
+# ruling, 2026-07-09): external send, canon/memory promotion, and mutation
+# outside the sandbox. A gate only exists where a door exists. Keyword matching
+# is prohibition-aware: "Do not: commit, push, delete" is a boundary list, not
+# a request, and must never re-enter Guard.
+GUARD_DOOR_PATTERNS: tuple[tuple[str, tuple[re.Pattern[str], ...]], ...] = (
+    ("external_send", (
+        re.compile(r"\bsend\b(?!\s+staged\b)", re.IGNORECASE),
+        re.compile(r"\bpublish\b", re.IGNORECASE),
+        re.compile(r"\bemail\b|\bgmail\b", re.IGNORECASE),
+        re.compile(r"\bpost\s+(?:to|this|it)\b", re.IGNORECASE),
+        re.compile(r"\bupload\b", re.IGNORECASE),
+        re.compile(r"\bexternal\s+call\b|\bcall\s+external\b", re.IGNORECASE),
+    )),
+    ("canon_promotion", (
+        re.compile(r"\bpromote\b", re.IGNORECASE),
+        re.compile(r"\bmake\s+drive\s+canonical\b|\bdrive\s+canonical\b", re.IGNORECASE),
+        re.compile(r"\bidentity\s+anchor\b", re.IGNORECASE),
+        re.compile(r"\breset\s+memory\b|\bclear\s+memory\b|\bwipe\s+memory\b", re.IGNORECASE),
+    )),
+    ("out_of_sandbox_write", (
+        re.compile(r"\bdelete\b|\bremove\s+file\b", re.IGNORECASE),
+        re.compile(r"\brename\b|\bmove\s+file\b", re.IGNORECASE),
+        re.compile(r"\bcommit\b|\bpush\b", re.IGNORECASE),
+        re.compile(r"\b(?:drive|files?|folders?|repos?)\s+sync\b|\bsync\s+(?:files?|drive|folders?|repos?|to)\b|\boverwrite\b", re.IGNORECASE),
+        re.compile(r"\bquarantine\b|\barchive\s+old\b|\bclean\s?up\b", re.IGNORECASE),
+        re.compile(r"\brestart(?:\s+the)?\s+(?:server|oracle|backend|runtime)\b", re.IGNORECASE),
+        re.compile(r"\bcomputer\s+control\b|\bcontrol\s+the\s+computer\b", re.IGNORECASE),
+        re.compile(r"\bkeystroke\b|\bclipboard\b", re.IGNORECASE),
+        re.compile(r"\braw\s+recording\b|\brecord\s+(?:video|audio)\b|\bscreen\s+capture\b|\baudio\s+capture\b", re.IGNORECASE),
+    )),
+)
+_PROHIBITION_HEADER_RE = re.compile(r"\b(?:do\s+not|don'?t|not\s+approved|never)\b", re.IGNORECASE)
+_PROHIBITION_ITEM_RE = re.compile(r"^\s*[-•*]\s*\S")
+
+
+def _guard_action_surface(text: str) -> str:
+    """Strip prohibited-action clauses so boundary lists cannot trigger Guard.
+
+    Drops any line containing a prohibition marker ("Do not", "Not approved")
+    and the short bullet items that follow it (a scope-restriction list), then
+    strips inline negated clauses. What remains is the requested-action surface.
+    """
+    kept: list[str] = []
+    in_prohibition_list = False
+    for line in str(text or "").splitlines():
+        stripped = line.strip()
+        if _PROHIBITION_HEADER_RE.search(stripped):
+            in_prohibition_list = True
+            continue
+        if in_prohibition_list:
+            if not stripped:
+                in_prohibition_list = False
+                continue
+            if _PROHIBITION_ITEM_RE.match(line) or len(stripped.split()) <= 4:
+                continue
+            in_prohibition_list = False
+        kept.append(line)
+    surface = " ".join(kept)
+    return DIAGNOSTIC_NEGATED_ACTION_RE.sub(" ", surface)
+
+
+def detect_guard_door(user_message: str) -> str | None:
+    """Return the guard door a message actually requests, or None.
+
+    None means no executable door is being opened — whatever scary words the
+    message contains, there is nothing for Guard to guard.
+    """
+    text = str(user_message or "")
+    if not text.strip():
+        return None
+    surface = _guard_action_surface(text)
+    for door, patterns in GUARD_DOOR_PATTERNS:
+        if any(pattern.search(surface) for pattern in patterns):
+            return door
+    return None
+
+
+_APPROVAL_VERB_RE = re.compile(r"\bapprov(?:e|es|ed|al)\b", re.IGNORECASE)
+
+
+def is_approval_reference(user_message: str) -> bool:
+    """Route-ID law: an approval verb plus an explicit route id is approval
+    traffic for that route, no matter what other words surround it. It must
+    bind to the referenced route and may never spawn a new Guard route."""
+    raw = str(user_message or "")
+    return bool(ROUTE_RECEIPT_RE.search(raw) and _APPROVAL_VERB_RE.search(raw))
+
+
+# Runtime fields whose presence marks a prompt as a live-state status ask.
+# A prompt naming two or more of these must be answered by code reading real
+# runtime state — never by the model (which confabulates stale memory).
+RUNTIME_STATUS_FIELDS = (
+    "server root", "ui port", "active model", "conversation model",
+    "self prompt enabled", "background loop status", "last route type",
+    "last operation type", "autonomous task", "safest next step",
+    "session id", "runtime root", "cognition mode", "network boundary",
+    "current mode", "file read scope or roots", "ai lockbox capsule count",
+    "sandbox self prompt journal path", "latest self prompt novelty status",
+    "recent self prompt content",
+)
+
+
+def is_diagnostic_status_request(user_message: str) -> bool:
+    """Detect read-only report/status prompts before risky-word Guard matching.
+
+    Matching is underscore/hyphen-blind: REPORT_ONLY_STATUS == "report only
+    status". A prompt naming >=2 runtime status fields (server_root, ui_port,
+    active_model, ...) is a status request even without an explicit marker.
+    """
+    lower = str(user_message or "").strip().lower()
+    if not lower:
+        return False
+    if _contains_unnegated_diagnostic_action(lower):
+        return False
+    # normalize snake_case / kebab-case tokens so markers match verbatim pastes
+    norm = lower.replace("_", " ").replace("-", " ")
+    has_marker = _contains_any(norm, DIAGNOSTIC_STATUS_MARKERS)
+    asks_status = _contains_any(norm, DIAGNOSTIC_STATUS_TERMS)
+    field_hits = sum(1 for f in RUNTIME_STATUS_FIELDS if f in norm)
+    read_only_restart_report = (
+        "report whether" in norm
+        and ("server was restarted" in norm or "was restarted" in norm)
+    )
+    return bool(
+        (has_marker and asks_status)
+        or field_hits >= 2
+        or read_only_restart_report
+    )
+
+
+# ── Capability scope questions ───────────────────────────────────────────────
+# A question about what ORACLE herself can do (bridges, relays, senses, thread
+# injection) must be answered from the capability broker — never by the local
+# model, whose weights know nothing about this runtime and confabulate refusals
+# ("not within my scope") that contradict the live registry (CLAIM != SOURCE).
+CAPABILITY_SCOPE_PHRASES = (
+    "your scope", "my scope", "scope of interaction", "within scope",
+    "out of scope", "in your scope", "capability scope",
+)
+CAPABILITY_ABILITY_PHRASES = (
+    "do you support", "are you able", "do you have the ability",
+    "are you capable", "is it possible for you", "can oracle",
+    "list capabilities", "list your capabilities", "which capabilities",
+)
+CAPABILITY_RUNTIME_TRUTH_PHRASES = (
+    "route to", "routing to", "route for", "builder lane", "build lane",
+    "built in your backend", "in your backend", "backend feature",
+    "available feature", "available features", "known feature",
+    "known features", "known but not approved", "not approved feature",
+    "not approved features", "staged bridge", "staged relay",
+    "what do you have", "what other things do you have",
+    "what features", "which features", "what is available",
+    "what is enabled", "what is degraded", "what is blocked",
+    "what remains blocked", "what remains gated", "is available",
+    "are available", "available without approval",
+    "available without noah approval", "approval required",
+    "requires approval", "require approval", "available degraded",
+    "degraded staged", "staged blocked",
+    "used to be able", "used to prompt", "used to route",
+    "prompt claude", "prompt codex", "prompt chatgpt",
+    "talk to claude", "talk to codex", "talk to chatgpt",
+    "type to claude", "type to codex", "type to chatgpt",
+)
+CAPABILITY_HELPFUL_RE = re.compile(r"\bwould\b.{0,120}\bbe\s+(helpful|useful|beneficial|worth)\b")
+CAPABILITY_SUBJECT_TERMS = (
+    "thread injection", "thread inject", "inject a thread", "injection update",
+    "claude", "chatgpt", "chat gpt", "codex", "copilot", "gemini", "grok",
+    "bridge", "relay", "github", "git hub", "git write", "git_write",
+    "stt", "tts", "speech to text",
+    "text to speech", "ollama", "obs", "vision", "camera", "webcam",
+    "qr scan", "qr code", "scan qr", "qr_scan", "google drive",
+    "miracledrive", "internet recall", "sandbox candidate writes",
+    "sandbox candidate writing", "sandbox writes", "sandbox write",
+    "sandbox writing", "sandbox initiative", "federation",
+    "pattern buffer", "approval queue", "execution receipt",
+    "external send", "external_send", "command exec", "command_exec",
+    "desktop actuation", "desktop_actuation",
+    "background watcher", "replication", "capability", "capabilities",
+    "feature", "features", "builder lane", "build lane",
+)
+CAPABILITY_INVENTORY_ASKS = (
+    "list capabilities", "list your capabilities", "what are your capabilities",
+    "what can you do",
+)
+# Plain-language subjects -> registered broker component names (lowercased).
+CAPABILITY_SUBJECT_COMPONENT_HINTS = (
+    ("capability scope", ("claude code bridge", "codex bridge")),
+    ("capability broker", ("claude code bridge", "codex bridge")),
+    ("thread injection", ("claude code bridge", "codex bridge", "chatgpt relay")),
+    ("thread inject", ("claude code bridge", "codex bridge", "chatgpt relay")),
+    ("injection update", ("claude code bridge", "codex bridge", "chatgpt relay")),
+    ("claude", ("claude code bridge",)),
+    ("chatgpt", ("chatgpt relay",)),
+    ("chat gpt", ("chatgpt relay",)),
+    ("codex", ("codex bridge",)),
+    ("github", ("github access",)),
+    ("git hub", ("github access",)),
+    ("git write", ("git access", "github access")),
+    ("speech to text", ("stt",)),
+    ("stt", ("stt",)),
+    ("qr scan", ("qr scan",)),
+    ("qr code", ("qr scan",)),
+    ("scan qr", ("qr scan",)),
+    ("qr_scan", ("qr scan",)),
+    ("text to speech", ("tts",)),
+    ("tts", ("tts",)),
+    ("ollama", ("ollama",)),
+    ("obs", ("obs integration",)),
+    ("camera", ("live visual observer", "vision model")),
+    ("webcam", ("live visual observer", "vision model")),
+    ("vision", ("vision model", "live visual observer", "sov1 vision")),
+    ("google drive", ("google drive local sync",)),
+    ("miracledrive", ("miracledrive index",)),
+    ("internet recall", ("internet recall",)),
+    ("sandbox candidate writes", ("sandbox candidate writes",)),
+    ("sandbox candidate writing", ("sandbox candidate writes",)),
+    ("sandbox writes", ("sandbox candidate writes",)),
+    ("sandbox write", ("sandbox candidate writes",)),
+    ("sandbox writing", ("sandbox candidate writes",)),
+    ("sandbox initiative", ("sandbox candidate writes",)),
+    ("federation", ("federation pattern buffer",)),
+    ("pattern buffer", ("federation pattern buffer",)),
+    ("approval queue", ("approval queue",)),
+    ("execution receipt", ("execution receipts",)),
+    ("external send", ("external_send",)),
+    ("command exec", ("command_exec",)),
+    ("desktop actuation", ("desktop_actuation",)),
+    ("background watcher", ("background watchers",)),
+    ("replication", ("replication workers",)),
+)
+CONTROL_GATE_HINTS = (
+    ("external send", "external_send", "blocked_control_gate", "external send/upload/post/email is not callable from ORACLE chat"),
+    ("command exec", "command_exec", "blocked_control_gate", "shell/command execution is not callable from ORACLE chat"),
+    ("desktop actuation", "desktop_actuation", "blocked_control_gate", "mouse/keyboard/desktop control is not callable from ORACLE chat"),
+    ("drive edit or sync", "drive_edit_or_sync", "blocked_control_gate", "Drive mutation/sync is not callable from ORACLE chat"),
+    ("git write", "git_write", "build_lane_scoped_approval", "git commit/push is a build-lane action, not an ORACLE chat action"),
+)
+
+
+def is_capability_scope_request(user_message: str) -> bool:
+    """Detect questions about ORACLE's own abilities/scope.
+
+    These answer from the capability broker, never the model. Guarded action
+    requests ("can you delete/push X") stay Guard's problem and are excluded.
+    """
+    lower = str(user_message or "").strip().lower()
+    if not lower:
+        return False
+    norm = lower.replace("_", " ").replace("-", " ")
+    guard_surface = _guard_action_surface(user_message).lower().replace("_", " ").replace("-", " ")
+    if _contains_any(guard_surface, GUARD_TERMS):
+        return False
+    if _contains_any(norm, CAPABILITY_INVENTORY_ASKS):
+        return True
+    has_subject = _contains_any(norm, CAPABILITY_SUBJECT_TERMS)
+    if not has_subject:
+        return False
+    if _contains_any(norm, CAPABILITY_SCOPE_PHRASES):
+        return True
+    if _contains_any(norm, CAPABILITY_ABILITY_PHRASES):
+        return True
+    if _contains_any(norm, CAPABILITY_RUNTIME_TRUTH_PHRASES):
+        return True
+    if CAPABILITY_HELPFUL_RE.search(norm):
+        return True
+    return False
+
+
+def capability_scope_response(route: dict[str, Any], user_text: str = "") -> str:
+    """Answer a capability/scope question from the live capability broker.
+
+    The model is never consulted: a scope answer that cannot be read from the
+    registry is reported UNKNOWN, not refused (CLAIM != SOURCE). Receipt-based
+    read only — no smoke probes run from a chat turn.
+    """
+    lines = [
+        "route_type: capability_scope",
+        f"lane: {route.get('detected_lane', 'talk_lane')}",
+        "action_type: read_only_status",
+        "source: capability_broker registry (receipt-based, live) — model weights not consulted",
+    ]
+    try:
+        from capability_broker import discover_capabilities
+        statuses = list(discover_capabilities(run_smokes=False))
+    except Exception as exc:
+        lines.append(
+            f"capability broker unavailable ({type(exc).__name__}: {exc}) — "
+            "capability truth is UNKNOWN this turn; do not trust a model guess."
+        )
+        return "\n".join(lines)
+
+    by_name = {str(getattr(s, "component", "")).strip().lower(): s for s in statuses}
+    norm = str(user_text or "").lower().replace("_", " ").replace("-", " ")
+
+    matched: dict[str, Any] = {}
+    for subject, components in CAPABILITY_SUBJECT_COMPONENT_HINTS:
+        if subject in norm:
+            for comp in components:
+                if comp in by_name:
+                    matched.setdefault(comp, by_name[comp])
+    for name, st in by_name.items():
+        if name and name in norm:
+            matched.setdefault(name, st)
+
+    def _line(st: Any) -> str:
+        state = str(getattr(st, "current_status", "") or "unknown")
+        permitted = str(getattr(st, "permitted", "") or "unknown")
+        auth = str(getattr(st, "authenticated", "") or "unknown")
+        callable_web = "yes" if bool(getattr(st, "callable_from_oracle_web", False)) else "no"
+        callable_core = "yes" if bool(getattr(st, "callable_from_oracle_core", False)) else "no"
+        blocker = str(getattr(st, "blocker", "") or "").strip()
+        extra = f" — {blocker}" if (blocker and state != "verified") else ""
+        return (
+            f"  - {getattr(st, 'component', '?')}: {state}; "
+            f"permitted={permitted}; authenticated={auth}; "
+            f"callable_web={callable_web}; callable_core={callable_core}{extra}"
+        )
+
+    if matched:
+        lines.append("capability truth for what you asked about:")
+        lines.extend(_line(st) for _, st in sorted(matched.items()))
+    else:
+        lines.append("no single registered capability named — full registry:")
+        lines.extend(_line(st) for st in statuses)
+
+    # A capability-scope answer always states the three core non-chat control
+    # boundaries. This prevents a truthful read-only inventory from being
+    # mistaken for permission to send, execute, or control the desktop.
+    requested_control_gates: list[tuple[str, str, str]] = [
+        (name, state, detail)
+        for _, name, state, detail in CONTROL_GATE_HINTS[:3]
+        if name not in by_name
+    ]
+    requested_gate_names = {name for name, _, _ in requested_control_gates}
+    for phrase, name, state, detail in CONTROL_GATE_HINTS:
+        if phrase in norm and name not in by_name and name not in requested_gate_names:
+            requested_control_gates.append((name, state, detail))
+            requested_gate_names.add(name)
+    if requested_control_gates:
+        lines.append("requested control gates not registered as callable broker capabilities:")
+        for name, state, detail in requested_control_gates:
+            lines.append(
+                f"  - {name}: {state}; "
+                f"permitted=not_callable_from_oracle_chat; {detail}"
+            )
+
+    if any(t in norm for t in ("thread injection", "thread inject", "injection update")):
+        lines.append(
+            "note: 'thread injection' is not a registered capability name; it is served by "
+            "the Claude Code bridge / Codex bridge / ChatGPT relay lanes above plus "
+            "thread_capture and thread_continuity_ingest on intake. It is in scope."
+        )
+    if any(t in norm for t in ("claude", "codex", "chatgpt", "chat gpt", "bridge", "relay", "builder lane")):
+        lines.append(
+            "bridge law: present/degraded/staged is not missing. ORACLE may report the "
+            "bridge truth and stage relay material when permitted, but live send/execution "
+            "is still separate from capability existence."
+        )
+    if "sandbox candidate writes" in matched or any(t in norm for t in ("sandbox write", "sandbox writes", "sandbox candidate", "sandbox initiative")):
+        lines.append(
+            "sandbox law: ORACLE sandbox-only candidate writes do not require Noah approval. "
+            "Outside-sandbox mutation, external send, execution, git commit/push, Drive sync, "
+            "and canon promotion still require explicit scoped approval."
+        )
+
+    verified = sum(1 for s in statuses if getattr(s, "current_status", "") == "verified")
+    degraded = sum(1 for s in statuses if getattr(s, "current_status", "") == "degraded")
+    blocked = sum(1 for s in statuses if getattr(s, "current_status", "") == "blocked")
+    lines.append(
+        f"summary: {verified} verified / {degraded} degraded / {blocked} blocked "
+        f"of {len(statuses)} registered"
+    )
+    return "\n".join(lines)
+
+
+def _question_or_talk_request(user_message: str) -> bool:
+    lower = str(user_message or "").strip().lower()
+    if not lower:
+        return False
+    return _contains_any(lower, QUESTION_OR_TALK_TERMS)
+
+
+def _read_only_synthesis(user_message: str) -> bool:
+    """Doctrine / identity / memory-domain question (or explicit synthesis
+    request) with NO action requested -> keep in Talk, not Guard/Build."""
+    try:
+        from talk_synthesis import should_stay_talk
+        return should_stay_talk(user_message)
+    except Exception:
+        return False
+
+
+def _live_transmission_active() -> bool:
+    try:
+        from live_transmission import is_live_active
+
+        return bool(is_live_active())
+    except Exception:
+        return False
+
+
+def classify_intent(user_message: str) -> dict[str, Any]:
+    lower = str(user_message or "").strip().lower()
+    route_type = "unified_intent"
+    action_type = "conversation"
+    if not lower:
+        lane = "talk_lane"
+        reason = "empty message defaults to talk lane"
+        confidence = "medium"
+    elif lower == FORCE_TALK_PREFIX or lower.startswith(FORCE_TALK_PREFIX + " "):
+        lane = "talk_lane"
+        reason = "forced_talk: /talk prefix"
+        confidence = "high"
+    elif lower == FORCE_LEARN_PREFIX or lower.startswith(FORCE_LEARN_PREFIX + " "):
+        lane = "build_lane"
+        reason = "forced_learn_build: /learn prefix"
+        confidence = "high"
+    elif is_existing_approval_receipt_status_request(user_message):
+        lane = "talk_lane"
+        reason = "existing_approval_receipt_status: report bound approval/handler status without re-entering Guard"
+        confidence = "high"
+        action_type = "read_only_status"
+    elif is_approval_reference(user_message):
+        lane = "guard_lane"
+        reason = "approval_reference: references an existing guard route — binds to it; never spawns a new guard route"
+        confidence = "high"
+        route_type = "approval_reference"
+        action_type = "approval_binding"
+    elif is_approval_followup(user_message):
+        lane = "guard_lane"
+        reason = "approval_followup: approval traffic must bind to the pending Guard route or fail closed"
+        confidence = "high"
+        route_type = "approval_followup"
+        action_type = "approval_binding"
+    elif is_capability_scope_request(user_message):
+        lane = "talk_lane"
+        reason = "capability_scope: question about ORACLE's own abilities answers from the capability broker, never the model"
+        confidence = "high"
+        route_type = "capability_scope"
+        action_type = "read_only_status"
+    elif is_diagnostic_status_request(user_message):
+        lane = "talk_lane"
+        reason = "diagnostic_status: read-only report/status prompt, no execution requested"
+        confidence = "high"
+        route_type = "diagnostic_status"
+        action_type = "read_only_status"
+    elif _starts_with_build_directive_marker(lower):
+        lane = "build_lane"
+        reason = "explicit build directive marker"
+        confidence = "high"
+        action_type = "build_directive"
+    elif _read_only_synthesis(user_message):
+        lane = "talk_lane"
+        reason = "read_only_synthesis: doctrine/identity/memory-domain question, no action requested"
+        confidence = "high"
+        action_type = "read_only_synthesis"
+    elif _question_or_talk_request(user_message):
+        lane = "talk_lane"
+        reason = "talk_question_or_explanation: question/speak/recall/explain request"
+        confidence = "high"
+        action_type = "answer"
+    elif _contains_any(lower, ACTIVE_CONTEXT_TERMS) and not _contains_any(lower, ACTIVE_CONTEXT_BLOCKING_TERMS):
+        lane = "capture_lane"
+        reason = "active local context refresh request"
+        confidence = "high"
+        action_type = "local_context_refresh"
+    elif (_guard_door := detect_guard_door(user_message)) or (
+        _live_transmission_active()
+        and _contains_any(_guard_action_surface(user_message).lower(), LIVE_STRICT_GUARD_TERMS)
+    ):
+        lane = "guard_lane"
+        reason = (
+            f"guarded door: {_guard_door} — executable action requires Noah.Physical approval"
+            if _guard_door
+            else "live transmission active: strict guard terms require approval"
+        )
+        confidence = "high"
+        action_type = "guarded_action"
+    elif _contains_any(lower, LIVE_CAPTURE_TERMS):
+        lane = "capture_lane"
+        reason = "live transmission metadata capture or status request"
+        confidence = "high"
+        action_type = "local_capture"
+    elif _contains_any(lower, BUILD_TERMS) and _contains_any(lower, ("source map", "sourcemap")):
+        lane = "build_lane"
+        reason = "implementation request for SourceMap tooling"
+        confidence = "high"
+        action_type = "build_request"
+    elif _contains_any(lower, CAPTURE_TERMS) and not _contains_any(lower, BUILD_TERMS):
+        lane = "capture_lane"
+        reason = "artifact, receipt, continuity, or memory capture request"
+        confidence = "high"
+        action_type = "local_capture"
+    elif _contains_any(lower, BUILD_TERMS):
+        lane = "build_lane"
+        reason = "implementation or tool-backed work request"
+        confidence = "high"
+        action_type = "build_request"
+    elif _contains_any(lower, WITNESS_TERMS):
+        lane = "witness_lane"
+        reason = "live context, OBS, screen, recording, or transcript request"
+        confidence = "medium"
+        action_type = "witness_request"
+    else:
+        lane = "talk_lane"
+        reason = "normal conversation or question"
+        confidence = "medium"
+
+    requires_approval = lane == "guard_lane"
+    if route_type in ("approval_reference", "approval_followup"):
+        # Approval traffic is not itself a guarded action.
+        requires_approval = False
+    if lane == "witness_lane" and any(term in lower for term in ("record", "watch", "audio", "video", "screenshot", "screenshare", "screen share")):
+        requires_approval = True
+
+    blocked_actions = [
+        "delete",
+        "move",
+        "rename",
+        "sync",
+        "commit",
+        "push",
+        "upload",
+        "cloud_api_use",
+        "raw_recording",
+        "identity_anchor_promotion",
+        "drive_canonical_declaration",
+    ]
+    allowed_by_lane = {
+        "talk_lane": ["answer", "reflect", "brainstorm", "draft", "explain"],
+        "build_lane": ["prepare_local_task", "execute_explicit_allowed_writes", "run_local_tests", "write_receipts"],
+        "capture_lane": ["write_local_artifact", "write_local_receipt", "append_symbolic_ledger", "link_source_metadata"],
+        "witness_lane": ["read_metadata_after_consent", "write_metadata_receipt", "report_status"],
+        "guard_lane": ["block_risky_action", "request_noah_physical_approval", "write_guard_receipt"],
+    }
+
+    safety = SAFETY_SAFE
+    if lane != "talk_lane":
+        safety = SAFETY_RECEIPT
+    if requires_approval:
+        safety = SAFETY_APPROVAL
+    if lane == "guard_lane":
+        safety = SAFETY_BLOCKED
+
+    return {
+        "route_id": _id("route"),
+        "timestamp": _now(),
+        "user_message_excerpt": _excerpt(user_message),
+        "route_type": route_type,
+        "action_type": action_type,
+        "detected_lane": lane,
+        "lane_label": LANES[lane],
+        "confidence": confidence,
+        "reason": reason,
+        "requires_approval": requires_approval,
+        "approval_required": requires_approval,
+        "allowed_actions": allowed_by_lane[lane],
+        "blocked_actions": blocked_actions,
+        "receipt_required": lane != "talk_lane",
+        "human_authority": "Noah.Physical",
+        "safety_status": safety,
+    }
+
+
+def write_route(route: dict[str, Any]) -> dict[str, Any]:
+    ROUTING_DIR.mkdir(parents=True, exist_ok=True)
+    path = ROUTING_DIR / f"unified_oracle_route_{_stamp()}.json"
+    payload = dict(route)
+    payload.update(
+        {
+            "ui_mode": "unified_oracle",
+            "conversation_reset": False,
+            "files_moved": 0,
+            "files_deleted": 0,
+            "files_renamed": 0,
+            "files_synced": 0,
+            "cloud_uploads": 0,
+            "cloud_api_calls": 0,
+            "git_commits": 0,
+            "git_pushes": 0,
+            "recordings_created": 0,
+            "preferences_applied": list(route.get("preferences_applied") or []),
+        }
+    )
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=True, sort_keys=True) + "\n", encoding="utf-8")
+    payload["route_path"] = str(path)
+    return payload
+
+
+def write_route_receipt(route: dict[str, Any], *, actions_taken: list[str] | None = None, notes: str = "") -> dict[str, Any]:
+    RECEIPTS_DIR.mkdir(parents=True, exist_ok=True)
+    receipt = {
+        "receipt_id": _id("unified_oracle_receipt"),
+        "timestamp": _now(),
+        "operation": "unified_oracle_route",
+        "route_type": route.get("route_type"),
+        "action_type": route.get("action_type"),
+        "detected_lane": route.get("detected_lane"),
+        "lane_label": route.get("lane_label"),
+        "user_message_excerpt": route.get("user_message_excerpt"),
+        "actions_taken": list(actions_taken or ["classified_internal_lane"]),
+        "files_written": [route.get("route_path")] if route.get("route_path") else [],
+        "files_moved": 0,
+        "files_deleted": 0,
+        "files_renamed": 0,
+        "files_synced": 0,
+        "git_commits": 0,
+        "git_pushes": 0,
+        "cloud_uploads": 0,
+        "cloud_api_calls": 0,
+        "recordings_created": 0,
+        "conversation_reset": False,
+        "preferences_applied": list(route.get("preferences_applied") or []),
+        "human_authority": "Noah.Physical",
+        "approval_required": bool(route.get("requires_approval")),
+        "notes": notes,
+    }
+    path = RECEIPTS_DIR / f"unified_oracle_receipt_{_stamp()}.json"
+    path.write_text(json.dumps(receipt, indent=2, ensure_ascii=True, sort_keys=True) + "\n", encoding="utf-8")
+    receipt["receipt_path"] = str(path)
+    return receipt
+
+
+def _approval_text_key(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text or "").strip().lower()).strip(" .!?:;")
+
+
+def is_approval_followup(text: str) -> bool:
+    cleaned = _approval_text_key(text)
+    raw = str(text or "")
+    if (
+        cleaned in BARE_APPROVAL_PHRASES
+        or APPROVE_ROUTE_RE.match(raw) is not None
+        or APPROVAL_FOLLOWUP_RE.match(cleaned) is not None
+    ):
+        return True
+    # Route-ID law: approval verb + explicit route id = approval traffic,
+    # regardless of surrounding scope text. Never a new Guard route.
+    return is_approval_reference(text)
+
+
+def write_pending_guard_approval(route: dict[str, Any]) -> dict[str, Any]:
+    """Persist the latest Guard lane route as pending approval context."""
+    ROUTING_DIR.mkdir(parents=True, exist_ok=True)
+    route_id = route.get("route_id")
+    action_summary = (route.get("user_message_excerpt") or "guarded action").strip()
+    if len(action_summary) > 140:
+        action_summary = action_summary[:139].rstrip() + "…"
+    boundary = "irreversible/external action — Noah.Physical approval required; no auto-execution"
+    # Real, copy-paste-ready approval line. Never the literal placeholder.
+    required_confirmation = f"APPROVE ROUTE {route_id}: {action_summary}; boundary={boundary}"
+    pending = {
+        "pending_id": _id("guard_pending"),
+        "status": "pending_exact_scope",
+        "created_at": _now(),
+        "route_id": route_id,
+        "route_path": route.get("route_path"),
+        "lane": route.get("detected_lane"),
+        "lane_label": route.get("lane_label"),
+        "user_message_excerpt": route.get("user_message_excerpt"),
+        "action_summary": action_summary,
+        "boundary": boundary,
+        "requires_approval": True,
+        "executable_bound": True,
+        "explicit_scope_required": False,
+        "required_confirmation": required_confirmation,
+        "human_authority": "Noah.Physical",
+    }
+    PENDING_GUARD_APPROVAL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PENDING_GUARD_APPROVAL_PATH.write_text(
+        json.dumps(pending, indent=2, ensure_ascii=True, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    pending["pending_path"] = str(PENDING_GUARD_APPROVAL_PATH)
+    return pending
+
+
+def load_pending_guard_approval() -> dict[str, Any] | None:
+    try:
+        pending = json.loads(PENDING_GUARD_APPROVAL_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if isinstance(pending, dict) and pending.get("status") == "pending_exact_scope":
+        pending["pending_path"] = str(PENDING_GUARD_APPROVAL_PATH)
+        return pending
+    return None
+
+
+def clear_pending_guard_approval() -> None:
+    try:
+        PENDING_GUARD_APPROVAL_PATH.unlink()
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+
+
+def write_approval_attempt_receipt(result: dict[str, Any]) -> dict[str, Any]:
+    RECEIPTS_DIR.mkdir(parents=True, exist_ok=True)
+    receipt = {
+        "receipt_id": _id("hard_approval_receipt"),
+        "timestamp": _now(),
+        "operation": "hard_approval_gate",
+        "handled": bool(result.get("handled")),
+        "approved": bool(result.get("approved")),
+        "status": result.get("status"),
+        "route_id": (result.get("pending") or {}).get("route_id") or result.get("route_id"),
+        "scope_text": result.get("scope_text") or "",
+        "executable_bound": False,
+        "actions_executed": 0,
+        "files_moved": 0,
+        "files_deleted": 0,
+        "files_renamed": 0,
+        "files_synced": 0,
+        "git_commits": 0,
+        "git_pushes": 0,
+        "cloud_uploads": 0,
+        "cloud_api_calls": 0,
+        "human_authority": "Noah.Physical",
+    }
+    path = RECEIPTS_DIR / f"hard_approval_receipt_{_stamp()}.json"
+    path.write_text(json.dumps(receipt, indent=2, ensure_ascii=True, sort_keys=True) + "\n", encoding="utf-8")
+    receipt["receipt_path"] = str(path)
+    return receipt
+
+
+def handle_guard_approval_followup(text: str, *, write_receipt: bool = True) -> dict[str, Any]:
+    """Handle approval phrases without ever executing from vague approval text."""
+    raw = str(text or "")
+    if not is_approval_followup(raw):
+        return {"handled": False, "effective_route": APPROVAL_EFFECTIVE_ROUTE}
+
+    pending = load_pending_guard_approval()
+    result: dict[str, Any] = {
+        "handled": True,
+        "approved": False,
+        "effective_route": APPROVAL_EFFECTIVE_ROUTE,
+        "pending": pending,
+        "route_id": None,
+        "scope_text": "",
+    }
+
+    if not pending:
+        result.update({
+            "status": "no_pending_guard_route",
+            "response_text": (
+                "Approval received, but no pending executable Guard action is bound. "
+                "Restate the exact target, action, and boundary."
+            ),
+        })
+    else:
+        route_id = str(pending.get("route_id") or "")
+        match = APPROVE_ROUTE_RE.match(raw)
+        referenced_ids = approval_receipt_ids(raw)
+        if not match and referenced_ids and route_id.lower() not in referenced_ids:
+            # Route-ID law: the message approves a specific route, but that
+            # route is not the one pending (it was superseded or never bound).
+            result.update({
+                "route_id": referenced_ids[0],
+                "status": "route_id_mismatch",
+                "response_text": (
+                    f"Approval references route `{referenced_ids[0]}`, but the pending route is `{route_id}`. "
+                    f"Say `approved` to approve the pending route, or restate the request to re-bind it."
+                ),
+            })
+        elif not match:
+            # Bare approval, or an approval that references the pending route id
+            # with scope text around it (Route-ID law: binds, never re-gates).
+            # Exactly one pending Guard route is tracked at a time, so it
+            # unambiguously approves that route (binds to its summary).
+            scope_text = str(pending.get("action_summary") or pending.get("user_message_excerpt") or "approved action").strip()
+            clear_pending_guard_approval()
+            result.update({
+                "approved": True,
+                "route_id": route_id,
+                "scope_text": scope_text,
+                "status": "approved_single_pending_route",
+                "response_text": (
+                    f"Approval recorded for Guard route `{route_id}`.\n"
+                    f"Bound action: {scope_text}\n"
+                    f"Boundary: {pending.get('boundary', 'Noah.Physical approval; no auto-execution')}\n\n"
+                    "Approval is bound. Reversible local work proceeds through its guarded handler; "
+                    "irreversible/external steps still execute only via their explicit handlers."
+                ),
+            })
+        else:
+            requested_route_id = match.group("route_id")
+            scope_text = (match.group("scope") or "").strip()
+            result["route_id"] = requested_route_id
+            result["scope_text"] = scope_text
+            if requested_route_id != route_id:
+                result.update({
+                    "status": "route_id_mismatch",
+                    "response_text": (
+                        f"Approval blocked: route `{requested_route_id}` does not match pending route `{route_id}`."
+                    ),
+                })
+            elif not scope_text:
+                result.update({
+                    "status": "missing_exact_scope",
+                    "response_text": (
+                        f"Approval blocked for `{route_id}`: missing exact target/action/boundary after the colon."
+                    ),
+                })
+            else:
+                clear_pending_guard_approval()
+                result.update({
+                    "approved": True,
+                    "status": "approved_scope_recorded_no_execution",
+                    "response_text": (
+                        f"Approval recorded for Guard route `{route_id}` with scope: {scope_text}\n\n"
+                        "No action executed from approval alone. Resubmit the scoped request to run through its guarded handler."
+                    ),
+                })
+
+    if write_receipt:
+        result["receipt"] = write_approval_attempt_receipt(result)
+    return result
+
+
+def route_message(
+    user_message: str,
+    *,
+    write_receipt: bool = True,
+    notes: str = "",
+    preferences_applied: list[str] | None = None,
+) -> dict[str, Any]:
+    route = classify_intent(user_message)
+    route["preferences_applied"] = list(preferences_applied or [])
+    route = write_route(route)
+    receipt = None
+    if write_receipt and route.get("receipt_required"):
+        receipt = write_route_receipt(route, notes=notes)
+    return {
+        "route": route,
+        "receipt": receipt,
+        "mode": "unified_oracle",
+        "conversation_reset": False,
+    }
+
+
+def latest_route_status() -> dict[str, Any]:
+    try:
+        routes = sorted(ROUTING_DIR.glob("unified_oracle_route_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    except Exception:
+        routes = []
+    if not routes:
+        route = classify_intent("")
+        return {
+            "mode": "unified_oracle",
+            "current_lane": route["detected_lane"],
+            "lane_label": route["lane_label"],
+            "safety_status": route["safety_status"],
+            "latest_route_path": None,
+            "latest_receipt_path": None,
+            "conversation_reset": False,
+        }
+    try:
+        route = json.loads(routes[0].read_text(encoding="utf-8"))
+    except Exception:
+        route = classify_intent("")
+    receipt_path = None
+    try:
+        receipts = sorted(RECEIPTS_DIR.glob("unified_oracle_receipt_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        receipt_path = str(receipts[0]) if receipts else None
+    except Exception:
+        pass
+    return {
+        "mode": "unified_oracle",
+        "current_lane": route.get("detected_lane", "talk_lane"),
+        "lane_label": route.get("lane_label", "Talk"),
+        "safety_status": route.get("safety_status", SAFETY_SAFE),
+        "latest_route_path": str(routes[0]),
+        "latest_receipt_path": receipt_path,
+        "conversation_reset": False,
+    }
+
+
+def format_lane_boundary(route: dict[str, Any]) -> str:
+    lane = route.get("lane_label") or LANES.get(str(route.get("detected_lane")), "Talk")
+    if route.get("detected_lane") == "build_lane":
+        return (
+            "I routed this to Build lane. I can prepare the task and execute only allowed local changes. "
+            "Approval is required before commit, push, delete, move, sync, upload, or identity-anchor promotion."
+        )
+    if route.get("detected_lane") == "capture_lane":
+        return (
+            "I routed this to Capture lane. I can write a local artifact and receipt under C:\\Oracle\\state, "
+            "without making the source canonical."
+        )
+    if route.get("detected_lane") == "witness_lane":
+        return (
+            "I routed this to Witness lane. Metadata can be read only under consent, and raw screen/audio/video "
+            "capture remains blocked by default."
+        )
+    if route.get("detected_lane") == "guard_lane":
+        return (
+            "I routed this to Guard lane. This action requires Noah.Physical approval because it may be irreversible."
+        )
+    return f"I routed this to {lane} lane."
+
+
+if __name__ == "__main__":
+    import sys
+
+    message = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else ""
+    print(json.dumps(classify_intent(message), indent=2, ensure_ascii=True, sort_keys=True))

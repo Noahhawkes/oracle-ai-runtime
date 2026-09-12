@@ -63,6 +63,8 @@ class NPCDialogue:
             return self._investigate_line(action.target)
 
         if action.kind == ActionKind.DIALOGUE:
+            if self._is_arcane_action(action):
+                return self._arcane_line(action, target_name, rel, disposition)
             return self._dialogue_line(action, target_name, rel, disposition, player_input)
 
         if action.kind == ActionKind.REQUEST:
@@ -94,6 +96,8 @@ class NPCDialogue:
         return self._style(f".")
 
     def _investigate_line(self, target: Optional[str]) -> str:
+        if target == "stonecroft_forge_ward":
+            return self._style("The ward is wrong. Keep back unless I ask you to hold iron.")
         if target:
             known = self.world_model.get_entity(target)
             if known:
@@ -141,6 +145,15 @@ class NPCDialogue:
 
         return self._style(f"What is it?")
 
+    def _arcane_line(self, action: CandidateAction, target_name: str, rel, disposition: str) -> str:
+        if disposition == "hostile":
+            return self._style("Do not put that charm on my anvil.")
+        if rel and rel.trust < -0.2:
+            return self._style("Set it down slowly. I will judge whether it is clean.")
+        if rel and rel.trust > 0.25:
+            return self._style(f"All right{', ' + target_name if target_name else ''}. Lay the charm by the tongs and keep your hand steady.")
+        return self._style("Lay it by the tongs. If the rune bites, step away.")
+
     def _request_line(self, target_name: str, rel) -> str:
         if rel and rel.trust > 0.4:
             return self._style(f"I could use your help, {target_name}." if target_name else "I could use some help.")
@@ -158,6 +171,10 @@ class NPCDialogue:
         if not entity_id: return ""
         e = self.world_model.get_entity(entity_id)
         return e.name if e else entity_id
+
+    def _is_arcane_action(self, action: CandidateAction) -> bool:
+        text = f"{action.target or ''} {action.content}".lower()
+        return any(token in text for token in ("arcane", "ward", "rune", "charm", "magic"))
 
     def _style(self, text: str) -> str:
         """Apply vocabulary and verbosity style."""

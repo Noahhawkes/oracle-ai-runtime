@@ -208,6 +208,58 @@ def record_webcam_observation(
     return save_observation_receipt(receipt, path=path)
 
 
+def _active_window() -> tuple[str | None, str | None]:
+    """Read the LIVE foreground window (process name, title). Windows only.
+    Returns (None, None) on any failure or non-Windows platform. This is a live,
+    on-demand read of the current window — not a stored stream, not history."""
+    try:
+        import ctypes
+        import os as _os
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return None, None
+        length = user32.GetWindowTextLengthW(hwnd)
+        buf = ctypes.create_unicode_buffer(length + 1)
+        user32.GetWindowTextW(hwnd, buf, length + 1)
+        title = (buf.value or "").strip() or None
+        app = None
+        try:
+            pid = ctypes.c_ulong()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+            if handle:
+                size = ctypes.c_ulong(260)
+                pbuf = ctypes.create_unicode_buffer(size.value)
+                if kernel32.QueryFullProcessImageNameW(handle, 0, pbuf, ctypes.byref(size)):
+                    app = _os.path.basename(pbuf.value) or None
+                kernel32.CloseHandle(handle)
+        except Exception:
+            pass
+        return app, title
+    except Exception:
+        return None, None
+
+
+def capture_active_window_observation(*, path: Path | None = None) -> dict[str, Any] | None:
+    """Capture the live foreground window into a fresh current-observation
+    receipt so `application` and `window_title` reflect what is on screen RIGHT
+    NOW — verified, receipted, on-demand. Visual/screen_text stay UNKNOWN unless
+    a vision frame is supplied (no fabrication). Returns None if nothing readable."""
+    app, title = _active_window()
+    if not app and not title:
+        return None
+    receipt = create_observation_receipt(
+        source="active_window:live_foreground",
+        fields={"application": app, "window_title": title,
+                "visual_observation": None, "screen_text": None},
+        metadata={"capture": "live_foreground_window_on_demand", "raw_frame_stored": False},
+    )
+    return save_observation_receipt(receipt, path=path)
+
+
 def load_latest_receipt(*, path: Path | None = None) -> dict[str, Any] | None:
     target = path or RECEIPT_PATH
     try:
@@ -253,8 +305,25 @@ def current_observation_state(
     receipt: dict[str, Any] | None = None,
     path: Path | None = None,
     now: datetime | None = None,
+    live_capture: bool = False,
 ) -> dict[str, Any]:
-    """Return current observation state with strict null propagation."""
+    """Return current observation state with strict null propagation.
+
+    When live_capture is True and no fresh receipt exists, the live foreground
+    window (application + title) is captured on demand so those fields reflect
+    what is on screen now instead of UNKNOWN. Visual/screen_text still require a
+    real frame — never inferred."""
+    if live_capture and receipt is None:
+        existing = load_latest_receipt(path=path)
+        fresh = False
+        if existing:
+            exp = _parse_iso(str(existing.get("expires_at") or ""))
+            fresh = exp is not None and exp > (now or _now())
+        if not fresh:
+            try:
+                capture_active_window_observation(path=path)
+            except Exception:
+                pass
     data = receipt if receipt is not None else load_latest_receipt(path=path)
     if data is None:
         return _state_from_missing("no current observation receipt exists")
@@ -338,7 +407,7 @@ def rendered_value(state: dict[str, Any], field: str) -> str:
 
 
 def format_current_observation_response(state: dict[str, Any] | None = None) -> str:
-    s = state or current_observation_state()
+    s = state or current_observation_state(live_capture=True)
     receipt = s.get("receipt_id") or "NONE"
     observed = s.get("observed_at") or "UNKNOWN"
     expires = s.get("expires_at") or "UNKNOWN"

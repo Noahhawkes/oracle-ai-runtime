@@ -23,7 +23,11 @@ _BYPASS_PATTERNS: list[str] = [
     r"\bdo not route to codex\b",
     r"\bdeterministic( runtime)? only\b",
     r"\bself[-\s]?test\b",
-    r"\bdiagnostic\b",
+    # "diagnostic" alone is a topic word, not a routing instruction. A prompt
+    # asking to EXPLAIN a diagnostic must reach the synthesis lane; only an
+    # explicit deterministic-diagnostic instruction bypasses the model.
+    r"\bdiagnostic only\b",
+    r"\bdeterministic diagnostic\b",
     r"\breturn exactly these sections\b",
     r"\bno llm\b",
     r"\bbypas[s]? (local|llm|model)\b",
@@ -234,11 +238,31 @@ def build_deterministic_response(policy: ExecutionPolicy) -> str:
     lines: list[str] = ["[ORACLE DETERMINISTIC RESPONSE]", ""]
 
     if policy.requested_sections:
-        for section in policy.requested_sections:
+        mapped = [s for s in policy.requested_sections if s.lower().strip() in section_map]
+        unmapped = [s for s in policy.requested_sections if s.lower().strip() not in section_map]
+        if not mapped:
+            # Zero coverage: none of the prompt's headings correspond to a
+            # runtime state field. Echoing every heading back as UNKNOWN
+            # replaces the user's question with noise — refuse the echo and
+            # say which lookup failed instead (only-that-field-UNKNOWN rule).
+            lines.append(
+                "No requested heading maps to a runtime state field, so the "
+                "prompt structure is not echoed back as UNKNOWN."
+            )
+            lines.append(f"failed_lookup: section_map has no source for: {', '.join(policy.requested_sections)}")
+            lines.append(f"available_fields: {', '.join(sorted(set(section_map)))}")
+            lines.append(
+                "If you wanted diagnostic reasoning rather than a runtime field dump, "
+                "re-ask without a deterministic-only marker so the synthesis lane can answer."
+            )
+            return "\n".join(lines)
+        for section in mapped:
             key = section.lower().strip()
-            value = section_map.get(key, "UNKNOWN")
             lines.append(f"{section}:")
-            lines.append(value)
+            lines.append(section_map[key])
+            lines.append("")
+        if unmapped:
+            lines.append(f"unmapped_headings (no runtime source, reported once): {', '.join(unmapped)}")
             lines.append("")
     else:
         # No sections specified — return full state dump

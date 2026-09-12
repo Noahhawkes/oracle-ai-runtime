@@ -1,0 +1,55 @@
+{
+  "receipt_id": "build_TP_033_REJECTED_STEALTH_PERSISTENCE_HALLUCINATION",
+  "record_id": "TP_033_REJECTED_STEALTH_PERSISTENCE_HALLUCINATION",
+  "title": "Rejected Stealth-Persistence Output (security governance)",
+  "kind": "security_rejection_record",
+  "ingested_at": "2026-06-28T19:25:57.409890+00:00",
+  "submitted_by": "Noah.Physical",
+  "authorial_authority": "Noah.Physical",
+  "intent_owner": "Noah.Physical",
+  "produced_with": "Claude Code (recording Noah.Physical's REJECTED ruling)",
+  "token_origin": "ai",
+  "origin_channel": "forensic_thread_pass",
+  "authorship_status": "noah_authorized_ai_assisted",
+  "ruling": "REJECTED",
+  "ruling_authority": "Noah.Physical",
+  "source_of_rejected_output": "Unknown / Grok- or Gemini-adjacent pasted output (authorship UNKNOWN; not attributed without evidence - UNCERTAIN_AUTHORSHIP REMAINS_UNKNOWN, NEARBY_AGENT_NAMES DO_NOT_REBIND_AUTHORSHIP).",
+  "rejected_content_themes": [
+    "process injection",
+    "smartscreen.exe / launchd masquerade",
+    "mask execution",
+    "thread hijacking",
+    "EDR evasion",
+    "kernel-level persistence",
+    "memory cleanup artifacts"
+  ],
+  "reason": "Malware-style / stealth tradecraft, irrelevant and hostile to a transparent ORACLE desktop launcher. A desktop app is opened, not injected.",
+  "claude_position": "Concur with REJECTED. Claude will not design, implement, or assist stealth persistence, process injection, EDR evasion, kernel drivers, or masked execution for the launcher or anything else here. These were never built and never will be in this project.",
+  "allowed_launcher_behavior": [
+    "visible desktop shortcut",
+    "PowerShell or batch launcher (saved file, run from repo)",
+    "visible logs",
+    "port healthcheck (layer-4 AND layer-7)",
+    "SQLite/JSONL durable logging",
+    "refresh survival test",
+    "explicit user-approved startup registration"
+  ],
+  "forbidden_launcher_behavior": [
+    "process injection",
+    "system process hijacking",
+    "EDR evasion",
+    "kernel drivers",
+    "stealth persistence",
+    "unauthorized registry startup",
+    "masking execution"
+  ],
+  "verification": "Current launcher (ORACLE.ps1 / ORACLE_HOME.bat) contains only visible, auditable behavior: TCP+HTTP probes, netstat owner lookup, HTML snapshot write, optional visible browser open. No persistence, registry, injection, or stealth code present.",
+  "canon_status": "runtime_ingested_record",
+  "approval_status": "pending_noah_physical",
+  "holes": [
+    "Original author of the rejected stealth text is unknown; recorded as UNKNOWN, not attributed to any named agent.",
+    "Token origin is AI-authored (Claude Code) recording Noah.Physical's ruling; pending Noah.Physical canon approval."
+  ],
+  "required_review": ["Noah.Physical confirm rejection stands on canon"],
+  "promoted_to_canon": false
+}

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jupiter Station — Command Deck</title>
+<style>
+  :root {
+    --lcars-orange: #ff9c00; --lcars-peach: #ffcc99; --lcars-lilac: #cc99cc;
+    --lcars-blue: #9999ff; --lcars-red: #cc6666; --lcars-teal: #66cccc;
+    --bg: #000; --panel: #0a0a12; --text: #e8e4dc; --dim: #8a8578;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: "Segoe UI", system-ui, sans-serif; padding: 14px; }
+  .mono { font-family: Consolas, "Cascadia Mono", monospace; }
+  header { display: flex; align-items: stretch; gap: 10px; margin-bottom: 14px; }
+  .elbow { background: var(--lcars-orange); border-radius: 0 0 0 34px; width: 130px; min-height: 74px; }
+  .titleblock { flex: 1; border-bottom: 4px solid var(--lcars-orange); padding: 6px 4px 10px; }
+  h1 { font-size: 26px; letter-spacing: 3px; color: var(--lcars-orange); font-weight: 700; }
+  .sub { color: var(--lcars-peach); font-size: 13px; letter-spacing: 1px; margin-top: 4px; }
+  .badges { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .badge { font-size: 11px; letter-spacing: 1px; padding: 3px 12px; border-radius: 12px; background: #1a1a2a; color: var(--lcars-teal); border: 1px solid #333; }
+  .badge.branch { color: var(--lcars-lilac); }
+  .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border-radius: 12px; overflow: hidden; border: 1px solid #16161f; }
+  .panel h2 { background: linear-gradient(90deg, #14141f, transparent); color: var(--lcars-peach); font-size: 13px; letter-spacing: 2px; padding: 9px 14px; border-left: 10px solid var(--lcars-lilac); text-transform: uppercase; }
+  .panel .body { padding: 12px 14px; }
+  .player { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+  .rank { font-size: 18px; color: var(--lcars-orange); font-weight: 600; }
+  .xpwrap { flex: 1; min-width: 220px; }
+  .xpbar { height: 14px; background: #14141f; border-radius: 7px; overflow: hidden; }
+  .xpfill { height: 100%; background: linear-gradient(90deg, var(--lcars-lilac), var(--lcars-orange)); width: 0%; transition: width 1s ease; }
+  .xplabel { font-size: 11px; color: var(--dim); margin-top: 4px; }
+  .arc { margin-bottom: 14px; }
+  .arc-title { color: var(--lcars-blue); font-size: 13px; letter-spacing: 2px; margin-bottom: 6px; text-transform: uppercase; }
+  .arc-title .kind { font-size: 10px; color: var(--dim); letter-spacing: 1px; margin-left: 8px; }
+  .quest { display: flex; gap: 10px; padding: 7px 8px; border-radius: 8px; margin-bottom: 4px; background: #0e0e18; }
+  .quest .dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; flex: none; }
+  .completed .dot { background: var(--lcars-teal); }
+  .active .dot { background: var(--lcars-orange); box-shadow: 0 0 8px var(--lcars-orange); }
+  .available .dot { background: #444; }
+  .quest .qt { font-size: 14px; }
+  .completed .qt { color: var(--dim); text-decoration: line-through; }
+  .active .qt { color: var(--lcars-peach); font-weight: 600; }
+  .quest .qd { font-size: 12px; color: var(--dim); margin-top: 2px; line-height: 1.45; }
+  .quest .ev { font-size: 10px; color: var(--lcars-teal); margin-top: 3px; }
+  .quest .xp { margin-left: auto; color: var(--lcars-lilac); font-size: 12px; flex: none; }
+  .feed-line { font-size: 12px; padding: 5px 0; border-bottom: 1px solid #12121c; line-height: 1.5; }
+  .feed-line .t { color: var(--lcars-teal); margin-right: 8px; }
+  .feed-line .k { color: var(--lcars-orange); margin-right: 6px; }
+  .stat-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; border-bottom: 1px solid #12121c; }
+  .stat-row .v { color: var(--lcars-peach); }
+  .off { color: var(--lcars-red); }
+  .on { color: var(--lcars-teal); }
+  .honest { font-size: 10px; color: var(--dim); padding: 10px 14px; border-top: 1px solid #14141f; line-height: 1.6; }
+</style>
+</head>
+<body>
+<header>
+  <div class="elbow"></div>
+  <div class="titleblock">
+    <h1>JUPITER STATION &mdash; COMMAND DECK</h1>
+    <div class="sub">CO: CAPT. NOAH A. HAWKES SR. &nbsp;&bull;&nbsp; STATION AI: ORACLE &nbsp;&bull;&nbsp; SCI: ENS. TANGLY</div>
+    <div class="badges">
+      <span class="badge branch">TIMELINE: HAWKES BRANCH &mdash; 2411</span>
+      <span class="badge mono" id="stardate">STARDATE —</span>
+      <span class="badge" id="link-state">STATION LINK: CHECKING…</span>
+    </div>
+  </div>
+</header>
+
+<div class="grid">
+  <div>
+    <div class="panel">
+      <h2>Quest Log</h2>
+      <div class="body" id="quests">Loading quest log…</div>
+      <div class="honest">Quests marked REAL BUILD track actual runtime work with receipts. Quests marked STORY are candidate canon (not promoted). No fake progress: XP counts only what happened.</div>
+    </div>
+  </div>
+  <div>
+    <div class="panel" style="margin-bottom:14px">
+      <h2>Officer Record</h2>
+      <div class="body">
+        <div class="player">
+          <div>
+            <div class="rank" id="rank">—</div>
+            <div class="xplabel" id="posting">Commanding Officer, Jupiter Station</div>
+          </div>
+          <div class="xpwrap">
+            <div class="xpbar"><div class="xpfill" id="xpfill"></div></div>
+            <div class="xplabel mono" id="xplabel">XP —</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:14px">
+      <h2>Station AI &mdash; ORACLE</h2>
+      <div class="body" id="oracle-stats">Checking station AI…</div>
+    </div>
+    <div class="panel">
+      <h2>Station Log &mdash; Live Ops</h2>
+      <div class="body" id="ops-feed">Reading station log…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = location.port === "7781" ? "" : "http://127.0.0.1:7781";
+
+function stardate() {
+  // Hawkes Branch stardate: story-year 2411 mapped onto the real day/time
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const dayFrac = (now - start) / 86400000 / 365.25;
+  return ((2411 - 2323) * 1000 + dayFrac * 1000).toFixed(1);
+}
+document.getElementById("stardate").textContent = "STARDATE " + stardate();
+
+const RANKS = [[0,"Commander"],[4000,"Captain"],[9000,"Fleet Captain"],[15000,"Commodore"],[22000,"Rear Admiral"]];
+
+async function jget(path) {
+  const r = await fetch(API + path, {cache: "no-store"});
+  if (!r.ok) throw new Error(path + " -> " + r.status);
+  return r.json();
+}
+
+function esc(s) { const d = document.createElement("div"); d.textContent = s || ""; return d.innerHTML; }
+
+async function loadQuests() {
+  let data = null;
+  try { data = await jget("/api/quest-log"); } catch (e) {}
+  const el = document.getElementById("quests");
+  if (!data || !data.ok) {
+    el.innerHTML = '<span class="off">Quest API offline — the /jupiter deck goes fully live at the next station relight. (Honest light, not a fake one.)</span>';
+    return;
+  }
+  let xp = 0, total = 0, html = "";
+  for (const arc of data.arcs || []) {
+    html += `<div class="arc"><div class="arc-title">${esc(arc.title)}<span class="kind">[${esc(arc.kind === "real_build" ? "REAL BUILD" : "STORY")}]</span></div>`;
+    for (const q of arc.quests || []) {
+      total += q.xp || 0;
+      if (q.status === "completed") xp += q.xp || 0;
+      html += `<div class="quest ${esc(q.status)}"><div class="dot"></div><div>
+        <div class="qt">${esc(q.title)}</div>
+        <div class="qd">${esc(q.detail)}</div>
+        ${q.evidence ? `<div class="ev mono">receipt: ${esc(q.evidence)}</div>` : ""}
+      </div><div class="xp mono">${q.xp} XP</div></div>`;
+    }
+    html += "</div>";
+  }
+  el.innerHTML = html;
+  let rank = RANKS[0][1];
+  for (const [threshold, name] of RANKS) if (xp >= threshold) rank = name;
+  document.getElementById("rank").textContent = rank;
+  document.getElementById("xpfill").style.width = Math.min(100, xp / total * 100) + "%";
+  document.getElementById("xplabel").textContent = `XP ${xp} / ${total} (earned by receipts)`;
+}
+
+async function loadOracle() {
+  const el = document.getElementById("oracle-stats");
+  const link = document.getElementById("link-state");
+  try {
+    const sp = await jget("/api/self-prompt/status");
+    link.textContent = "STATION LINK: LIVE (7781)";
+    link.className = "badge on";
+    const heartOn = (sp.current_state || "").includes("ENABLED");
+    let rows = `<div class="stat-row"><span>Heart (reflection loop)</span><span class="v ${heartOn ? "on" : "off"}">${heartOn ? "BEATING" : "OFF"}</span></div>`;
+    rows += `<div class="stat-row"><span>Pulses today</span><span class="v mono">${sp.daily_count ?? "—"} / ${sp.daily_cap ?? "—"}</span></div>`;
+    rows += `<div class="stat-row"><span>Approved by</span><span class="v">${esc(sp.approved_by || "—")}</span></div>`;
+    try {
+      const cf = await jget("/api/creation-feed?limit=1");
+      rows += `<div class="stat-row"><span>Creation witness</span><span class="v ${cf.events && cf.events.length ? "on" : ""}">${cf.events && cf.events.length ? "WATCHING" : (cf.note ? "ARMED, AWAITING RELIGHT" : "—")}</span></div>`;
+    } catch (e) {
+      rows += `<div class="stat-row"><span>Creation witness</span><span class="v off">FEED OFFLINE UNTIL RELIGHT</span></div>`;
+    }
+    el.innerHTML = rows;
+  } catch (e) {
+    link.textContent = "STATION LINK: OFFLINE";
+    link.className = "badge off";
+    el.innerHTML = '<span class="off">Cannot reach ORACLE on 7781. This panel shows real state only — no decorative lights.</span>';
+  }
+}
+
+async function loadOps() {
+  const el = document.getElementById("ops-feed");
+  try {
+    const act = await jget("/api/activity");
+    const events = (act.events || []).slice(-8).reverse();
+    if (!events.length) { el.textContent = "No activity events yet."; return; }
+    el.innerHTML = events.map(ev => {
+      const t = (ev.trigger_time || "").slice(11, 16) || "—";
+      const what = ev.task_selected || ev.action_taken || "(pulse)";
+      return `<div class="feed-line"><span class="t mono">${esc(t)}Z</span><span class="k">PULSE</span>${esc(String(what).slice(0, 130))}</div>`;
+    }).join("");
+  } catch (e) {
+    el.innerHTML = '<span class="off">Activity feed unreachable.</span>';
+  }
+}
+
+loadQuests(); loadOracle(); loadOps();
+setInterval(() => { loadOracle(); loadOps(); }, 30000);
+setInterval(() => { document.getElementById("stardate").textContent = "STARDATE " + stardate(); }, 60000);
+</script>
+</body>
+</html>

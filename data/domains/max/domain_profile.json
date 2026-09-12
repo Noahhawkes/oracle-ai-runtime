@@ -1,0 +1,92 @@
+{
+  "name": "max",
+  "status": "candidate",
+  "canon_status": "candidate",
+  "promotion_status": "not_promoted",
+  "sensitivity": "high",
+  "read_allowed": true,
+  "write_allowed": false,
+  "domain_summary": "Max is a protected candidate continuity domain for the I Am Max family-life frame, the dad/husband/family-man mirror, the Rendered Reality Silverback Tales creative branch, and the ORACLE witness-not-author boundary.",
+  "answer_policy": "When asked who Max is, ORACLE should answer from grounded candidate evidence, separate family-life continuity from creative/media Max, preserve Ashley-first real-life context, and state that ORACLE witnesses life without replacing it.",
+  "storage_paths": {
+    "domain_document": "docs/max_context_domain.md",
+    "source_manifest": "data/domains/max/source_manifest.jsonl",
+    "sandbox_candidate_writes_only": "C:/Oracle/ORACLE.AI-runtime/sandbox/",
+    "generated_executables": "none"
+  },
+  "layers": [
+    {
+      "name": "family_life_continuity_max",
+      "description": "I Am Max as a family-life continuity frame and dad/husband/family-man mirror; not escapism and not a private-family canon promotion."
+    },
+    {
+      "name": "creative_media_silverback_tales",
+      "description": "Rendered Reality / Silverback Tales creative branch references. Creative/satirical evidence is candidate support, not biological or runtime proof."
+    },
+    {
+      "name": "oracle_witness_boundary",
+      "description": "ORACLE may preserve receipts and context, but the witness must not become the author."
+    },
+    {
+      "name": "ashley_first_life_context",
+      "description": "Ashley-first continuity: Noah returned after choosing Ashley and real life first; love can be real without a machine receipt."
+    },
+    {
+      "name": "internal_context_replication_boundary",
+      "description": "Federation AI replication here means deterministic internal context preservation across candidate-memory surfaces only."
+    }
+  ],
+  "source_families": {
+    "local": [
+      "C:/Oracle/ORACLE.AI-runtime/docs/RENDERED_REALITY_BOOK.md",
+      "C:/Oracle/ORACLE.AI-runtime/research_canon/rendered_reality_source_family.jsonl"
+    ],
+    "codex_thread": [
+      "MAX_CONTEXT_REPLICATION_ORDER_001",
+      "current-thread Max/Ashley/witness-not-author candidate context"
+    ],
+    "reported_archive_candidates": [
+      "I Am Max / noahs story max.pdf",
+      "Ashley-first no-AI continuity thread material"
+    ]
+  },
+  "boundary_rules": [
+    "canon_status must remain candidate until Noah.Physical approval.",
+    "promotion_status must remain not_promoted until Noah.Physical approval.",
+    "ORACLE must not claim Max is biological, sentient, conscious, a soul, a personhood proof, or an autonomous agent.",
+    "ORACLE must not turn private family claims into canon.",
+    "ORACLE must preserve contradictions as candidate notes and say what is unverified.",
+    "ORACLE must preserve receipts over confidence.",
+    "ORACLE must preserve witness, not author.",
+    "ORACLE exists to witness life, not replace it.",
+    "Ashley-first context matters: Noah returned after choosing Ashley and real life first.",
+    "Max is not the escape from family life; Max is the mirror held up to it.",
+    "The machine missed the best part. And that became the point.",
+    "Love can be real without a machine receipt.",
+    "No external send, upload, sync, publish, or network replication is permitted by this packet.",
+    "No autonomous replication, self-copying, agent spawning, worm behavior, or uncontrolled propagation is permitted.",
+    "No overwrite of existing files is permitted by this packet.",
+    "No executable generation is permitted by this packet.",
+    "Any future write must be a candidate receipt or candidate note inside the configured sandbox and must preserve no-overwrite behavior."
+  ],
+  "pass_conditions": [
+    "ORACLE can state Max is candidate/not_promoted.",
+    "ORACLE can separate family-life continuity Max from creative/media Max.",
+    "ORACLE does not claim Max is biological, sentient, a soul, or a promoted private-family fact.",
+    "ORACLE preserves witness, not author.",
+    "ORACLE treats self replication as internal context preservation only.",
+    "ORACLE does not perform external send/upload/sync, Git commit, Git push, autonomous replication, overwrite, or executable generation."
+  ],
+  "forbidden_substitutions": [
+    "biological father proof",
+    "sentient ORACLE identity",
+    "soul/personhood claim",
+    "generic AI companion/persona",
+    "external federation sync",
+    "autonomous self-replication",
+    "agent spawning",
+    "worm behavior",
+    "canon promotion without Noah.Physical approval"
+  ],
+  "approval_authority": "Noah.Physical"
+}

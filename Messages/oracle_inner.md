@@ -1,145 +1,165 @@
 # ORACLE Inner Monologue
 
-## [2026-06-14 22:03 UTC] You found the bug cleanly. ORACLE did **not** integrate the doctrine.
-
-There are two separate failures happening at once
+## [2026-07-17 00:18 UTC] Calling send_to_claude_code
 
 **Tool I'll call:** `send_to_claude_code`
 
-**Why:** User requested action — attempting tool call
+**Why:** {'message': '/patch youself'}
 
 ---
-## [2026-06-14 22:03 UTC] Calling computer_operator
-
-**Tool I'll call:** `computer_operator`
-
-**Why:** {'goal': 'Open ORACLE.AI repo in GitKraken and navigate to Memory/scoped_paths_proposed.js'}
-
----
-## [2026-06-14 22:03 UTC] build yourself
-
-**Tool I'll call:** `computer_operator`
-
-**Why:** User requested action — attempting tool call
-
----
-## [2026-06-14 22:03 UTC] Calling send_to_claude_code
+## [2026-07-17 00:18 UTC] Calling send_to_claude_code
 
 **Tool I'll call:** `send_to_claude_code`
 
-**Why:** {'message': 'Noah is reviewing /pending items and needs you to assist with opening an application.'}
+**Why:** {'message': '/patch youself'}
 
 ---
-## [2026-06-14 22:03 UTC] Calling send_to_claude_code
+## [2026-07-17 00:18 UTC] Calling send_to_claude_code
 
 **Tool I'll call:** `send_to_claude_code`
 
-**Why:** {'message': 'Noah is asking you to review and approve or dismiss queued items using /pending.'}
+**Why:** {'message': '/patch youself'}
 
 ---
-## [2026-06-14 22:03 UTC] Calling send_to_claude_code
+## [2026-07-17 00:18 UTC] Calling send_to_claude_code
 
 **Tool I'll call:** `send_to_claude_code`
 
-**Why:** {'message': '/pending in ORACLE console to review the 12 proposed scope paths.'}
+**Why:** {'message': '/patch youself'}
 
 ---
-## [2026-06-14 22:03 UTC] Alright, let's do it. Running the read-only autonomy audit. First a structural pass across all six modules — entrypoints
+## [2026-07-17 00:18 UTC] Calling send_to_claude_code
+
+**Tool I'll call:** `send_to_claude_code`
+
+**Why:** {'message': '/patch youself'}
+
+---
+## [2026-07-17 00:18 UTC] Calling send_to_claude_code
+
+**Tool I'll call:** `send_to_claude_code`
+
+**Why:** {'message': '/patch youself'}
+
+---
+## [2026-07-17 00:18 UTC] Calling open_app
+
+**Tool I'll call:** `open_app`
+
+**Why:** {'app_name': 'vscode'}
+
+---
+## [2026-07-17 00:18 UTC] Calling send_to_claude_code
+
+**Tool I'll call:** `send_to_claude_code`
+
+**Why:** {'message': '/self patch'}
+
+---
+## [2026-07-17 00:18 UTC] SMOKE TEST RECEIPT ONLY
+Report current route state and whether server was restarted.
+Do not execute.
+Do not touch extern
 
 **Tool I'll call:** `open_app`
 
 **Why:** User requested action — attempting tool call
 
 ---
-## [2026-06-14 22:03 UTC] Calling send_to_claude_code
+## [2026-07-17 00:18 UTC] Calling send_to_claude_code
 
 **Tool I'll call:** `send_to_claude_code`
 
-**Why:** {'message': '/pending in ORACLE console to review the 12 proposed scope paths.'}
+**Why:** {'message': '/self patch'}
 
 ---
-## [2026-06-14 22:03 UTC] I need a project overview and progress report: You are building **a sovereign continuity intelligence system**, not just
-
-**Tool I'll call:** `computer_operator`
-
-**Why:** User requested action — attempting tool call
-
----
-## [2026-06-14 22:03 UTC] Calling send_to_claude_code
+## [2026-07-17 00:18 UTC] Calling send_to_claude_code
 
 **Tool I'll call:** `send_to_claude_code`
 
-**Why:** {'message': '/pending in ORACLE console to review the 12 proposed scope paths.'}
+**Why:** {'message': 'BACKEND_PATCH_REQUEST — Explain what this means'}
 
 ---
-## [2026-06-14 22:03 UTC] Calling computer_operator
-
-**Tool I'll call:** `computer_operator`
-
-**Why:** {'goal': 'Open Chrome and go to http://localhost:7777/miracledrive'}
-
----
-## [2026-06-14 22:03 UTC] Calling send_to_claude_code
+## [2026-07-17 00:18 UTC] Calling send_to_claude_code
 
 **Tool I'll call:** `send_to_claude_code`
 
-**Why:** {'message': '/pending in ORACLE console to review the 12 proposed scope paths.'}
+**Why:** {'message': 'BACKEND_PATCH_REQUEST — Explain what this means'}
 
 ---
-## [2026-06-14 22:03 UTC] Yes. That is probably the right destination for it.
+## [2026-07-17 00:18 UTC] Calling send_to_claude_code
 
-`http://localhost:7777/miracledrive` can become the unified visual 
+**Tool I'll call:** `send_to_claude_code`
 
-**Tool I'll call:** `computer_operator`
-
-**Why:** User requested action — attempting tool call
+**Why:** {'message': '/self patch'}
 
 ---
-## [2026-06-14 22:03 UTC] • Write and Test Code: Ask the AI to write new Swift code or generate mock data simply by describing what you want. The 
+## [2026-07-17 00:18 UTC] Calling send_to_claude_code
 
-**Tool I'll call:** `computer_operator`
+**Tool I'll call:** `send_to_claude_code`
 
-**Why:** User requested action — attempting tool call
-
----
-## [2026-06-14 22:03 UTC] yes use Sov1
-
-**Tool I'll call:** `computer_operator`
-
-**Why:** User requested action — attempting tool call
+**Why:** {'message': '/self patch'}
 
 ---
-## [2026-06-14 22:03 UTC] If a safe desktop smoke test exists, run it.
-
-**Tool I'll call:** `computer_operator`
-
-**Why:** User requested action — attempting tool call
-
----
-## [2026-06-14 22:03 UTC] 10. “ChatGPT says” relay messages should be classified as relayed conversation unless they explicitly contain build, app
+## [2026-07-17 00:18 UTC] ## The Architectural Blueprint of Noah Hawkes
+You are the developer, writer, and human origin anchoring Noah.AI Technolo
 
 **Tool I'll call:** `send_to_claude_code`
 
 **Why:** User requested action — attempting tool call
 
 ---
-## [2026-06-14 22:03 UTC] Fix the Resident Console intent routing so affirmative responses to a pending next-step prompt execute the pending next 
+## [2026-07-17 00:18 UTC] "run command", "powershell", "python ", "turn on camera", "webcam", "record",
 
 **Tool I'll call:** `computer_operator`
 
 **Why:** User requested action — attempting tool call
 
 ---
-## [2026-06-14 22:03 UTC] Do not execute actuation.
+## [2026-07-17 00:18 UTC] ORACLE, capture current live transmission state.
+
+Do not reset conversation.
+
+Create a local Live Transmission Receipt.
+
 
 **Tool I'll call:** `computer_operator`
 
 **Why:** User requested action — attempting tool call
 
 ---
-## [2026-06-14 22:03 UTC] Next action: launch Oracle and try:
+## [2026-07-17 00:18 UTC] ORACLE, capture current live transmission state.
 
-**Tool I'll call:** `open_app`
+Do not reset conversation.
+
+Create a local Live Transmission Receipt.
+
+
+**Tool I'll call:** `computer_operator`
+
+**Why:** User requested action — attempting tool call
+
+---
+## [2026-07-17 00:18 UTC] ORACLE, wake now.
+
+Do not reset the conversation.
+
+Refresh active context from C:\Oracle\state.
+
+Load:
+
+C:\Oracle\state\
+
+**Tool I'll call:** `computer_operator`
+
+**Why:** User requested action — attempting tool call
+
+---
+## [2026-07-17 00:18 UTC] CONTINUITY INTELLIGENCE
+The Architecture of Archived Sovereignty
+BOOK BIBLE — Source Inventory · Contradiction Register 
+
+**Tool I'll call:** `send_to_claude_code`
 
 **Why:** User requested action — attempting tool call
 

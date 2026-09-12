@@ -2,7 +2,7 @@
 TARGET 2 regression tests:
   - deferred action requests ("...log that in memory") enroll as pending intent
   - a subsequent "proceed"/"yes" resolves the pending intent (no fall-through)
-  - the routing fallback is mode-aware (never says "switch to Builder" in Builder)
+  - the routing fallback uses unified lane language instead of visible mode switching
 """
 from __future__ import annotations
 
@@ -61,10 +61,22 @@ def test_bare_proceed_without_pending_still_defers(tmp_path, monkeypatch):
 
 def test_fallback_mode_aware_builder():
     out = srv._strip_routing_artifacts("Routing to Claude Code.", "builder")
-    assert "already in builder" in out.lower()
+    assert "build lane" in out.lower()
     assert "switch to builder" not in out.lower()
 
 
-def test_fallback_companion_offers_switch():
+def test_fallback_companion_uses_unified_lane_language():
     out = srv._strip_routing_artifacts("Routing to Claude Code.", "companion")
-    assert "switch to builder" in out.lower()
+    assert "unified oracle" in out.lower()
+    assert "switch to builder" not in out.lower()
+
+
+def test_inline_routing_artifact_is_removed_without_replacing_answer():
+    out = srv._strip_routing_artifacts(
+        "BACKEND_PATCH_REQUEST is a backend directive. Routing to Claude Code.",
+        "companion",
+    )
+
+    assert "backend directive" in out.lower()
+    assert "routing to claude code" not in out.lower()
+    assert "unified oracle" not in out.lower()

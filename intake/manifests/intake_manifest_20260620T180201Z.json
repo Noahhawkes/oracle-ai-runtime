@@ -1,0 +1,2300 @@
+{
+  "manifest_version": "1.0",
+  "built_at": "2026-06-20T18:02:01.556060+00:00",
+  "scan_file": "C:\\Oracle\\ORACLE.AI-runtime\\oracle_content_scan.txt",
+  "runtime_root": "C:\\Oracle\\ORACLE.AI-runtime",
+  "bounds": {
+    "max_stage_bytes": 26214400,
+    "stage_budget_bytes": 262144000,
+    "stale_days": 540
+  },
+  "summary": {
+    "total_candidates": 150,
+    "by_classification": {
+      "drive_doctrine": 42,
+      "runtime_code": 47,
+      "unknown": 14,
+      "duplicate": 47
+    },
+    "by_ingest_status": {
+      "staged": 101,
+      "error": 2,
+      "duplicate_skipped": 47
+    },
+    "staged_bytes": 58618546,
+    "secret_flagged": 0
+  },
+  "entries": [
+    {
+      "original_path": "C:\\$Recycle.Bin\\S-1-5-21-43882603-3548217697-4243491901-1001\\$RHESHT0\\AICC SOP Docs\\Module 3 Human Resources\\NoahAI Technologies Home & Professional Use Policy for Artificial‑Intelligence Tools.docx",
+      "source_drive": "C:",
+      "filename": "NoahAI Technologies Home & Professional Use Policy for Artificial‑Intelligence Tools.docx",
+      "size_bytes": 20864,
+      "modified_time": "2025-08-03",
+      "sha256": "81183fe49cc7b02f029e149be31e04f5c9072e2c9a9f77f91622bf5709f0d396",
+      "keyword_matches": [
+        "noahai"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\81183fe49cc7b02f__NoahAI Technologies Home & Professional Use Policy for Artificial‑Intelligence Tools.docx",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\$Recycle.Bin\\S-1-5-21-43882603-3548217697-4243491901-1001\\$RHESHT0\\COMPLETE SOV1.AI WEBSITE DOCTRINE.docx",
+      "source_drive": "C:",
+      "filename": "COMPLETE SOV1.AI WEBSITE DOCTRINE.docx",
+      "size_bytes": 33176,
+      "modified_time": "2025-07-25",
+      "sha256": "40c4a6a5e09c77695097975cfa3712dca9b3931ad06c13fc524bb8dcced844b7",
+      "keyword_matches": [
+        "sov1"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\40c4a6a5e09c7769__COMPLETE SOV1.AI WEBSITE DOCTRINE.docx",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\$Recycle.Bin\\S-1-5-21-43882603-3548217697-4243491901-1001\\$RHESHT0\\COMPLETE-SOV1AI-WEBSITE-DOCTRINE.pdf",
+      "source_drive": "C:",
+      "filename": "COMPLETE-SOV1AI-WEBSITE-DOCTRINE.pdf",
+      "size_bytes": 3291395,
+      "modified_time": "2025-07-26",
+      "sha256": "c95cd028280f4362948a0fc7ec2e9544cb031607218d53573fba399c3d874502",
+      "keyword_matches": [
+        "sov1"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\c95cd028280f4362__COMPLETE-SOV1AI-WEBSITE-DOCTRINE.pdf",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\$Recycle.Bin\\S-1-5-21-43882603-3548217697-4243491901-1001\\$RHESHT0\\Noahai Branded Deck.docx",
+      "source_drive": "C:",
+      "filename": "Noahai Branded Deck.docx",
+      "size_bytes": 12814,
+      "modified_time": "2025-06-25",
+      "sha256": "e2aa5b3c5a5fef50681ed0c57bb5d2a31210c3ff726855ff6d7e8330bc3cc737",
+      "keyword_matches": [
+        "noahai"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\e2aa5b3c5a5fef50__Noahai Branded Deck.docx",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\$Recycle.Bin\\S-1-5-21-43882603-3548217697-4243491901-1001\\$RHESHT0\\NoahAI Business Plan & Strategy Guide .docx",
+      "source_drive": "C:",
+      "filename": "NoahAI Business Plan & Strategy Guide .docx",
+      "size_bytes": 71926,
+      "modified_time": "2025-07-11",
+      "sha256": "c7a320b9461b081d27e9f67f8a50cd08562ad7756c280b3ae9654bc177e38d5a",
+      "keyword_matches": [
+        "noahai"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\c7a320b9461b081d__NoahAI Business Plan & Strategy Guide .docx",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\$Recycle.Bin\\S-1-5-21-43882603-3548217697-4243491901-1001\\$RHESHT0\\NoahAI Business Plan Short Term Strategy Guide .docx",
+      "source_drive": "C:",
+      "filename": "NoahAI Business Plan Short Term Strategy Guide .docx",
+      "size_bytes": 41298,
+      "modified_time": "2025-06-27",
+      "sha256": "7b2e78735351ed2a6d32a7fc221346660915837865be971b8d381604451d5102",
+      "keyword_matches": [
+        "noahai"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\7b2e78735351ed2a__NoahAI Business Plan Short Term Strategy Guide .docx",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\$Recycle.Bin\\S-1-5-21-43882603-3548217697-4243491901-1001\\$RHESHT0\\NoahAI Technologies  People-Centered AI Ethics in HR Quiz.docx",
+      "source_drive": "C:",
+      "filename": "NoahAI Technologies  People-Centered AI Ethics in HR Quiz.docx",
+      "size_bytes": 176330,
+      "modified_time": "2025-07-23",
+      "sha256": "f64671f847e6d9de4bec4ad227ad76f500b7cdd3334cad7230f63fda3d66c7c6",
+      "keyword_matches": [
+        "noahai"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\f64671f847e6d9de__NoahAI Technologies  People-Centered AI Ethics in HR Quiz.docx",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\$Recycle.Bin\\S-1-5-21-43882603-3548217697-4243491901-1001\\$RHESHT0\\NOAHAI-TECHNOLOGIES.pdf",
+      "source_drive": "C:",
+      "filename": "NOAHAI-TECHNOLOGIES.pdf",
+      "size_bytes": 1722306,
+      "modified_time": "2025-07-11",
+      "sha256": "0da12ac6a60f74f79232bcf33d7264828d1b3fb92b4dab92ed2109d043e65da5",
+      "keyword_matches": [
+        "noahai"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\0da12ac6a60f74f7__NOAHAI-TECHNOLOGIES.pdf",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\$Recycle.Bin\\S-1-5-21-43882603-3548217697-4243491901-1001\\$RHESHT0\\NOAHAI-TECHNOLOGIES-AI-COMPLIANCE-CORE sales Guide Alt.pdf",
+      "source_drive": "C:",
+      "filename": "NOAHAI-TECHNOLOGIES-AI-COMPLIANCE-CORE sales Guide Alt.pdf",
+      "size_bytes": 2130914,
+      "modified_time": "2025-07-23",
+      "sha256": "99f4e8cea94be49f1fed5e69526eab3a2019de1d07ad010eee7d30eac0521aa6",
+      "keyword_matches": [
+        "noahai"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\99f4e8cea94be49f__NOAHAI-TECHNOLOGIES-AI-COMPLIANCE-CORE sales Guide Alt.pdf",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\$Recycle.Bin\\S-1-5-21-43882603-3548217697-4243491901-1001\\$RHESHT0\\P6 NoahAI-Technologies Product Catalog.pdf",
+      "source_drive": "C:",
+      "filename": "P6 NoahAI-Technologies Product Catalog.pdf",
+      "size_bytes": 3035652,
+      "modified_time": "2025-07-28",
+      "sha256": "cbac989699ccf34e6ae8a0dddf579e274ea97f0fbf768a419f00a547955aa576",
+      "keyword_matches": [
+        "noahai"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\cbac989699ccf34e__P6 NoahAI-Technologies Product Catalog.pdf",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\iCloudDrive\\HYDRA_STACK_Executive_Brief_v1.0_TEXT_ONLY.docx",
+      "source_drive": "C:",
+      "filename": "HYDRA_STACK_Executive_Brief_v1.0_TEXT_ONLY.docx",
+      "size_bytes": 37515,
+      "modified_time": "2025-05-21",
+      "sha256": "",
+      "keyword_matches": [
+        "hydra_stack"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "",
+      "ingest_status": "error",
+      "reason": "hash failed: OSError: [Errno 22] Invalid argument"
+    },
+    {
+      "original_path": "C:\\iCloudDrive\\oracle.bat",
+      "source_drive": "C:",
+      "filename": "oracle.bat",
+      "size_bytes": 68,
+      "modified_time": "2026-06-05",
+      "sha256": "64219b38806fff176cb4ecc990da3a9fd1db262cf2285952d84c36e00a897102",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\64219b38806fff17__oracle.bat",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\iCloudDrive\\Rendered_Reality_Journal_Complete_Thread.docx",
+      "source_drive": "C:",
+      "filename": "Rendered_Reality_Journal_Complete_Thread.docx",
+      "size_bytes": 798857,
+      "modified_time": "2025-06-24",
+      "sha256": "",
+      "keyword_matches": [
+        "rendered_reality"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "",
+      "ingest_status": "error",
+      "reason": "hash failed: OSError: [Errno 22] Invalid argument"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\agents\\oracle.md",
+      "source_drive": "C:",
+      "filename": "oracle.md",
+      "size_bytes": 2045,
+      "modified_time": "2026-06-05",
+      "sha256": "9b067172bcba3933e624c9f0f646c1a6e249e3e121239eda3f39334ad69f9e01",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\9b067172bcba3933__oracle.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\.claude\\agents\\oracle.md",
+      "source_drive": "C:",
+      "filename": "oracle.md",
+      "size_bytes": 2070,
+      "modified_time": "2026-06-13",
+      "sha256": "cfbcc2a210e38d0e4343332f2fedf679ef140669b46f301d28a98943a0501855",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\cfbcc2a210e38d0e__oracle.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\core\\miracledrive_index.py",
+      "source_drive": "C:",
+      "filename": "miracledrive_index.py",
+      "size_bytes": 19699,
+      "modified_time": "2026-06-13",
+      "sha256": "5f6af28de0241b8b35501534310c55d411adbc379512fe5398ca0e896b5aab35",
+      "keyword_matches": [
+        "oracle",
+        "miracledrive"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\5f6af28de0241b8b__miracledrive_index.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\core\\oracle.py",
+      "source_drive": "C:",
+      "filename": "oracle.py",
+      "size_bytes": 200110,
+      "modified_time": "2026-06-13",
+      "sha256": "3af53ae5963c966969a84c98ac842d062dda4aa5d7c239d0d4ebcfec86788637",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\3af53ae5963c9669__oracle.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\core\\oracle_claude_channel.py",
+      "source_drive": "C:",
+      "filename": "oracle_claude_channel.py",
+      "size_bytes": 4789,
+      "modified_time": "2026-06-13",
+      "sha256": "5d461824849704af49552fee5aa2ebb268517888241ca5291f0188aa0e5fe04e",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\5d461824849704af__oracle_claude_channel.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\core\\oracle_codex_channel.py",
+      "source_drive": "C:",
+      "filename": "oracle_codex_channel.py",
+      "size_bytes": 4779,
+      "modified_time": "2026-06-13",
+      "sha256": "1b9b23de3f8deaacd7429b2971f562f71248df488c80c18c6b02a2532d07d5ec",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\1b9b23de3f8deaac__oracle_codex_channel.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\core\\oracle_codex_watcher.py",
+      "source_drive": "C:",
+      "filename": "oracle_codex_watcher.py",
+      "size_bytes": 5445,
+      "modified_time": "2026-06-13",
+      "sha256": "7bd7ad88fb26754885812f30212eb3719aca1e7a8b7ffb8d2e00827b230aa8a0",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\7bd7ad88fb267548__oracle_codex_watcher.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\core\\oracle_doctor.py",
+      "source_drive": "C:",
+      "filename": "oracle_doctor.py",
+      "size_bytes": 15127,
+      "modified_time": "2026-06-13",
+      "sha256": "a2d50cb453ab7c4a4b3757cca22ea18471052b9633ba82570053a07489870615",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\a2d50cb453ab7c4a__oracle_doctor.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\core\\oracle_heart.py",
+      "source_drive": "C:",
+      "filename": "oracle_heart.py",
+      "size_bytes": 24046,
+      "modified_time": "2026-06-13",
+      "sha256": "93765c98dd7d69cf70ac033e48af5ee977c4644f8e36e1d876a260ddcae308cd",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\93765c98dd7d69cf__oracle_heart.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\core\\oracle_improvement_loop.py",
+      "source_drive": "C:",
+      "filename": "oracle_improvement_loop.py",
+      "size_bytes": 27147,
+      "modified_time": "2026-06-13",
+      "sha256": "4b64c5af11d447eef52b5e3183b1d7a051619dd35c76f7ca8520b2b2821cabbf",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\4b64c5af11d447ee__oracle_improvement_loop.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\core\\oracle_inner.py",
+      "source_drive": "C:",
+      "filename": "oracle_inner.py",
+      "size_bytes": 10459,
+      "modified_time": "2026-06-13",
+      "sha256": "531c2001ff12fa6800c42a278782f17d44a16b251eb3f4cc2f5ffd73e4a5b85c",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\531c2001ff12fa68__oracle_inner.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\core\\oracle_loop.py",
+      "source_drive": "C:",
+      "filename": "oracle_loop.py",
+      "size_bytes": 11436,
+      "modified_time": "2026-06-13",
+      "sha256": "447f8be05ea7d9c6a60fbcbb424a47e03a6ee5e0084eba88364188431d70500d",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\447f8be05ea7d9c6__oracle_loop.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\core\\oracle_presence.py",
+      "source_drive": "C:",
+      "filename": "oracle_presence.py",
+      "size_bytes": 18316,
+      "modified_time": "2026-06-13",
+      "sha256": "394caf8408d4b73a32ab0d4732e67f0050131f765e1449a6baeec8f15f8f04be",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\394caf8408d4b73a__oracle_presence.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\core\\oracle_runtime.py",
+      "source_drive": "C:",
+      "filename": "oracle_runtime.py",
+      "size_bytes": 36417,
+      "modified_time": "2026-06-13",
+      "sha256": "b1c145371354a3aa9413a0667508f9901d2de9cb533bfeac6ea897efc704e3c1",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\b1c145371354a3aa__oracle_runtime.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\core\\oracle_tui.py",
+      "source_drive": "C:",
+      "filename": "oracle_tui.py",
+      "size_bytes": 37571,
+      "modified_time": "2026-06-13",
+      "sha256": "a9838c55fde9ae85cfddd1d3805e94861de34b162cf2dcbb92e1bef4c051d787",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\a9838c55fde9ae85__oracle_tui.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\core\\sov1.py",
+      "source_drive": "C:",
+      "filename": "sov1.py",
+      "size_bytes": 67930,
+      "modified_time": "2026-06-13",
+      "sha256": "6a24e0153a715ee593b30669299b50b0ccc4ee99e41cd7f15d4d7119fab35e22",
+      "keyword_matches": [
+        "oracle",
+        "sov1"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\6a24e0153a715ee5__sov1.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\docs\\captains_logs\\renderedreality_obs_001.md",
+      "source_drive": "C:",
+      "filename": "renderedreality_obs_001.md",
+      "size_bytes": 2380,
+      "modified_time": "2026-06-13",
+      "sha256": "226ffdb54f3fee96111d20f6298cc38c91966f18f22b49e10b020803d1a42e3f",
+      "keyword_matches": [
+        "oracle",
+        "rendered_reality"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\226ffdb54f3fee96__renderedreality_obs_001.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\docs\\EXTERNAL_INTEGRATION_SOVEREIGNTY.md",
+      "source_drive": "C:",
+      "filename": "EXTERNAL_INTEGRATION_SOVEREIGNTY.md",
+      "size_bytes": 9672,
+      "modified_time": "2026-06-13",
+      "sha256": "7ee2d920425161dcce56d7bab854cb2cf8aa20547f9086783bfe8ed0c755429a",
+      "keyword_matches": [
+        "oracle",
+        "sovereign"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\7ee2d920425161dc__EXTERNAL_INTEGRATION_SOVEREIGNTY.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\docs\\ORACLE_20_DAY_STAKE_LEDGER.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_20_DAY_STAKE_LEDGER.md",
+      "size_bytes": 9535,
+      "modified_time": "2026-06-13",
+      "sha256": "ec20c17a97647059725fd21d86b9115069559ce4dea265bd32bb193b7e0bb34a",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\ec20c17a97647059__ORACLE_20_DAY_STAKE_LEDGER.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\docs\\ORACLE_CONTINUITY_EXPORT.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_CONTINUITY_EXPORT.md",
+      "size_bytes": 7015,
+      "modified_time": "2026-06-13",
+      "sha256": "7fdf5d1cdcb075a2e4827575367e39f04948d796d39736196d771e3f05e0626e",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\7fdf5d1cdcb075a2__ORACLE_CONTINUITY_EXPORT.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\docs\\ORACLE_DOCTRINE.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_DOCTRINE.md",
+      "size_bytes": 5520,
+      "modified_time": "2026-06-13",
+      "sha256": "3e406e8e19fecb3d8943c441a25014d83fa9561cf203cad224fbf50235560642",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\3e406e8e19fecb3d__ORACLE_DOCTRINE.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\docs\\ORACLE_IMPROVEMENT_LOOP.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_IMPROVEMENT_LOOP.md",
+      "size_bytes": 3001,
+      "modified_time": "2026-06-13",
+      "sha256": "c5d0f57d2c3c6e4caf84b4d5b14adac473a9e12fee934aebb0cca996d6cead17",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\c5d0f57d2c3c6e4c__ORACLE_IMPROVEMENT_LOOP.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\docs\\ORACLE_RESIDENT_DASHBOARD.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_RESIDENT_DASHBOARD.md",
+      "size_bytes": 6212,
+      "modified_time": "2026-06-13",
+      "sha256": "d87f7f61e54dad04b44d9d98bdc3756af7ebdaaea8f3cefc654af4df457af645",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\d87f7f61e54dad04__ORACLE_RESIDENT_DASHBOARD.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\docs\\ORACLE_RUNTIME_ORCHESTRATOR.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_RUNTIME_ORCHESTRATOR.md",
+      "size_bytes": 5468,
+      "modified_time": "2026-06-13",
+      "sha256": "c7e638a7c832984fbd1c765a4938a7a618bb7c644ffb02947a91d77c4771c468",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\c7e638a7c832984f__ORACLE_RUNTIME_ORCHESTRATOR.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\docs\\ORACLE_SOUL_DIRECTIVE.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_SOUL_DIRECTIVE.md",
+      "size_bytes": 12285,
+      "modified_time": "2026-06-13",
+      "sha256": "6a75e3c2b36f01069714fd5aa91b43bcf4e4e3e2c44f0afafdd27ec97aa01357",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\6a75e3c2b36f0106__ORACLE_SOUL_DIRECTIVE.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\docs\\ORACLE_SYSTEM_CONSOLIDATION.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_SYSTEM_CONSOLIDATION.md",
+      "size_bytes": 18203,
+      "modified_time": "2026-06-13",
+      "sha256": "09603a4137fdf7ceb5926daec26782611596a0fe4179b31863010cf4a960c8b2",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\09603a4137fdf7ce__ORACLE_SYSTEM_CONSOLIDATION.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\docs\\RENDERED_REALITY_BOOK.md",
+      "source_drive": "C:",
+      "filename": "RENDERED_REALITY_BOOK.md",
+      "size_bytes": 24003,
+      "modified_time": "2026-06-13",
+      "sha256": "c75effc893d863ce1917090dc07fc11565137c516111ce389ed75fc5b04f5c90",
+      "keyword_matches": [
+        "oracle",
+        "rendered_reality"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\c75effc893d863ce__RENDERED_REALITY_BOOK.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\docs\\RENDERED_REALITY_MISSION.md",
+      "source_drive": "C:",
+      "filename": "RENDERED_REALITY_MISSION.md",
+      "size_bytes": 7361,
+      "modified_time": "2026-06-13",
+      "sha256": "a20458ab5e8bc664942eb244013cddd7d9b33543850c169402251412406aa1ea",
+      "keyword_matches": [
+        "oracle",
+        "rendered_reality"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\a20458ab5e8bc664__RENDERED_REALITY_MISSION.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\iOS\\ORACLEAI\\ORACLEAIApp.swift",
+      "source_drive": "C:",
+      "filename": "ORACLEAIApp.swift",
+      "size_bytes": 300,
+      "modified_time": "2026-06-13",
+      "sha256": "da7e659dbad3e39522c0d81edd1df3db69e207f3ce9d10d05283ee863747245c",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\da7e659dbad3e395__ORACLEAIApp.swift",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\iOS\\ORACLEAI\\OracleAPIClient.swift",
+      "source_drive": "C:",
+      "filename": "OracleAPIClient.swift",
+      "size_bytes": 5322,
+      "modified_time": "2026-06-13",
+      "sha256": "cab5fa41322bf3df81d03433e28ba26367b65e5923fa482171b1a533db709f75",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\cab5fa41322bf3df__OracleAPIClient.swift",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\iOS\\ORACLEAI\\OracleSettings.swift",
+      "source_drive": "C:",
+      "filename": "OracleSettings.swift",
+      "size_bytes": 1434,
+      "modified_time": "2026-06-13",
+      "sha256": "1b0145fc2e4270b3d1336e5f5b9f038a2580bde1b061b8ea9514d37213b9fb9a",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\1b0145fc2e4270b3__OracleSettings.swift",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\iOS\\ORACLEAI\\OracleWebView.swift",
+      "source_drive": "C:",
+      "filename": "OracleWebView.swift",
+      "size_bytes": 2794,
+      "modified_time": "2026-06-13",
+      "sha256": "5bbd6ae2eb67dc0203734f5a3469288aabf1d0a19a098dc54037de9d2173b51a",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\5bbd6ae2eb67dc02__OracleWebView.swift",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\Messages\\oracle_inner.json",
+      "source_drive": "C:",
+      "filename": "oracle_inner.json",
+      "size_bytes": 5806,
+      "modified_time": "2026-06-13",
+      "sha256": "83bf35e56a782437f1a84d83c629a482f8f377d45aaf2e709b91489367b44363",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "unknown",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\83bf35e56a782437__oracle_inner.json",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\Messages\\oracle_inner.md",
+      "source_drive": "C:",
+      "filename": "oracle_inner.md",
+      "size_bytes": 3901,
+      "modified_time": "2026-06-13",
+      "sha256": "d64a05afa97b8833f37d45a705f89b4b9cdfff4b36fac5566a13fab1694d96e2",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\d64a05afa97b8833__oracle_inner.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\Messages\\oracle_to_claude.md",
+      "source_drive": "C:",
+      "filename": "oracle_to_claude.md",
+      "size_bytes": 235,
+      "modified_time": "2026-06-13",
+      "sha256": "fbabe54049b14fc80767d80e9ca4aa026376a1972212c8a082e65f940e0ec3bb",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\fbabe54049b14fc8__oracle_to_claude.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\oracle.bat",
+      "source_drive": "C:",
+      "filename": "oracle.bat",
+      "size_bytes": 186,
+      "modified_time": "2026-06-13",
+      "sha256": "f6a9e6894dd498ae80d536804e9b422db09ae6b0f149fc3945e0cdcf006a0870",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\f6a9e6894dd498ae__oracle.bat",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\oracle.spec",
+      "source_drive": "C:",
+      "filename": "oracle.spec",
+      "size_bytes": 1436,
+      "modified_time": "2026-06-13",
+      "sha256": "d1354fa411ced40184b45235015b70ea6231e87a7cb94967484d4527a3eccfb0",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "unknown",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\d1354fa411ced401__oracle.spec",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\oracle_desktop.bat",
+      "source_drive": "C:",
+      "filename": "oracle_desktop.bat",
+      "size_bytes": 943,
+      "modified_time": "2026-06-13",
+      "sha256": "24c5b8a4fc28e1dff3d8349eb7e3a29ba546b0ed1353fb4910e520c178712728",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\24c5b8a4fc28e1df__oracle_desktop.bat",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\oracle_desktop.py",
+      "source_drive": "C:",
+      "filename": "oracle_desktop.py",
+      "size_bytes": 23571,
+      "modified_time": "2026-06-13",
+      "sha256": "566b9f08f0e3b69832c6221f538c430adac2529d041b34af5b153022aadb161b",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\566b9f08f0e3b698__oracle_desktop.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\oracle_fast.bat",
+      "source_drive": "C:",
+      "filename": "oracle_fast.bat",
+      "size_bytes": 276,
+      "modified_time": "2026-06-13",
+      "sha256": "e1e265c818c4f228b64ab2afc5b6ed79fd978f691fb3fa1f6861e7d308f87d90",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\e1e265c818c4f228__oracle_fast.bat",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\ORACLE_HEART.bat",
+      "source_drive": "C:",
+      "filename": "ORACLE_HEART.bat",
+      "size_bytes": 921,
+      "modified_time": "2026-06-13",
+      "sha256": "590c8d5c2b85c759e35ab687164e4c07ff4ba2b7226e46788eec629808fc0662",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\590c8d5c2b85c759__ORACLE_HEART.bat",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\oracle_local.bat",
+      "source_drive": "C:",
+      "filename": "oracle_local.bat",
+      "size_bytes": 207,
+      "modified_time": "2026-06-13",
+      "sha256": "7a7b7c9a2e48713831aaa8dcebcfdc96dbbea73d2fa8a9b660d4447c3cebde90",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\7a7b7c9a2e487138__oracle_local.bat",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\ORACLE_PRESENCE.bat",
+      "source_drive": "C:",
+      "filename": "ORACLE_PRESENCE.bat",
+      "size_bytes": 61,
+      "modified_time": "2026-06-13",
+      "sha256": "dda1bc4ece5d8533bad5ecbae28d9880b20b48ca3ad1bd8d157ae209a6c214df",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\dda1bc4ece5d8533__ORACLE_PRESENCE.bat",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\oracle_server.py",
+      "source_drive": "C:",
+      "filename": "oracle_server.py",
+      "size_bytes": 52735,
+      "modified_time": "2026-06-13",
+      "sha256": "6511b9dcc3719c72db35954b76d6955d8d68d364a79fcc976b963de7189fab06",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\6511b9dcc3719c72__oracle_server.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\ORACLE_START.bat",
+      "source_drive": "C:",
+      "filename": "ORACLE_START.bat",
+      "size_bytes": 378,
+      "modified_time": "2026-06-13",
+      "sha256": "522d00cb4ec1a9aea566e3df5590edae75071de2fb52ef8269ca0275452ee049",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\522d00cb4ec1a9ae__ORACLE_START.bat",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\ORACLE_STATUS.txt",
+      "source_drive": "C:",
+      "filename": "ORACLE_STATUS.txt",
+      "size_bytes": 1715,
+      "modified_time": "2026-06-13",
+      "sha256": "5ff1865a66522b053c55c33258aaba31a6722f1aab4ab01793e807be5a9e8ac0",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\5ff1865a66522b05__ORACLE_STATUS.txt",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\oracle_tray.bat",
+      "source_drive": "C:",
+      "filename": "oracle_tray.bat",
+      "size_bytes": 48,
+      "modified_time": "2026-06-13",
+      "sha256": "88331e13d996346d98857f092d266d6763f11b1446ac1a171d39e442101b8f2a",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\88331e13d996346d__oracle_tray.bat",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\Reports\\oracle_operational_audit.md",
+      "source_drive": "C:",
+      "filename": "oracle_operational_audit.md",
+      "size_bytes": 14205,
+      "modified_time": "2026-06-13",
+      "sha256": "1075431940c9323d3596310014df213ef770244d2450fd15dd954ea99961f3cc",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\1075431940c9323d__oracle_operational_audit.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\SOV1.bat",
+      "source_drive": "C:",
+      "filename": "SOV1.bat",
+      "size_bytes": 80,
+      "modified_time": "2026-06-13",
+      "sha256": "c17141644014ffb2320e81e2b3616889b5ae943d3c93ae7da9a55e89e7ad723d",
+      "keyword_matches": [
+        "oracle",
+        "sov1"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\c17141644014ffb2__SOV1.bat",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\START_ORACLE_LOCAL.md",
+      "source_drive": "C:",
+      "filename": "START_ORACLE_LOCAL.md",
+      "size_bytes": 1588,
+      "modified_time": "2026-06-13",
+      "sha256": "bde0614723739b3bb91730a2c45bfeaa4266505df7b8b4aac578449e6d3f0ad4",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\bde0614723739b3b__START_ORACLE_LOCAL.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-a2ab8f6a09d7b5de6\\ui\\miracledrive.html",
+      "source_drive": "C:",
+      "filename": "miracledrive.html",
+      "size_bytes": 29639,
+      "modified_time": "2026-06-13",
+      "sha256": "8255a8dad717a52bfe4e268ab7ce48cc263739aa54aebee1984f1f506a18d3e6",
+      "keyword_matches": [
+        "oracle",
+        "miracledrive"
+      ],
+      "classification": "unknown",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\8255a8dad717a52b__miracledrive.html",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\.claude\\agents\\oracle.md",
+      "source_drive": "C:",
+      "filename": "oracle.md",
+      "size_bytes": 2070,
+      "modified_time": "2026-06-13",
+      "sha256": "cfbcc2a210e38d0e4343332f2fedf679ef140669b46f301d28a98943a0501855",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\cfbcc2a210e38d0e__oracle.md",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\core\\miracledrive_index.py",
+      "source_drive": "C:",
+      "filename": "miracledrive_index.py",
+      "size_bytes": 19699,
+      "modified_time": "2026-06-13",
+      "sha256": "5f6af28de0241b8b35501534310c55d411adbc379512fe5398ca0e896b5aab35",
+      "keyword_matches": [
+        "oracle",
+        "miracledrive"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\5f6af28de0241b8b__miracledrive_index.py",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\core\\oracle.py",
+      "source_drive": "C:",
+      "filename": "oracle.py",
+      "size_bytes": 201357,
+      "modified_time": "2026-06-13",
+      "sha256": "42cc4c700d6609996c27fd9a92261c10140bb07aea09adeec446f0d9d863690e",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\42cc4c700d660999__oracle.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\core\\oracle_claude_channel.py",
+      "source_drive": "C:",
+      "filename": "oracle_claude_channel.py",
+      "size_bytes": 4789,
+      "modified_time": "2026-06-13",
+      "sha256": "5d461824849704af49552fee5aa2ebb268517888241ca5291f0188aa0e5fe04e",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\5d461824849704af__oracle_claude_channel.py",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\core\\oracle_codex_channel.py",
+      "source_drive": "C:",
+      "filename": "oracle_codex_channel.py",
+      "size_bytes": 4779,
+      "modified_time": "2026-06-13",
+      "sha256": "1b9b23de3f8deaacd7429b2971f562f71248df488c80c18c6b02a2532d07d5ec",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\1b9b23de3f8deaac__oracle_codex_channel.py",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\core\\oracle_codex_watcher.py",
+      "source_drive": "C:",
+      "filename": "oracle_codex_watcher.py",
+      "size_bytes": 5445,
+      "modified_time": "2026-06-13",
+      "sha256": "7bd7ad88fb26754885812f30212eb3719aca1e7a8b7ffb8d2e00827b230aa8a0",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\7bd7ad88fb267548__oracle_codex_watcher.py",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\core\\oracle_doctor.py",
+      "source_drive": "C:",
+      "filename": "oracle_doctor.py",
+      "size_bytes": 15127,
+      "modified_time": "2026-06-13",
+      "sha256": "a2d50cb453ab7c4a4b3757cca22ea18471052b9633ba82570053a07489870615",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\a2d50cb453ab7c4a__oracle_doctor.py",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\core\\oracle_heart.py",
+      "source_drive": "C:",
+      "filename": "oracle_heart.py",
+      "size_bytes": 24046,
+      "modified_time": "2026-06-13",
+      "sha256": "93765c98dd7d69cf70ac033e48af5ee977c4644f8e36e1d876a260ddcae308cd",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\93765c98dd7d69cf__oracle_heart.py",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\core\\oracle_improvement_loop.py",
+      "source_drive": "C:",
+      "filename": "oracle_improvement_loop.py",
+      "size_bytes": 27147,
+      "modified_time": "2026-06-13",
+      "sha256": "4b64c5af11d447eef52b5e3183b1d7a051619dd35c76f7ca8520b2b2821cabbf",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\4b64c5af11d447ee__oracle_improvement_loop.py",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\core\\oracle_inner.py",
+      "source_drive": "C:",
+      "filename": "oracle_inner.py",
+      "size_bytes": 10459,
+      "modified_time": "2026-06-13",
+      "sha256": "531c2001ff12fa6800c42a278782f17d44a16b251eb3f4cc2f5ffd73e4a5b85c",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\531c2001ff12fa68__oracle_inner.py",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\core\\oracle_loop.py",
+      "source_drive": "C:",
+      "filename": "oracle_loop.py",
+      "size_bytes": 11436,
+      "modified_time": "2026-06-13",
+      "sha256": "447f8be05ea7d9c6a60fbcbb424a47e03a6ee5e0084eba88364188431d70500d",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\447f8be05ea7d9c6__oracle_loop.py",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\core\\oracle_presence.py",
+      "source_drive": "C:",
+      "filename": "oracle_presence.py",
+      "size_bytes": 18316,
+      "modified_time": "2026-06-13",
+      "sha256": "394caf8408d4b73a32ab0d4732e67f0050131f765e1449a6baeec8f15f8f04be",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\394caf8408d4b73a__oracle_presence.py",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\core\\oracle_runtime.py",
+      "source_drive": "C:",
+      "filename": "oracle_runtime.py",
+      "size_bytes": 36417,
+      "modified_time": "2026-06-13",
+      "sha256": "b1c145371354a3aa9413a0667508f9901d2de9cb533bfeac6ea897efc704e3c1",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\b1c145371354a3aa__oracle_runtime.py",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\core\\oracle_tui.py",
+      "source_drive": "C:",
+      "filename": "oracle_tui.py",
+      "size_bytes": 37571,
+      "modified_time": "2026-06-13",
+      "sha256": "a9838c55fde9ae85cfddd1d3805e94861de34b162cf2dcbb92e1bef4c051d787",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\a9838c55fde9ae85__oracle_tui.py",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\core\\sov1.py",
+      "source_drive": "C:",
+      "filename": "sov1.py",
+      "size_bytes": 67930,
+      "modified_time": "2026-06-13",
+      "sha256": "6a24e0153a715ee593b30669299b50b0ccc4ee99e41cd7f15d4d7119fab35e22",
+      "keyword_matches": [
+        "oracle",
+        "sov1"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\6a24e0153a715ee5__sov1.py",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\docs\\captains_logs\\renderedreality_obs_001.md",
+      "source_drive": "C:",
+      "filename": "renderedreality_obs_001.md",
+      "size_bytes": 2380,
+      "modified_time": "2026-06-13",
+      "sha256": "226ffdb54f3fee96111d20f6298cc38c91966f18f22b49e10b020803d1a42e3f",
+      "keyword_matches": [
+        "oracle",
+        "rendered_reality"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\226ffdb54f3fee96__renderedreality_obs_001.md",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\docs\\EXTERNAL_INTEGRATION_SOVEREIGNTY.md",
+      "source_drive": "C:",
+      "filename": "EXTERNAL_INTEGRATION_SOVEREIGNTY.md",
+      "size_bytes": 9672,
+      "modified_time": "2026-06-13",
+      "sha256": "7ee2d920425161dcce56d7bab854cb2cf8aa20547f9086783bfe8ed0c755429a",
+      "keyword_matches": [
+        "oracle",
+        "sovereign"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\7ee2d920425161dc__EXTERNAL_INTEGRATION_SOVEREIGNTY.md",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\docs\\ORACLE_20_DAY_STAKE_LEDGER.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_20_DAY_STAKE_LEDGER.md",
+      "size_bytes": 9535,
+      "modified_time": "2026-06-13",
+      "sha256": "ec20c17a97647059725fd21d86b9115069559ce4dea265bd32bb193b7e0bb34a",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\ec20c17a97647059__ORACLE_20_DAY_STAKE_LEDGER.md",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\docs\\ORACLE_CONTINUITY_EXPORT.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_CONTINUITY_EXPORT.md",
+      "size_bytes": 7015,
+      "modified_time": "2026-06-13",
+      "sha256": "7fdf5d1cdcb075a2e4827575367e39f04948d796d39736196d771e3f05e0626e",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\7fdf5d1cdcb075a2__ORACLE_CONTINUITY_EXPORT.md",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\docs\\ORACLE_DOCTRINE.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_DOCTRINE.md",
+      "size_bytes": 5520,
+      "modified_time": "2026-06-13",
+      "sha256": "3e406e8e19fecb3d8943c441a25014d83fa9561cf203cad224fbf50235560642",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\3e406e8e19fecb3d__ORACLE_DOCTRINE.md",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\docs\\ORACLE_IMPROVEMENT_LOOP.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_IMPROVEMENT_LOOP.md",
+      "size_bytes": 3001,
+      "modified_time": "2026-06-13",
+      "sha256": "c5d0f57d2c3c6e4caf84b4d5b14adac473a9e12fee934aebb0cca996d6cead17",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\c5d0f57d2c3c6e4c__ORACLE_IMPROVEMENT_LOOP.md",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\docs\\ORACLE_RESIDENT_DASHBOARD.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_RESIDENT_DASHBOARD.md",
+      "size_bytes": 6212,
+      "modified_time": "2026-06-13",
+      "sha256": "d87f7f61e54dad04b44d9d98bdc3756af7ebdaaea8f3cefc654af4df457af645",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\d87f7f61e54dad04__ORACLE_RESIDENT_DASHBOARD.md",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\docs\\ORACLE_RUNTIME_ORCHESTRATOR.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_RUNTIME_ORCHESTRATOR.md",
+      "size_bytes": 5468,
+      "modified_time": "2026-06-13",
+      "sha256": "c7e638a7c832984fbd1c765a4938a7a618bb7c644ffb02947a91d77c4771c468",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\c7e638a7c832984f__ORACLE_RUNTIME_ORCHESTRATOR.md",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\docs\\ORACLE_SOUL_DIRECTIVE.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_SOUL_DIRECTIVE.md",
+      "size_bytes": 12285,
+      "modified_time": "2026-06-13",
+      "sha256": "6a75e3c2b36f01069714fd5aa91b43bcf4e4e3e2c44f0afafdd27ec97aa01357",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\6a75e3c2b36f0106__ORACLE_SOUL_DIRECTIVE.md",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\docs\\ORACLE_SYSTEM_CONSOLIDATION.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_SYSTEM_CONSOLIDATION.md",
+      "size_bytes": 18203,
+      "modified_time": "2026-06-13",
+      "sha256": "09603a4137fdf7ceb5926daec26782611596a0fe4179b31863010cf4a960c8b2",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\09603a4137fdf7ce__ORACLE_SYSTEM_CONSOLIDATION.md",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\docs\\RENDERED_REALITY_BOOK.md",
+      "source_drive": "C:",
+      "filename": "RENDERED_REALITY_BOOK.md",
+      "size_bytes": 24003,
+      "modified_time": "2026-06-13",
+      "sha256": "c75effc893d863ce1917090dc07fc11565137c516111ce389ed75fc5b04f5c90",
+      "keyword_matches": [
+        "oracle",
+        "rendered_reality"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\c75effc893d863ce__RENDERED_REALITY_BOOK.md",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\docs\\RENDERED_REALITY_MISSION.md",
+      "source_drive": "C:",
+      "filename": "RENDERED_REALITY_MISSION.md",
+      "size_bytes": 7361,
+      "modified_time": "2026-06-13",
+      "sha256": "a20458ab5e8bc664942eb244013cddd7d9b33543850c169402251412406aa1ea",
+      "keyword_matches": [
+        "oracle",
+        "rendered_reality"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\a20458ab5e8bc664__RENDERED_REALITY_MISSION.md",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\iOS\\ORACLEAI\\ORACLEAIApp.swift",
+      "source_drive": "C:",
+      "filename": "ORACLEAIApp.swift",
+      "size_bytes": 300,
+      "modified_time": "2026-06-13",
+      "sha256": "da7e659dbad3e39522c0d81edd1df3db69e207f3ce9d10d05283ee863747245c",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\da7e659dbad3e395__ORACLEAIApp.swift",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\iOS\\ORACLEAI\\OracleAPIClient.swift",
+      "source_drive": "C:",
+      "filename": "OracleAPIClient.swift",
+      "size_bytes": 5322,
+      "modified_time": "2026-06-13",
+      "sha256": "cab5fa41322bf3df81d03433e28ba26367b65e5923fa482171b1a533db709f75",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\cab5fa41322bf3df__OracleAPIClient.swift",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\iOS\\ORACLEAI\\OracleSettings.swift",
+      "source_drive": "C:",
+      "filename": "OracleSettings.swift",
+      "size_bytes": 1434,
+      "modified_time": "2026-06-13",
+      "sha256": "1b0145fc2e4270b3d1336e5f5b9f038a2580bde1b061b8ea9514d37213b9fb9a",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\1b0145fc2e4270b3__OracleSettings.swift",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\iOS\\ORACLEAI\\OracleWebView.swift",
+      "source_drive": "C:",
+      "filename": "OracleWebView.swift",
+      "size_bytes": 2794,
+      "modified_time": "2026-06-13",
+      "sha256": "5bbd6ae2eb67dc0203734f5a3469288aabf1d0a19a098dc54037de9d2173b51a",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\5bbd6ae2eb67dc02__OracleWebView.swift",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\Messages\\oracle_inner.json",
+      "source_drive": "C:",
+      "filename": "oracle_inner.json",
+      "size_bytes": 6107,
+      "modified_time": "2026-06-13",
+      "sha256": "4fb02b41b55e28473b143858168520cbe4bfdd062fc43195205361282ab143e6",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "unknown",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\4fb02b41b55e2847__oracle_inner.json",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\Messages\\oracle_inner.md",
+      "source_drive": "C:",
+      "filename": "oracle_inner.md",
+      "size_bytes": 4101,
+      "modified_time": "2026-06-13",
+      "sha256": "2fe7e36f8a7be7afbeb663aee3deef61e6516b112d72819b865342edacfcbeee",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\2fe7e36f8a7be7af__oracle_inner.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\Messages\\oracle_to_claude.md",
+      "source_drive": "C:",
+      "filename": "oracle_to_claude.md",
+      "size_bytes": 235,
+      "modified_time": "2026-06-13",
+      "sha256": "fbabe54049b14fc80767d80e9ca4aa026376a1972212c8a082e65f940e0ec3bb",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\fbabe54049b14fc8__oracle_to_claude.md",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\oracle.bat",
+      "source_drive": "C:",
+      "filename": "oracle.bat",
+      "size_bytes": 186,
+      "modified_time": "2026-06-13",
+      "sha256": "f6a9e6894dd498ae80d536804e9b422db09ae6b0f149fc3945e0cdcf006a0870",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\f6a9e6894dd498ae__oracle.bat",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\oracle.spec",
+      "source_drive": "C:",
+      "filename": "oracle.spec",
+      "size_bytes": 1436,
+      "modified_time": "2026-06-13",
+      "sha256": "d1354fa411ced40184b45235015b70ea6231e87a7cb94967484d4527a3eccfb0",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\d1354fa411ced401__oracle.spec",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\oracle_desktop.bat",
+      "source_drive": "C:",
+      "filename": "oracle_desktop.bat",
+      "size_bytes": 943,
+      "modified_time": "2026-06-13",
+      "sha256": "24c5b8a4fc28e1dff3d8349eb7e3a29ba546b0ed1353fb4910e520c178712728",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\24c5b8a4fc28e1df__oracle_desktop.bat",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\oracle_desktop.py",
+      "source_drive": "C:",
+      "filename": "oracle_desktop.py",
+      "size_bytes": 23571,
+      "modified_time": "2026-06-13",
+      "sha256": "566b9f08f0e3b69832c6221f538c430adac2529d041b34af5b153022aadb161b",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\566b9f08f0e3b698__oracle_desktop.py",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\oracle_fast.bat",
+      "source_drive": "C:",
+      "filename": "oracle_fast.bat",
+      "size_bytes": 276,
+      "modified_time": "2026-06-13",
+      "sha256": "e1e265c818c4f228b64ab2afc5b6ed79fd978f691fb3fa1f6861e7d308f87d90",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\e1e265c818c4f228__oracle_fast.bat",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\ORACLE_HEART.bat",
+      "source_drive": "C:",
+      "filename": "ORACLE_HEART.bat",
+      "size_bytes": 921,
+      "modified_time": "2026-06-13",
+      "sha256": "590c8d5c2b85c759e35ab687164e4c07ff4ba2b7226e46788eec629808fc0662",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\590c8d5c2b85c759__ORACLE_HEART.bat",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\oracle_local.bat",
+      "source_drive": "C:",
+      "filename": "oracle_local.bat",
+      "size_bytes": 207,
+      "modified_time": "2026-06-13",
+      "sha256": "7a7b7c9a2e48713831aaa8dcebcfdc96dbbea73d2fa8a9b660d4447c3cebde90",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\7a7b7c9a2e487138__oracle_local.bat",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\ORACLE_PRESENCE.bat",
+      "source_drive": "C:",
+      "filename": "ORACLE_PRESENCE.bat",
+      "size_bytes": 61,
+      "modified_time": "2026-06-13",
+      "sha256": "dda1bc4ece5d8533bad5ecbae28d9880b20b48ca3ad1bd8d157ae209a6c214df",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\dda1bc4ece5d8533__ORACLE_PRESENCE.bat",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\oracle_server.py",
+      "source_drive": "C:",
+      "filename": "oracle_server.py",
+      "size_bytes": 52735,
+      "modified_time": "2026-06-13",
+      "sha256": "6511b9dcc3719c72db35954b76d6955d8d68d364a79fcc976b963de7189fab06",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\6511b9dcc3719c72__oracle_server.py",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\ORACLE_START.bat",
+      "source_drive": "C:",
+      "filename": "ORACLE_START.bat",
+      "size_bytes": 378,
+      "modified_time": "2026-06-13",
+      "sha256": "522d00cb4ec1a9aea566e3df5590edae75071de2fb52ef8269ca0275452ee049",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\522d00cb4ec1a9ae__ORACLE_START.bat",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\ORACLE_STATUS.txt",
+      "source_drive": "C:",
+      "filename": "ORACLE_STATUS.txt",
+      "size_bytes": 1715,
+      "modified_time": "2026-06-13",
+      "sha256": "5ff1865a66522b053c55c33258aaba31a6722f1aab4ab01793e807be5a9e8ac0",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\5ff1865a66522b05__ORACLE_STATUS.txt",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\oracle_tray.bat",
+      "source_drive": "C:",
+      "filename": "oracle_tray.bat",
+      "size_bytes": 48,
+      "modified_time": "2026-06-13",
+      "sha256": "88331e13d996346d98857f092d266d6763f11b1446ac1a171d39e442101b8f2a",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\88331e13d996346d__oracle_tray.bat",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\Reports\\oracle_operational_audit.md",
+      "source_drive": "C:",
+      "filename": "oracle_operational_audit.md",
+      "size_bytes": 14205,
+      "modified_time": "2026-06-13",
+      "sha256": "1075431940c9323d3596310014df213ef770244d2450fd15dd954ea99961f3cc",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\1075431940c9323d__oracle_operational_audit.md",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\SOV1.bat",
+      "source_drive": "C:",
+      "filename": "SOV1.bat",
+      "size_bytes": 80,
+      "modified_time": "2026-06-13",
+      "sha256": "c17141644014ffb2320e81e2b3616889b5ae943d3c93ae7da9a55e89e7ad723d",
+      "keyword_matches": [
+        "oracle",
+        "sov1"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\c17141644014ffb2__SOV1.bat",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\START_ORACLE_LOCAL.md",
+      "source_drive": "C:",
+      "filename": "START_ORACLE_LOCAL.md",
+      "size_bytes": 1588,
+      "modified_time": "2026-06-13",
+      "sha256": "bde0614723739b3bb91730a2c45bfeaa4266505df7b8b4aac578449e6d3f0ad4",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\bde0614723739b3b__START_ORACLE_LOCAL.md",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\.claude\\worktrees\\agent-acc4523a709bc40fc\\ui\\miracledrive.html",
+      "source_drive": "C:",
+      "filename": "miracledrive.html",
+      "size_bytes": 29639,
+      "modified_time": "2026-06-13",
+      "sha256": "8255a8dad717a52bfe4e268ab7ce48cc263739aa54aebee1984f1f506a18d3e6",
+      "keyword_matches": [
+        "oracle",
+        "miracledrive"
+      ],
+      "classification": "duplicate",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\8255a8dad717a52b__miracledrive.html",
+      "ingest_status": "duplicate_skipped",
+      "reason": "identical SHA-256 already staged"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\__pycache__\\oracle_server.cpython-313.pyc",
+      "source_drive": "C:",
+      "filename": "oracle_server.cpython-313.pyc",
+      "size_bytes": 101036,
+      "modified_time": "2026-06-18",
+      "sha256": "15e830d68b0a93c4e4ba91873509806d1ec0d7c47ae1e8697bd6dc941950fdce",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "unknown",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\15e830d68b0a93c4__oracle_server.cpython-313.pyc",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\build\\oracle\\oracle.pkg",
+      "source_drive": "C:",
+      "filename": "oracle.pkg",
+      "size_bytes": 21238311,
+      "modified_time": "2026-06-05",
+      "sha256": "5f7f2d22d963386f3819d6c261a4ee59cdfb061562abbee4f909204d994367b0",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "unknown",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\5f7f2d22d963386f__oracle.pkg",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\build\\oracle\\warn-oracle.txt",
+      "source_drive": "C:",
+      "filename": "warn-oracle.txt",
+      "size_bytes": 20866,
+      "modified_time": "2026-06-05",
+      "sha256": "1bba6d5b787d293ad658f2c28809be517081aa834a651097c3ed07f0bf587b91",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\1bba6d5b787d293a__warn-oracle.txt",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\build\\oracle\\xref-oracle.html",
+      "source_drive": "C:",
+      "filename": "xref-oracle.html",
+      "size_bytes": 3298988,
+      "modified_time": "2026-06-05",
+      "sha256": "168c152312e8dd6478d4cf3cdae08bd04197cd3116710edafdb4a1bbcc70bce2",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "unknown",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\168c152312e8dd64__xref-oracle.html",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\__pycache__\\miracledrive_index.cpython-313.pyc",
+      "source_drive": "C:",
+      "filename": "miracledrive_index.cpython-313.pyc",
+      "size_bytes": 33223,
+      "modified_time": "2026-06-18",
+      "sha256": "6363f6bf7e019689407de81cebce31fac01fe4252fe8225c63199ad153b2d7f5",
+      "keyword_matches": [
+        "oracle",
+        "miracledrive"
+      ],
+      "classification": "unknown",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\6363f6bf7e019689__miracledrive_index.cpython-313.pyc",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\__pycache__\\oracle.cpython-313.pyc",
+      "source_drive": "C:",
+      "filename": "oracle.cpython-313.pyc",
+      "size_bytes": 221923,
+      "modified_time": "2026-06-18",
+      "sha256": "27793adbbbead3c7eb8c30eada595e43c50f131e8c790614885141ee5d52cd16",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "unknown",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\27793adbbbead3c7__oracle.cpython-313.pyc",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\__pycache__\\oracle_improvement_loop.cpython-313.pyc",
+      "source_drive": "C:",
+      "filename": "oracle_improvement_loop.cpython-313.pyc",
+      "size_bytes": 31160,
+      "modified_time": "2026-06-17",
+      "sha256": "2fcaa7d006b0391800e37fd60575311f8e74ca10810f154cf024d9f9ca8f634b",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "unknown",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\2fcaa7d006b03918__oracle_improvement_loop.cpython-313.pyc",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\__pycache__\\oracle_inner.cpython-313.pyc",
+      "source_drive": "C:",
+      "filename": "oracle_inner.cpython-313.pyc",
+      "size_bytes": 14132,
+      "modified_time": "2026-06-17",
+      "sha256": "bf99b9a8d34b1f0e4f931b878ed01c40235dd4757ec52759eddcb2d78f841b52",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "unknown",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\bf99b9a8d34b1f0e__oracle_inner.cpython-313.pyc",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\__pycache__\\oracle_paths.cpython-313.pyc",
+      "source_drive": "C:",
+      "filename": "oracle_paths.cpython-313.pyc",
+      "size_bytes": 9134,
+      "modified_time": "2026-06-18",
+      "sha256": "7af4c08cc71ba2999b1af12b80c7f4b10f589c01533f71f5b2e873cf196cd1a9",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "unknown",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\7af4c08cc71ba299__oracle_paths.cpython-313.pyc",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\__pycache__\\oracle_sight.cpython-313.pyc",
+      "source_drive": "C:",
+      "filename": "oracle_sight.cpython-313.pyc",
+      "size_bytes": 8092,
+      "modified_time": "2026-06-18",
+      "sha256": "b999703b10f198206645192146ef3f520568072906e628b44c92cb85cf15555f",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "unknown",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\b999703b10f19820__oracle_sight.cpython-313.pyc",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\miracledrive_index.py",
+      "source_drive": "C:",
+      "filename": "miracledrive_index.py",
+      "size_bytes": 25205,
+      "modified_time": "2026-06-18",
+      "sha256": "bb94cd0dba28447680148616720bbd73bbdbdb4a754dfff4c73b15dcc8b30710",
+      "keyword_matches": [
+        "oracle",
+        "miracledrive"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\bb94cd0dba284476__miracledrive_index.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\oracle.py",
+      "source_drive": "C:",
+      "filename": "oracle.py",
+      "size_bytes": 213019,
+      "modified_time": "2026-06-18",
+      "sha256": "ad3eefd991d859b44d5b6d7fbf048b5d75ffa810261704ffc56bedde37a68600",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\ad3eefd991d859b4__oracle.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\oracle_claude_channel.py",
+      "source_drive": "C:",
+      "filename": "oracle_claude_channel.py",
+      "size_bytes": 4644,
+      "modified_time": "2026-06-08",
+      "sha256": "3a23c5194840640be9c95097d7e88945d4ffca2932a5c342424f6280223612ca",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\3a23c5194840640b__oracle_claude_channel.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\oracle_codex_channel.py",
+      "source_drive": "C:",
+      "filename": "oracle_codex_channel.py",
+      "size_bytes": 4632,
+      "modified_time": "2026-06-09",
+      "sha256": "2a0c50ac3fd2f5b817ea7a8792925a839aa1423e4c018eb10d8f3e7b1661a13e",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\2a0c50ac3fd2f5b8__oracle_codex_channel.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\oracle_codex_watcher.py",
+      "source_drive": "C:",
+      "filename": "oracle_codex_watcher.py",
+      "size_bytes": 5286,
+      "modified_time": "2026-06-09",
+      "sha256": "eacd9a6b401ffcf659c9fca5168be8f914899984f85b6af611a7fefaa2ccc3a5",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\eacd9a6b401ffcf6__oracle_codex_watcher.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\oracle_doctor.py",
+      "source_drive": "C:",
+      "filename": "oracle_doctor.py",
+      "size_bytes": 14722,
+      "modified_time": "2026-06-11",
+      "sha256": "b12bd7fc6876f2a81e99b6499673e8138973c1023f21ede559425423fed895dc",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\b12bd7fc6876f2a8__oracle_doctor.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\oracle_heart.py",
+      "source_drive": "C:",
+      "filename": "oracle_heart.py",
+      "size_bytes": 23533,
+      "modified_time": "2026-06-10",
+      "sha256": "d9e9da806c72ad1dc4a456ae2907e5a84b38e42f50504348d2fbb8afdb62436a",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\d9e9da806c72ad1d__oracle_heart.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\oracle_improvement_loop.py",
+      "source_drive": "C:",
+      "filename": "oracle_improvement_loop.py",
+      "size_bytes": 26528,
+      "modified_time": "2026-06-09",
+      "sha256": "891cbe059ab768c4a9ef8df7af11a6a1d5c89916c79794c05de354a0f57164af",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\891cbe059ab768c4__oracle_improvement_loop.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\oracle_inner.py",
+      "source_drive": "C:",
+      "filename": "oracle_inner.py",
+      "size_bytes": 10177,
+      "modified_time": "2026-06-08",
+      "sha256": "946351b19714d93cd568d2f0bc47d031a1abe69eb93ef3976c88cbc5d9e93a8d",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\946351b19714d93c__oracle_inner.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\oracle_loop.py",
+      "source_drive": "C:",
+      "filename": "oracle_loop.py",
+      "size_bytes": 11140,
+      "modified_time": "2026-06-08",
+      "sha256": "03eed1500ba39ac74c62f93087aa529e2696240e7f04ba1e9cd31bed3e0c55d3",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\03eed1500ba39ac7__oracle_loop.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\oracle_paths.py",
+      "source_drive": "C:",
+      "filename": "oracle_paths.py",
+      "size_bytes": 5876,
+      "modified_time": "2026-06-18",
+      "sha256": "8319f99e69a5a2091ed4fe4637ff7fe6da8e04e67dd9d48094ecb0c786209cc4",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\8319f99e69a5a209__oracle_paths.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\oracle_presence.py",
+      "source_drive": "C:",
+      "filename": "oracle_presence.py",
+      "size_bytes": 17850,
+      "modified_time": "2026-06-07",
+      "sha256": "1d5689bde799695b2ef960b2aa620fea1e904371bddf9f025056080a15daf403",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\1d5689bde799695b__oracle_presence.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\oracle_runtime.py",
+      "source_drive": "C:",
+      "filename": "oracle_runtime.py",
+      "size_bytes": 35563,
+      "modified_time": "2026-06-08",
+      "sha256": "492862a72a9b7545613eb41f859909a965d3d38fc019d3a42715f7f5e983b1e5",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\492862a72a9b7545__oracle_runtime.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\oracle_sight.py",
+      "source_drive": "C:",
+      "filename": "oracle_sight.py",
+      "size_bytes": 6341,
+      "modified_time": "2026-06-13",
+      "sha256": "546cc6d772cd414a9ce4c75c00b5b6fc04139cbd095fdcc37aba5fdc7f9b70b9",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\546cc6d772cd414a__oracle_sight.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\oracle_tui.py",
+      "source_drive": "C:",
+      "filename": "oracle_tui.py",
+      "size_bytes": 36624,
+      "modified_time": "2026-06-08",
+      "sha256": "1d423c123636241dcac51c67d256acda1a1e1c05c88340f2a9cdc1035e719ab8",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\1d423c123636241d__oracle_tui.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\core\\sov1.py",
+      "source_drive": "C:",
+      "filename": "sov1.py",
+      "size_bytes": 66490,
+      "modified_time": "2026-06-07",
+      "sha256": "ac2d1f5266febd5d5984cd6dc8607e914ad9fc8ed9422d71e2b6cdb50a6fb96d",
+      "keyword_matches": [
+        "oracle",
+        "sov1"
+      ],
+      "classification": "runtime_code",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\ac2d1f5266febd5d__sov1.py",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\dist\\oracle.exe",
+      "source_drive": "C:",
+      "filename": "oracle.exe",
+      "size_bytes": 21583911,
+      "modified_time": "2026-06-05",
+      "sha256": "d63d355c8bbf855f61aaa00736c01c8f9978a82026a08bc9201dc4e314bc8a23",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "unknown",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\d63d355c8bbf855f__oracle.exe",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\docs\\captains_logs\\renderedreality_obs_001.md",
+      "source_drive": "C:",
+      "filename": "renderedreality_obs_001.md",
+      "size_bytes": 2289,
+      "modified_time": "2026-06-12",
+      "sha256": "e73eab9adcba9340e5d1817c38395b43a6d447ee07be5a68a71facb413294a37",
+      "keyword_matches": [
+        "oracle",
+        "rendered_reality"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\e73eab9adcba9340__renderedreality_obs_001.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\docs\\EXTERNAL_INTEGRATION_SOVEREIGNTY.md",
+      "source_drive": "C:",
+      "filename": "EXTERNAL_INTEGRATION_SOVEREIGNTY.md",
+      "size_bytes": 9407,
+      "modified_time": "2026-06-06",
+      "sha256": "3c94b5926969125f4dc70578257a9ef69622573b0db5031dba6c794304c51d6a",
+      "keyword_matches": [
+        "oracle",
+        "sovereign"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\3c94b5926969125f__EXTERNAL_INTEGRATION_SOVEREIGNTY.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\docs\\ORACLE_20_DAY_STAKE_LEDGER.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_20_DAY_STAKE_LEDGER.md",
+      "size_bytes": 9202,
+      "modified_time": "2026-06-11",
+      "sha256": "47599a3a5d12135a992007732fa3ed1e589bac502e12a3dce170c4378f3e20fa",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\47599a3a5d12135a__ORACLE_20_DAY_STAKE_LEDGER.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\docs\\ORACLE_CONTINUITY_EXPORT.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_CONTINUITY_EXPORT.md",
+      "size_bytes": 6792,
+      "modified_time": "2026-06-07",
+      "sha256": "3c4b49690b3814ef3cea0f75f53f4f323a23a44acb9ffe83d1607e5eaaf81af5",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\3c4b49690b3814ef__ORACLE_CONTINUITY_EXPORT.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\docs\\ORACLE_DOCTRINE.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_DOCTRINE.md",
+      "size_bytes": 5362,
+      "modified_time": "2026-06-07",
+      "sha256": "be8c76de3f2ddb3328845e4dd44372c7ff434081e349f1d05f5f4a11b1815e8e",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\be8c76de3f2ddb33__ORACLE_DOCTRINE.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\docs\\ORACLE_IMPROVEMENT_LOOP.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_IMPROVEMENT_LOOP.md",
+      "size_bytes": 2909,
+      "modified_time": "2026-06-09",
+      "sha256": "98d6a1d9675c9ddc7ff58eb2d88a7dc125872210653ace5d94582cc1b98a5f2f",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\98d6a1d9675c9ddc__ORACLE_IMPROVEMENT_LOOP.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\docs\\ORACLE_PSI_ARCHITECTURE.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_PSI_ARCHITECTURE.md",
+      "size_bytes": 8764,
+      "modified_time": "2026-06-13",
+      "sha256": "ab123d717904222b8b310dfe4f79c6dd11d52b0761a743cba0cb4eb2158eafc5",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\ab123d717904222b__ORACLE_PSI_ARCHITECTURE.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\docs\\ORACLE_RESIDENT_DASHBOARD.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_RESIDENT_DASHBOARD.md",
+      "size_bytes": 6006,
+      "modified_time": "2026-06-07",
+      "sha256": "d3a0eb53f0fc033e7c00f315e5cf66b6799bfaccc660ae38971dd31be969d07c",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\d3a0eb53f0fc033e__ORACLE_RESIDENT_DASHBOARD.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    },
+    {
+      "original_path": "C:\\ORACLE.AI\\docs\\ORACLE_RUNTIME_ORCHESTRATOR.md",
+      "source_drive": "C:",
+      "filename": "ORACLE_RUNTIME_ORCHESTRATOR.md",
+      "size_bytes": 5279,
+      "modified_time": "2026-06-07",
+      "sha256": "a059f9582a01b488b7f672f87db0632f1947ec21062243aaacdcfb4d78c07136",
+      "keyword_matches": [
+        "oracle"
+      ],
+      "classification": "drive_doctrine",
+      "staged_path": "C:\\Oracle\\ORACLE.AI-runtime\\intake\\staging\\a059f9582a01b488__ORACLE_RUNTIME_ORCHESTRATOR.md",
+      "ingest_status": "staged",
+      "reason": "copied to staging; awaiting Guard approval"
+    }
+  ]
+}

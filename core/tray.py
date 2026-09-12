@@ -78,18 +78,25 @@ def start_daemon():
 
 def open_chat(icon, item):
     subprocess.Popen(
-        ["cmd", "/c", "start", "ORACLE.AI Chat", str(ROOT / "oracle.bat")],
+        ["cmd", "/c", str(ROOT / "oracle_desktop.bat")],
         shell=False,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
 
 
 def show_status(icon, item):
-    # Spawn resident_runtime status in a new console window
+    # Capture resident_runtime status without opening a console window.
     try:
-        subprocess.Popen(
+        result = subprocess.run(
             [sys.executable, str(ROOT / "core" / "resident_runtime.py"), "--status"],
-            creationflags=subprocess.CREATE_NEW_CONSOLE,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
+        output = (result.stdout or result.stderr or "No status output.").strip()
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(0, output[:3500], "ORACLE.AI Status", 0x40)
     except Exception as e:
         import ctypes
         ctypes.windll.user32.MessageBoxW(0, f"Status failed:\n{e}", "ORACLE.AI", 0x10)

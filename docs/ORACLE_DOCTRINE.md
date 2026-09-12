@@ -138,6 +138,25 @@ ORACLE is the architecture of that refusal.
 
 ---
 
+## Iceberg Map
+
+The implementation surface is not the whole project.
+
+`docs/ORACLE_ICEBERG_DOCTRINE.md` records the current candidate map of the
+larger stack:
+
+- ORACLE as local witness, custody, recall, receipts, correction, and re-entry
+- SOV1.AI as future governed interpretation and bounded action under authority
+- Rendered Reality as cockpit, experience, and cognitive world projection
+- Legacy.GI as long-horizon identity anchors and preservation
+- AI Compliance Core as the audit/product wrapper for receipts and approval law
+
+This map is candidate, not canon. It exists to prevent implementation work from
+flattening ORACLE into only a dashboard, only a chatbot, or only a compliance
+product.
+
+---
+
 ## Protected by Governance
 
 This document is referenced by:

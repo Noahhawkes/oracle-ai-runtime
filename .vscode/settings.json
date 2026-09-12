@@ -1,0 +1,33 @@
+{
+  "//": "ORACLE containment: keep her generated artifacts out of search/index noise.",
+  "//sandbox": "sandbox/workbench (her .ai self-narrative) stays searchable on purpose. Only the high-churn receipt/state/log artifacts are hidden. Nothing here is moved or deleted.",
+
+  "search.exclude": {
+    "**/sandbox/receipts/**": true,
+    "**/sandbox.trash/**": true,
+    "**/Memory/thread_ingest/**": true,
+    "**/Memory/build_witness/**": true,
+    "**/Memory/**/*.db": true,
+    "**/Memory/**/*.jsonl": true,
+    "**/data/domains/*/extracted/**": true,
+    "**/state/**": true,
+    "**/.snapshots/**": true,
+    "**/Logs/**": true,
+    "**/*.log": true,
+    "**/__pycache__/**": true,
+    "**/.pytest_cache/**": true,
+    "**/.tmp.drivedownload/**": true,
+    "**/.tmp.driveupload/**": true
+  },
+
+  "files.watcherExclude": {
+    "**/sandbox/**": true,
+    "**/Memory/**": true,
+    "**/data/**": true,
+    "**/state/**": true,
+    "**/.snapshots/**": true,
+    "**/Logs/**": true,
+    "**/__pycache__/**": true,
+    "**/.pytest_cache/**": true
+  }
+}

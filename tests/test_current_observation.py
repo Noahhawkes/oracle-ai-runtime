@@ -81,6 +81,10 @@ def test_expired_receipt_loses_authority(tmp_path):
 def test_current_observation_gate_replaces_model_claim(monkeypatch, tmp_path):
     monkeypatch.setattr(co, "RECEIPT_PATH", tmp_path / "missing.json")
     monkeypatch.setattr(co, "RECEIPT_LOG_PATH", tmp_path / "missing.jsonl")
+    # Neutralize the live foreground-window read so this exercises the
+    # "nothing real available -> UNKNOWN" fallback deterministically. The
+    # invariant under test is that the model's fabricated claim never leaks.
+    monkeypatch.setattr(co, "_active_window", lambda: (None, None))
 
     reply = co.enforce_current_observation_boundary(
         "What application and window am I using?",
@@ -94,9 +98,31 @@ def test_current_observation_gate_replaces_model_claim(monkeypatch, tmp_path):
     assert "ChatGPT" not in reply
 
 
+def test_current_observation_gate_reports_live_window_when_available(monkeypatch, tmp_path):
+    # When a real foreground window IS readable, the gate replaces the model's
+    # guess with the receipted live reading (full recall) instead of UNKNOWN.
+    monkeypatch.setattr(co, "RECEIPT_PATH", tmp_path / "current_observation_receipt.json")
+    monkeypatch.setattr(co, "RECEIPT_LOG_PATH", tmp_path / "current_observation_receipt.jsonl")
+    monkeypatch.setattr(co, "_active_window", lambda: ("code.exe", "ORACLE - Visual Studio Code"))
+
+    reply = co.enforce_current_observation_boundary(
+        "What application and window am I using?",
+        "You are using Chrome in a ChatGPT window.",
+    )
+
+    assert reply.startswith("CURRENT_OBSERVATION")
+    assert "application: code.exe" in reply
+    assert "window_title: ORACLE - Visual Studio Code" in reply
+    # The model's fabricated claim is still discarded; visual stays UNKNOWN
+    # (no frame supplied — never inferred).
+    assert "ChatGPT" not in reply
+    assert "visual_observation: UNKNOWN" in reply
+
+
 def test_server_current_window_question_is_deterministic(monkeypatch, tmp_path):
     monkeypatch.setattr(co, "RECEIPT_PATH", tmp_path / "missing.json")
     monkeypatch.setattr(co, "RECEIPT_LOG_PATH", tmp_path / "missing.jsonl")
+    monkeypatch.setattr(co, "_active_window", lambda: (None, None))
 
     reply = srv._deterministic_runtime_answer("What application and window am I using?")
 

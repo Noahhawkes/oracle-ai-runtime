@@ -1,0 +1,49 @@
+{
+  "receipt_id": "build_TP_034_POWERSHELL_WRONG_ROOT_FALSE_COMMIT_FORENSIC",
+  "record_id": "TP_034_POWERSHELL_WRONG_ROOT_FALSE_COMMIT_FORENSIC",
+  "title": "PowerShell Wrong-Root False-Commit - forensic + fix",
+  "kind": "forensic_bugfix_record",
+  "ingested_at": "2026-06-28T19:25:57.409890+00:00",
+  "submitted_by": "Noah.Physical",
+  "authorial_authority": "Noah.Physical",
+  "intent_owner": "Noah.Physical",
+  "produced_with": "Claude Code",
+  "token_origin": "ai",
+  "origin_channel": "forensic_thread_pass",
+  "authorship_status": "noah_authorized_ai_assisted",
+  "machine_observed": true,
+  "observation_status": "machine_observed",
+  "incident_source": "Noah.Physical pasted a PowerShell transcript captured live on OBS.",
+  "findings": [
+    "Script was PASTED into a PowerShell prompt from C:\\WINDOWS\\system32, so $PSScriptRoot / $MyInvocation.MyCommand.Path were empty and the repo root resolved to system32.",
+    "Operator Home tried to write to C:\\WINDOWS\\system32\\ui\\operator_home.html and failed (Access Denied / path not found).",
+    "Despite the failed write, the script reported success (false-positive 'committed' reporting).",
+    "Manifest counts were 0 because the script read from the wrong directory.",
+    "Stale 7777 process PID 37000 (python G:\\My Drive\\HawkesNest LLC\\ORACLE.AI\\oracle_server.py --port 7777) was identified and killed.",
+    "Canonical 7781 later reported active (PID 43440)."
+  ],
+  "bugs_addressed": {
+    "BUG_001": "ORACLE.ps1 refuses to run if the resolved root lacks repo markers (oracle_server.py, core\\runtime_config.py, ui).",
+    "BUG_002": "Operator Home write wrapped in try/catch; success printed only if the file wrote AND exists with non-zero length; non-zero exit (4) on failure.",
+    "BUG_003": "Pasted execution mitigated: empty $PSScriptRoot now self-heals to C:\\Oracle\\ORACLE.AI-runtime when present, else hard-fails with guidance to run the saved file.",
+    "BUG_004": "Invoke-WebRequest uses -UseBasicParsing (Windows PowerShell 5.1).",
+    "BUG_005": "Layer-7 HTTP health check (Test-Http) gates 'runtime alive'; a layer-4 TCP-open-only port is shown as 'port open but app NOT responding', not online.",
+    "BUG_006": "Stale cloud-sync runtime detection: 7777 owned by a G:\\My Drive path is labeled STALE and never treated as ORACLE."
+  },
+  "fix_artifact": {"path": "ORACLE.ps1", "sha256": "sha256:c2bbc1026186c2474bc065fbb4fab4c8eb5571a87c8ec14696b7607bf76bcbc3"},
+  "verification": [
+    "Ran patched ORACLE.ps1 -Report from C:\\WINDOWS\\system32 cwd via -File: resolved repo root correctly, manifest counts 10/7 (not 0), exit 0.",
+    "Layer-7 result: 7781 UP (answering /api/mode), 7777 DOWN (stale killed), 7778 DOWN, 11434 UP.",
+    "Guard logic test: root=system32 -> REFUSE (all markers missing); root=repo -> ALLOW; empty $PSScriptRoot -> self-heal to repo."
+  ],
+  "operating_rule": "Do not paste path-sensitive scripts into a prompt. Run the saved file from the repo: ORACLE_HOME.bat or powershell -ExecutionPolicy Bypass -File C:\\Oracle\\ORACLE.AI-runtime\\ORACLE.ps1.",
+  "canon_status": "runtime_ingested_record",
+  "approval_status": "pending_noah_physical",
+  "holes": [
+    "The exact pasted transcript text was not re-captured into the repo; findings are transcribed from Noah.Physical's forensic thread pass.",
+    "Some transcript references (evict_stale_runtime.ps1, 'Operator Home Snapshot Committed') may be from a separate script variant; the same hardening was applied to the canonical ORACLE.ps1.",
+    "Token origin is AI-authored (Claude Code) under Noah.Physical authority; pending Noah.Physical canon approval."
+  ],
+  "required_review": ["Noah.Physical confirm fixes; re-run launcher from Desktop ORACLE icon"],
+  "promoted_to_canon": false
+}

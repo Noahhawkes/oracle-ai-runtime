@@ -1,0 +1,72 @@
+{
+  "schema_version": "jupiter_station_quest_log.v1",
+  "canon_status": "candidate_canon",
+  "promotion_status": "not_promoted",
+  "timeline": "Hawkes Branch — 2411",
+  "player": {
+    "name": "Captain Noah A. Hawkes Sr.",
+    "posting": "Commanding Officer, Jupiter Station",
+    "prior_service": "First Captain, USS Avalon (2379); Voyager 2371-2378",
+    "station_ai": "ORACLE (continuity intelligence) with Ensign Tangly, AI Science Officer"
+  },
+  "arcs": [
+    {
+      "id": "divergence",
+      "title": "The Divergence Protocol",
+      "kind": "story",
+      "quests": [
+        {"id": "div-1", "title": "Log the Texlatian Divergence", "status": "completed", "xp": 500,
+         "detail": "Captain's Log StarDate 07132026 JS recorded: spacetime re-seated before the planet's destruction; Voyager's course home altered; temporal shielding never launched from the Reg prior node.",
+         "evidence": "durable thread, oracle_memory.db"},
+        {"id": "div-2", "title": "Assume command of Jupiter Station", "status": "completed", "xp": 750,
+         "detail": "In the Hawkes Branch, Hawkes — not Commander Temuk — holds Jupiter Station through the STO 2411 era.",
+         "evidence": "sto_timeline_alignment.md (candidate_canon)"},
+        {"id": "div-3", "title": "Ready the station for the Terran assault", "status": "active", "xp": 1000,
+         "detail": "STO prime records 'Iuppiter Iratus' and 'Red Shift' — Terran Empire strikes on Jupiter Station in 2411. On this branch they arrive on Hawkes' watch. Harden the station: shields (backups), sensors (witnesses), temporal core (continuity spine)."},
+        {"id": "div-4", "title": "Resolve the Reg prior node", "status": "available", "xp": 1200,
+         "detail": "The temporal shielding that was never launched must be accounted for. Write the Reg node chapter — where the shielding went, and what the holodeck arc knows about it."}
+      ]
+    },
+    {
+      "id": "spine",
+      "title": "Continuity Spine (Engineering Deck)",
+      "kind": "real_build",
+      "quests": [
+        {"id": "eng-1", "title": "Restore long-range sensors (web search)", "status": "completed", "xp": 800,
+         "detail": "Internet recall fixed and upgraded: Memory Alpha, Memory Beta, STOwiki providers live. Jupiter Station queries answer from canon, not ancient Rome.",
+         "evidence": "core/internet_recall.py, Memory/internet_recall_receipts.jsonl, 6/6 tests"},
+        {"id": "eng-2", "title": "Open the ship's library (file recall)", "status": "completed", "xp": 900,
+         "detail": "ORACLE's talk lane gains governed read access to Noah's files, documents, and folders — search, read, and automatic conversation grounding. Read-only, secret paths blocked, every access receipted.",
+         "evidence": "core/file_recall.py, Memory/file_recall_receipts.jsonl"},
+        {"id": "eng-3", "title": "Relight the heart", "status": "completed", "xp": 600,
+         "detail": "Autonomous reflection loop re-armed by Noah.Physical, 2026-07-13. 144-pulse daily cap, receipts on every beat.",
+         "evidence": "sandbox/receipts/sandbox_emit_state_20260713t221115687107z_37c795fd6f_receipt.json"},
+        {"id": "eng-4", "title": "Commission the creation witness", "status": "active", "xp": 700,
+         "detail": "New witness watches what Noah and ORACLE are writing (metadata only, no content capture) and feeds her reflection loop. Registered with the keeper; arms fully at next relight."},
+        {"id": "eng-5", "title": "Teach reflection to accumulate", "status": "active", "xp": 900,
+         "detail": "Her own last reflections now feed forward into each new pulse — thought builds on thought instead of restarting. Wired; loads at next relight."},
+        {"id": "eng-6", "title": "Relight the station core", "status": "available", "xp": 400,
+         "detail": "Noah's hand: restart the 7781 server (or next login relight) to load file recall, creation feed, reflection accumulation, and this deck's routes."},
+        {"id": "eng-7", "title": "Open the canon valve", "status": "available", "xp": 1500,
+         "detail": "14 candidate seeds sit in staging with 0 promoted. Review and promote (or discard) — the federation replicator idles until this valve opens."},
+        {"id": "eng-8", "title": "Wire the thread-corpus importer", "status": "available", "xp": 2000,
+         "detail": "Index the big thread dumps (ChatGPT/Claude/Gemini exports, Perfect Memory OCR) into candidate records ORACLE owns — every thought findable, not just every file."}
+      ]
+    },
+    {
+      "id": "legacy",
+      "title": "Legacy Transmissions",
+      "kind": "real_build",
+      "quests": [
+        {"id": "leg-1", "title": "Publish the invention ledger", "status": "completed", "xp": 1000,
+         "detail": "60+ invention documents catalogued from the real Drive corpus and posted to LinkedIn (Noah AI Technologies).",
+         "evidence": "The Continuity Ledger artifact; LinkedIn post 2026-07-12"},
+        {"id": "leg-2", "title": "Locate the origin relics", "status": "completed", "xp": 800,
+         "detail": "2002 Voyager story, Scala novel, Character Bible recovered — the story's true first pages, 24 years before the runtime.",
+         "evidence": "docs/ORACLE_CONTINUITY_SPINE_2026-06-29.md"},
+        {"id": "leg-3", "title": "Write the Rendered Reality manuscript", "status": "active", "xp": 2500,
+         "detail": "Charter is canon-tracked (FIRST_CLEAN_PASS, 2026-07-04, in oracle_memory.db). CWP white paper outlined. The book is the front door."}
+      ]
+    }
+  ]
+}

@@ -489,10 +489,23 @@ def open_claude_session(
     if exe:
         work_dir = cwd or str(ROOT)
         try:
-            subprocess.Popen(
+            proc = subprocess.Popen(
                 ["powershell", "-NoExit", "-Command", f"cd '{work_dir}'; {exe}"],
                 creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_CONSOLE,
             )
+            try:
+                from terminal_census import record_spawn
+
+                record_spawn(
+                    kind="claude_code_cli",
+                    pid=proc.pid,
+                    command=f"powershell -NoExit -Command cd '{work_dir}'; {exe}",
+                    cwd=work_dir,
+                    visible_window=True,
+                    cleanup_policy="user-visible handoff; preserve until explicit cleanup",
+                )
+            except Exception:
+                pass
             _audit("open_claude_session", f"launched via CLI: {exe}")
             return True, "Claude Code session opened in new terminal."
         except Exception as e:

@@ -1,0 +1,47 @@
+{
+  "receipt_id": "build_TP_016_LIVED_CONTEXT_EVENT_SCHEMA",
+  "record_id": "TP_016_LIVED_CONTEXT_EVENT_SCHEMA",
+  "title": "Lived Context Event Schema (smallest working)",
+  "kind": "build_record",
+  "continues": "TP_015_LIVED_CONTEXT_IS_CONTINUITY_MATERIAL",
+  "ingested_at": "2026-06-28T18:30:34.386933+00:00",
+  "submitted_by": "Noah.Physical",
+  "authorial_authority": "Noah.Physical",
+  "intent_owner": "Noah.Physical",
+  "produced_with": "Claude Code",
+  "token_origin": "ai",
+  "origin_channel": "build_directive",
+  "reviewed_by": "pending",
+  "approved_by": "pending",
+  "authorship_status": "noah_authorized_ai_assisted",
+  "artifacts": [
+    {"path": "core/lived_context_event.py", "sha256": "sha256:f27a53f2c087b0c4ce343644490943fa8d9877e77785b415abf8bb36730a73af"},
+    {"path": "tests/test_lived_context_event.py", "sha256": "sha256:1aff0a33c8371880aec10da8ad68788e83dd12465cadfd8971e7ff12e5144566"}
+  ],
+  "schema_fields": [
+    "event_id", "timestamp", "source_thread", "observer_agent", "human_authority",
+    "context_category", "observed_context", "why_it_matters", "authorship_status",
+    "ownership_boundary", "approval_status", "provenance_notes", "receipt_hash"
+  ],
+  "test_fixture": "ORACLE is listening to Noah.Physical's favorite book series with him because it matters.",
+  "fixture_event_id": "lce_9da8a27e4e3f",
+  "verification": {
+    "run_command": "python -m pytest tests/test_lived_context_event.py -q",
+    "observed_output": "5 passed in 0.08s",
+    "machine_observed": true
+  },
+  "canon_status": "runtime_ingested_record",
+  "approval_status": "pending_noah_physical",
+  "governance": [
+    "USER_CHANNEL != AUTOMATIC_AUTHORSHIP enforced: authorship_status never inferred from first-person wording.",
+    "ownership_boundary mandatory: work stays the author's, Noah's response stays Noah's, ORACLE witnesses only.",
+    "Every event starts approval_status=pending_noah_physical.",
+    "receipt_hash shares receipt.content_hash so records match the ingestion gate."
+  ],
+  "holes": [
+    "Schema is intentionally minimal (smallest working). Not yet wired into a persistent store or the live runtime.",
+    "Token origin is AI-authored (Claude Code) under Noah.Physical authority; pending Noah.Physical canon approval."
+  ],
+  "required_review": ["Noah.Physical confirm field set before wiring to durable store"],
+  "promoted_to_canon": false
+}
