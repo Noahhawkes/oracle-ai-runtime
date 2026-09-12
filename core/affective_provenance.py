@@ -68,8 +68,10 @@ _FIRST_PERSON = re.compile(r"\b(I|I'm|I've|I'll|my|me|we|our)\b")
 class AffectiveEvent:
     """One receipted unit of emotional shape. No numeric sentiment, ever."""
     source_id: str
-    exact_text: str                          # the raw receipt — always preserved
+    exact_text: str                          # the raw receipt (padded context) — always preserved
     virtue_family: str                       # one of VIRTUE_FAMILIES (UNKNOWN allowed)
+    sentence: str = ""                       # the exact clause classified (tight, for locality)
+    source_kind: str = "UNKNOWN"             # LIVED (journal/doc) | FICTION | UNKNOWN — never conflate
     target: str = "UNKNOWN"                  # who/what was valued
     authorship: str = "UNKNOWN"              # NOAH_AUTHORED | UNVERIFIED
     signals: list[str] = field(default_factory=list)   # evidence markers matched
@@ -119,6 +121,18 @@ def classify_passage(passage: str) -> tuple[str, list[str], str]:
     return fam, signals, strength
 
 
+def _source_kind(source_id: str) -> str:
+    """Classify the source so lived love and fiction love never share a bucket."""
+    s = (source_id or "").lower()
+    if any(k in s for k in ("renderedreality", "drakin", "/book", "book/", "chapters",
+                            "novel", "manuscript")):
+        return "FICTION"
+    if "journal" in s:
+        return "LIVED"
+    # docs/ is mixed (reader's reports, plans, transmissions) -> not asserted as lived
+    return "UNKNOWN"
+
+
 def extract_affective_events(text: str, *, source_id: str,
                              noah_authored: bool | None = None) -> list[AffectiveEvent]:
     """Harvest candidate affective events from a block of text. One event per
@@ -126,6 +140,7 @@ def extract_affective_events(text: str, *, source_id: str,
     events: list[AffectiveEvent] = []
     if not text:
         return events
+    src_kind = _source_kind(source_id)
     # split into sentences/segments for locality
     segments = re.split(r"(?<=[.!?])\s+(?=[A-Z\"'])", text)
     pos = 0
@@ -136,7 +151,11 @@ def extract_affective_events(text: str, *, source_id: str,
         if fam == "UNKNOWN":
             continue
         window = _window(text, max(0, seg_start), seg_start + len(seg))
-        rel = _RELATION.search(seg)
+        # Prefer a proper name (Ashley/Ender/...) over a generic role phrase ("my son")
+        # when both appear in the sentence, so "my son Ender" resolves to Ender.
+        rels = list(_RELATION.finditer(seg))
+        proper = next((m for m in rels if not m.group(0).lower().startswith("my ")), None)
+        rel = proper or (rels[0] if rels else None)
         target = re.sub(r"\s+", " ", rel.group(0)).strip() if rel else "UNKNOWN"
         authored = ("NOAH_AUTHORED" if (noah_authored is True or
                      (noah_authored is None and bool(_FIRST_PERSON.search(seg))))
@@ -148,6 +167,7 @@ def extract_affective_events(text: str, *, source_id: str,
             holes.append("authorship not confirmed as Noah's own words")
         events.append(AffectiveEvent(
             source_id=source_id, exact_text=window, virtue_family=fam,
+            sentence=re.sub(r"\s+", " ", seg).strip(), source_kind=src_kind,
             target=target, authorship=authored, signals=signals,
             has_action=bool(_ACTION.search(seg)), has_cost=bool(_COST.search(seg)),
             has_conflict=bool(_CONFLICT.search(seg)),
