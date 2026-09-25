@@ -315,19 +315,40 @@ def migrate_durable_fact_provenance() -> dict:
         if "provenance_json" not in columns:
             conn.execute("ALTER TABLE durable_facts ADD COLUMN provenance_json TEXT NOT NULL DEFAULT '{}'")
             column_added = True
-        legacy = json.dumps(_legacy_unknown_provenance(), sort_keys=True)
-        cursor = conn.execute(
-            """
-            UPDATE durable_facts
-            SET provenance_json=?
-            WHERE provenance_json IS NULL OR trim(provenance_json) IN ('', '{}')
-            """,
-            (legacy,),
-        )
+        legacy_rows = conn.execute(
+            """SELECT id, provenance_json, canonical_status, approval_status
+               FROM durable_facts"""
+        ).fetchall()
+        corrected = 0
+        for row in legacy_rows:
+            raw = row["provenance_json"]
+            try:
+                provenance = json.loads(raw or "{}")
+            except (ValueError, TypeError):
+                provenance = {}
+            if not isinstance(provenance, dict):
+                provenance = {}
+            if (not provenance or (
+                provenance.get("identity_resolution_status") == "legacy_unresolved"
+                and (row["canonical_status"] != "staged" or row["approval_status"] != "pending")
+            )):
+                provenance = {**_legacy_unknown_provenance(), **provenance}
+                if row["canonical_status"] != "staged" or row["approval_status"] != "pending":
+                    provenance.setdefault("correction_history", []).append({
+                        "step": "legacy_authority_downgrade",
+                        "previous_canonical_status": row["canonical_status"],
+                        "previous_approval_status": row["approval_status"],
+                    })
+                conn.execute(
+                    """UPDATE durable_facts SET provenance_json=?,
+                       canonical_status='staged', approval_status='pending' WHERE id=?""",
+                    (json.dumps(provenance, sort_keys=True), row["id"]),
+                )
+                corrected += 1
         conn.commit()
         return {
             "provenance_column_added": column_added,
-            "legacy_rows_marked_suspect": cursor.rowcount,
+            "legacy_rows_marked_suspect": corrected,
         }
 
 

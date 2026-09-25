@@ -1,0 +1,17 @@
+name: Continuity boundaries
+
+on:
+  push:
+    branches: ["codex/governed-continuity-hardening"]
+  pull_request:
+
+jobs:
+  focused-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pytest 'fastapi>=0.115,<1' 'uvicorn>=0.30,<1' 'av>=13,<17'
+      - run: python -m pytest tests/test_continuity_event_packet.py tests/test_continuity_pipeline_speaker_provenance.py tests/test_continuity_loop.py rendered_reality/tests -q

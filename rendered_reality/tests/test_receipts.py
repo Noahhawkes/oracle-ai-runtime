@@ -16,9 +16,19 @@ def test_pending_receipt_cannot_promote():
 
 def test_approved_receipt_can_promote():
     r = Receipt(source="s", submitting_system="x", submitted_by="Noah.Physical",
-                approval_status=ApprovalStatus.APPROVED)
+                content="exact content")
+    r.record_approval(actor="Noah.Physical")
     ok, _ = r.can_promote_to_canon()
     assert ok is True
+
+
+def test_approval_flag_or_changed_content_cannot_promote():
+    r = Receipt(source="s", submitting_system="x", submitted_by="Noah.Physical",
+                content="original", approval_status=ApprovalStatus.APPROVED)
+    assert r.can_promote_to_canon()[0] is False
+    r.record_approval(actor="Noah.Physical")
+    r.content = "altered"
+    assert r.can_promote_to_canon()[0] is False
 
 
 def test_to_json_serializes_enums():

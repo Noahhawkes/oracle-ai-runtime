@@ -48,7 +48,6 @@ from memory import (
     get_audit_chain,
 )
 from light_compression import score_signal, FACT, CONSTRAINT, PATTERN
-from governance import is_approval_required
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -276,7 +275,8 @@ def assign_provenance(candidate: dict) -> dict:
     Build a complete provenance record for a candidate.
 
     Rules:
-      - human_stated facts get canonical_status="accepted", approval_status="auto_approved"
+      - human_stated testimony is stored as staged/pending, even when the
+        speaker is known; observing an utterance does not approve its claim
       - inferred facts get canonical_status="staged", approval_status="pending"
         (inferred must never be written as canonical without explicit approval)
       - generated facts get canonical_status="staged", approval_status="pending"
@@ -287,19 +287,15 @@ def assign_provenance(candidate: dict) -> dict:
     # identity resolution existed (e.g. hand-built dicts in older callers).
     identity = candidate.get("identity") or resolve_speaker_identity(candidate)
 
-    if source_type == "human_stated":
-        canonical_status = "accepted"
-        approval_status = "auto_approved"
-    else:
-        # inferred and generated: never auto-promoted
-        canonical_status = "staged"
-        approval_status = "pending"
+    canonical_status = "staged"
+    approval_status = "pending"
 
     transformation_history = list(candidate.get("transformation_history", []))
     transformation_history.append({
         "step": "provenance_assigned",
         "canonical_status": canonical_status,
         "approval_status": approval_status,
+        "assertion_status": "human_testimony" if source_type == "human_stated" else "unverified_candidate",
         "speaker_id": identity["speaker_id"],
     })
 
@@ -314,6 +310,7 @@ def assign_provenance(candidate: dict) -> dict:
         "transformation_history": transformation_history,
         "canonical_status": canonical_status,
         "approval_status": approval_status,
+        "assertion_status": "human_testimony" if source_type == "human_stated" else "unverified_candidate",
     }
 
     return provenance
@@ -327,12 +324,7 @@ def evaluate_policy(candidate: dict, provenance: dict) -> dict:
       - write_allowed: bool
       - reason: str
     """
-    # Governance.is_approval_required() is True by default
-    approval_required = is_approval_required()
-
     source_type = provenance["source_type"]
-    approval_status = provenance["approval_status"]
-    canonical_status = provenance["canonical_status"]
 
     # Inferred/generated facts must never be written as canonical without explicit approval
     if source_type in ("inferred", "generated"):
@@ -343,20 +335,13 @@ def evaluate_policy(candidate: dict, provenance: dict) -> dict:
             "approval_status": "pending",
         }
 
-    # human_stated: allow if approval not required, or if already auto_approved
+    # Preserve testimony durably without granting authority to its claims.
     if source_type == "human_stated":
-        if approval_required and approval_status != "auto_approved":
-            return {
-                "write_allowed": False,
-                "reason": "approval_required_by_governance",
-                "canonical_status": "staged",
-                "approval_status": "pending",
-            }
         return {
             "write_allowed": True,
-            "reason": "human_stated_auto_approved",
-            "canonical_status": canonical_status,
-            "approval_status": approval_status,
+            "reason": "human_testimony_staged_for_review",
+            "canonical_status": "staged",
+            "approval_status": "pending",
         }
 
     return {

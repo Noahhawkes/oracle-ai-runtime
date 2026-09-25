@@ -49,7 +49,8 @@ def test_no_canon_without_noah_approval():
 def test_approved_receipt_promotes_to_canon():
     tw = Truthwriter()
     r = Receipt(source="s", submitting_system="x", submitted_by="Noah.Physical",
-                content="approved truth", approval_status=ApprovalStatus.APPROVED)
+                content="approved truth")
+    r.record_approval(actor="Noah.Physical")
     out = tw.promote_to_canon(r)
     assert "CANON" in out
     assert r.canon_status.value == "noah_approved_canon"

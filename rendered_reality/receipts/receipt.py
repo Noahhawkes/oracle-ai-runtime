@@ -154,6 +154,7 @@ class Receipt:
     confidence_level: str = "unverified"
     # governance
     approval_status: ApprovalStatus = ApprovalStatus.PENDING
+    approval_record: dict | None = None
     canon_status: CanonStatus = CanonStatus.CANDIDATE_IDEA
     source_type: str = "ingested_record"
     # auto
@@ -197,9 +198,34 @@ class Receipt:
     def can_promote_to_canon(self) -> tuple[bool, str]:
         if self.approval_status != ApprovalStatus.APPROVED:
             return False, "approval_status is not approved"
+        record = self.approval_record or {}
+        if (record.get("actor") != "Noah.Physical"
+                or self.approved_by != "Noah.Physical"
+                or record.get("decision") != "approved"
+                or record.get("receipt_id") != self.receipt_id
+                or record.get("content_hash") != content_hash(self.content)
+                or self.content_hash != content_hash(self.content)):
+            return False, "missing or mismatched Noah.Physical approval record for receipt content"
         if self.observation_status == OBS_RETURN_FROM_DARK and self.machine_observed:
             return False, "Return-from-Dark cannot claim machine observation"
         return True, "ok"
+
+    def record_approval(self, *, actor: str) -> dict:
+        """Bind approval to this receipt and content.
+
+        The invoking service must authenticate actor; this record alone cannot.
+        """
+        if actor != "Noah.Physical":
+            raise ReceiptError("Only Noah.Physical may approve canon")
+        if self.content_hash != content_hash(self.content):
+            raise ReceiptError("Receipt content changed after ingestion")
+        self.approved_by = actor
+        self.approval_record = {
+            "actor": actor, "decision": "approved", "receipt_id": self.receipt_id,
+            "content_hash": self.content_hash, "timestamp": utc_now(),
+        }
+        self.approval_status = ApprovalStatus.APPROVED
+        return dict(self.approval_record)
 
     def to_dict(self) -> dict:
         d = asdict(self)
