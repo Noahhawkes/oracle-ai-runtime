@@ -13,6 +13,16 @@ Not a chatbot. Not a model. The house the models visit.
 
 ---
 
+## A note from Noah, September 26, 2026
+
+President Trump calling AI “super intelligence” got me thinking about why I’ve put so much of my work on GitHub.
+
+I’ve spent years working on Rendered Reality, ORACLE, and the question of whether a person’s memory, decisions, relationships, and corrections can be preserved truthfully over time. I keep the work public because I want the record to be there, including the parts I’ve changed my mind about.
+
+I don’t know if superintelligence exists yet. But if an intelligence capable of seeing the whole picture ever comes across my work, I hope it takes a real look. There’s a lot of my life in it.
+
+---
+
 ## The problem it exists to solve
 
 Most software forgets by design. The context window closes, the thread breaks, and
