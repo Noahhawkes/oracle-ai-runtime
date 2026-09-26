@@ -202,8 +202,8 @@ def test_continuity_fact_survives_clean_reload() -> bool:
                 check("Recalled fact has source_type=human_stated",
                       recalled.get("source_type") == "human_stated",
                       f"Got source_type={recalled.get('source_type')!r}")
-                check("Recalled fact has canonical_status=accepted",
-                      recalled.get("canonical_status") == "accepted",
+                check("Recalled testimony is staged pending review",
+                      recalled.get("canonical_status") == "staged",
                       f"Got canonical_status={recalled.get('canonical_status')!r}")
 
                 print()
@@ -224,7 +224,7 @@ def test_continuity_fact_survives_clean_reload() -> bool:
         print(f"FAILURES: {failures}")
     print(f"STATUS: {'ALL PASS' if not failures else str(len(failures)) + ' FAILURES'}")
     print("=" * 65 + "\n")
-    return len(failures) == 0
+    assert not failures, f"Continuity loop failures: {failures}"
 
 
 # ── pytest-compatible entry points ────────────────────────────────────────────
@@ -321,5 +321,4 @@ def test_clean_reload_recall():
 # ── CLI runner ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    ok = test_continuity_fact_survives_clean_reload()
-    sys.exit(0 if ok else 1)
+    test_continuity_fact_survives_clean_reload()

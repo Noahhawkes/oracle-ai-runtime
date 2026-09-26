@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,7 +36,6 @@ _RECEIPT_PATH_RE = re.compile(
     r"(?:receipt_path|receipts?)['\"\s:=]+(?P<path>[A-Za-z]:[\\/][^\r\n\"'`]+)",
     re.IGNORECASE,
 )
-_ACTION_ID_RE = re.compile(r"(sandbox_[A-Za-z0-9_]+_[0-9TZ_a-f-]+)", re.IGNORECASE)
 
 
 def _utc_now() -> datetime:
@@ -171,42 +172,11 @@ def _receipt_mentions(done_payload: dict[str, Any], assistant_output: str) -> li
     return deduped
 
 
-def _executed_actions(done_payload: dict[str, Any], assistant_output: str) -> list[dict[str, Any]]:
-    route = _route_payload(done_payload)
-    route_text = " ".join(
-        str(route.get(key) or "") for key in ("route_type", "effective_route", "lane", "reason")
-    ).lower()
-    output_lower = assistant_output.lower()
-    actions: list[dict[str, Any]] = []
-
-    sandbox_markers = (
-        "sandbox_initiative_write" in route_text
-        or "sandbox initiative receipt" in output_lower
-        or '"operation_type": "sandbox_initiative_write"' in output_lower
-        or "'operation_type': 'sandbox_initiative_write'" in output_lower
-    )
-    if sandbox_markers:
-        action_id = done_payload.get("action_id")
-        if not action_id:
-            match = _ACTION_ID_RE.search(assistant_output or "")
-            action_id = match.group(1) if match else None
-        actions.append({
-            "operation_type": "sandbox_initiative_write",
-            "action_id": action_id,
-            "evidence": "done_payload_or_visible_response_text",
-            "external": False,
-            "canon_promotion": False,
-            "boundary": "sandbox candidate only; Codex packet did not read or write sandbox",
-        })
-
-    if done_payload.get("citation_guard"):
-        actions.append({
-            "operation_type": "citation_guard",
-            "evidence": "streaming_text_guard",
-            "external": False,
-            "canon_promotion": False,
-        })
-    return actions
+def _executed_actions(done_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Only an upstream structured verification result is execution evidence."""
+    return [dict(item) for item in _coerce_list(done_payload.get("verified_action_receipts"))
+            if isinstance(item, dict) and item.get("verified") is True
+            and item.get("action_id") and item.get("receipt_hash")]
 
 
 def _source_resolution_payload(done_payload: dict[str, Any]) -> dict[str, Any]:
@@ -313,8 +283,15 @@ def build_event_packet(
     intended_audience = intended_audience or "UNKNOWN"
     route = _route_payload(done)
     sources = _source_payload(done)
-    receipts = _receipt_mentions(done, assistant_output)
-    actions_executed = _executed_actions(done, assistant_output)
+    mentions = _receipt_mentions(done, assistant_output)
+    actions_executed = _executed_actions(done)
+    receipts = [item for item in actions_executed if item.get("receipt_hash")]
+    actions_claimed = ([{
+        "operation_type": "sandbox_initiative_write",
+        "source": "route_or_assistant_output",
+        "verified": False,
+    }] if "sandbox_initiative_write" in
+        (str(route.get("route_type") or "") + assistant_output).lower() else [])
     uncertainties = _uncertainties(done, assistant_output)
     claims_extracted = _claims_extracted(done)
     visible_context = {
@@ -390,7 +367,9 @@ def build_event_packet(
         "actions_proposed": [],
         "actions_taken": actions_executed,
         "actions_executed": actions_executed,
+        "actions_claimed": actions_claimed,
         "receipts": receipts,
+        "receipt_mentions_unverified": mentions,
         "memory_effect": {
             "conversation_history_append": True,
             "continuity_packet_written": False,
@@ -446,14 +425,8 @@ def write_event_packet(
     packet["packet_hash_sha256"] = _sha256_json({k: v for k, v in packet.items() if k != "packet_hash_sha256"})
 
     packet_path = root / f"{packet['event_id']}.json"
-    packet_path.write_text(
-        json.dumps(packet, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    latest_path.write_text(
-        json.dumps(packet, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    payload = json.dumps(packet, ensure_ascii=True, indent=2, sort_keys=True) + "\n"
+    _atomic_write(packet_path, payload)
     index_row = {
         "schema_version": SCHEMA_VERSION,
         "event_id": packet["event_id"],
@@ -470,6 +443,10 @@ def write_event_packet(
     }
     with index_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(index_row, ensure_ascii=True, sort_keys=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    # The latest pointer advances only after the indexed packet is durable.
+    _atomic_write(latest_path, payload)
 
     return {
         "ok": True,
@@ -483,6 +460,19 @@ def write_event_packet(
         "promotion_status": packet["canon_status"]["promotion_status"],
         "boundary": "local Memory record only; no sandbox touch, external send, command execution, or canon promotion",
     }
+
+
+def _atomic_write(path: Path, payload: str) -> None:
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def latest_event(output_dir: Path | None = None) -> dict[str, Any]:

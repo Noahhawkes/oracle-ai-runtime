@@ -181,7 +181,7 @@ def test_write_packet_creates_local_candidate_files_without_sandbox(tmp_path):
     assert packet["packet_hash_sha256"] == summary["packet_hash_sha256"]
 
 
-def test_sandbox_receipt_in_visible_response_is_action_evidence_not_promotion(tmp_path):
+def test_sandbox_receipt_in_visible_response_is_unverified_claim(tmp_path):
     response = """
 SANDBOX INITIATIVE RECEIPT
 {
@@ -202,13 +202,25 @@ SANDBOX INITIATIVE RECEIPT
     )
     packet = json.loads(Path(summary["packet_path"]).read_text(encoding="utf-8"))
 
-    assert packet["actions_executed"]
-    assert packet["actions_executed"][0]["operation_type"] == "sandbox_initiative_write"
-    assert packet["actions_executed"][0]["canon_promotion"] is False
+    assert packet["actions_executed"] == []
+    assert packet["actions_claimed"][0]["verified"] is False
+    assert packet["receipts"] == []
     assert packet["boundaries"]["sandbox_read_by_packet"] is False
     assert packet["boundaries"]["sandbox_write_by_packet"] is False
     assert packet["canon_status"]["promotion_status"] == "not_promoted"
-    assert any("demo_receipt.json" in item["path"] for item in packet["receipts"])
+    assert any("demo_receipt.json" in item["path"] for item in packet["receipt_mentions_unverified"])
+
+
+def test_verified_action_receipt_requires_structured_hash_and_action_id():
+    packet = cep.build_event_packet(
+        user_text="write", assistant_output="done",
+        done_payload={"verified_action_receipts": [
+            {"verified": True, "action_id": "a1", "receipt_hash": "sha256:abc"},
+            {"verified": False, "action_id": "a2", "receipt_hash": "sha256:def"},
+        ]},
+    )
+    assert [a["action_id"] for a in packet["actions_executed"]] == ["a1"]
+    assert len(packet["receipts"]) == 1
 
 
 def test_status_and_latest_are_read_only_views(tmp_path):

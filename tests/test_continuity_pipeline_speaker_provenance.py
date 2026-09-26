@@ -114,6 +114,8 @@ def test_assign_provenance_carries_speaker_id_and_never_defaults_to_noah():
     assert provenance["speaker_id"] == "UNKNOWN"
     assert provenance["speaker_id"] != "Noah.Physical"
     assert provenance["account_owner_id"] == "Noah.Physical"
+    assert provenance["canonical_status"] == "staged"
+    assert provenance["approval_status"] == "pending"
 
 
 def test_assign_provenance_preserves_explicit_ashley_identity():
@@ -121,6 +123,8 @@ def test_assign_provenance_preserves_explicit_ashley_identity():
     candidates = extract_candidates(session, "sess-ashley")
     provenance = assign_provenance(candidates[0])
     assert provenance["speaker_id"] == "Ashley"
+    assert provenance["canonical_status"] == "staged"
+    assert provenance["approval_status"] == "pending"
 
 
 # ── end-to-end pipeline: the historical failure, reproduced and fixed ────
@@ -315,6 +319,8 @@ def test_legacy_rows_are_marked_suspect_without_inventing_noah(tmp_path):
         assert row["author_id"] == "UNKNOWN"
         assert row["identity_resolution_status"] == "legacy_unresolved"
         assert row["provenance_suspect"] is True
+        assert row["canonical_status"] == "staged"
+        assert row["approval_status"] == "pending"
         assert "Noah.Physical" not in row["provenance"].values()
     finally:
         mem_module.DB_PATH = orig
