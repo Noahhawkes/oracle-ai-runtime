@@ -133,9 +133,13 @@ The system must be able to run without paid API calls.
 
 **Where it belongs:** `documentation` — archive reference only. The reasoning patterns from Legacy.GI that are worth keeping have already been absorbed into the `core/context_loader.py` identity system and `objectives.yaml`. Do not build new code for this.
 
+**Current map:** `docs/LEGACY_GI_ORACLE_MERGED_DISSERTATION_MAP.md` preserves the old v~300 Legacy.GI dissertation spine and the newer v~301 ORACLE / Truthwriter update as a single source-backed outline.
+
 ---
 
 ### AI Compliance Core
+
+**Current doctrine:** `docs/AI_COMPLIANCE_CORE_DOCTRINE.md` narrows AI Compliance Core to a receipt-backed AI audit trail and approval-gate system: an AI flight recorder for companies.
 
 **What it is:** A framework concept for ensuring AI systems meet regulatory and ethical standards. Referenced in OneDrive archive under `AI Compliance Core/`. Has documentation but no active code in this repo.
 

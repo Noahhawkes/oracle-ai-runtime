@@ -1,0 +1,961 @@
+{
+  "artifact_count": 5947,
+  "counts_by_root": {
+    "C:/ORACLE.AI": 882,
+    "C:/Oracle": 4949,
+    "C:/Users/noahh/.codex": 116
+  },
+  "counts_by_source_system": {
+    "codex_attachment_cache": 116,
+    "local_git_repo": 1919,
+    "local_oracle_ai_root": 882,
+    "local_oracle_root": 3030
+  },
+  "duplicate_file_count": 3699,
+  "duplicate_group_count": 818,
+  "duplicates": [
+    {
+      "count": 2,
+      "paths": [
+        "C:/ORACLE.AI/.aider.chat.history.md",
+        "C:/Oracle/ORACLE.AI-runtime/.aider.chat.history.md"
+      ],
+      "sha256": "6875d04df6285eb3a6e9c89b046e2911ea6b4528de9cc58ef93ff8c7006b0fc1"
+    },
+    {
+      "count": 2,
+      "paths": [
+        "C:/ORACLE.AI/.claude/agents/oracle.md",
+        "C:/Oracle/ORACLE.AI-runtime/intake/staging/9b067172bcba3933__oracle.md"
+      ],
+      "sha256": "9b067172bcba3933e624c9f0f646c1a6e249e3e121239eda3f39334ad69f9e01"
+    },
+    {
+      "count": 3,
+      "paths": [
+        "C:/ORACLE.AI/.claude/settings.local.json",
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/.claude/settings.local.json",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/.claude/settings.local.json"
+      ],
+      "sha256": "fdd0d1865c3ccff1b54e84741254886124450f273032f08b12cd9985627330bf"
+    },
+    {
+      "count": 10,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/.claude/agents/oracle.md",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/.claude/agents/oracle.md",
+        "C:/Oracle/ORACLE.AI-runtime/intake/staging/cfbcc2a210e38d0e__oracle.md",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/.claude/agents/oracle.md",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/.claude/agents/oracle.md",
+        "C:/Oracle/worktrees/canonical-grounding-integration/.claude/agents/oracle.md",
+        "C:/Oracle/worktrees/media-witness-poc/.claude/agents/oracle.md",
+        "C:/Oracle/worktrees/obs-live-witness-v01/.claude/agents/oracle.md"
+      ],
+      "sha256": "cfbcc2a210e38d0e4343332f2fedf679ef140669b46f301d28a98943a0501855"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/.claude/launch.json",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/.claude/launch.json",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/.claude/launch.json",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/.claude/launch.json",
+        "C:/Oracle/worktrees/canonical-grounding-integration/.claude/launch.json",
+        "C:/Oracle/worktrees/media-witness-poc/.claude/launch.json",
+        "C:/Oracle/worktrees/obs-live-witness-v01/.claude/launch.json",
+        "C:/Oracle/worktrees/oracle-public-main/.claude/launch.json"
+      ],
+      "sha256": "78443f88f03df649fbfedf8b4ea4e6ca1e3168162266f0bf1ae687a052a056b7"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/.telemetry/product.md",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/.telemetry/product.md",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/.telemetry/product.md",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/.telemetry/product.md",
+        "C:/Oracle/worktrees/canonical-grounding-integration/.telemetry/product.md",
+        "C:/Oracle/worktrees/media-witness-poc/.telemetry/product.md",
+        "C:/Oracle/worktrees/obs-live-witness-v01/.telemetry/product.md",
+        "C:/Oracle/worktrees/oracle-public-main/.telemetry/product.md"
+      ],
+      "sha256": "f97a260fc8c59290970fc0dcd457941fb19ffca1447a8ea596726a1a450e3dd6"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/.telemetry/README.md",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/.telemetry/README.md",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/.telemetry/README.md",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/.telemetry/README.md",
+        "C:/Oracle/worktrees/canonical-grounding-integration/.telemetry/README.md",
+        "C:/Oracle/worktrees/media-witness-poc/.telemetry/README.md",
+        "C:/Oracle/worktrees/obs-live-witness-v01/.telemetry/README.md",
+        "C:/Oracle/worktrees/oracle-public-main/.telemetry/README.md"
+      ],
+      "sha256": "ea6d7b9a50161abc053c4ea3811199874ed165451ed3c9281129a2f2b286442d"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/BRIDGE.bat",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/BRIDGE.bat",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/BRIDGE.bat",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/BRIDGE.bat",
+        "C:/Oracle/worktrees/canonical-grounding-integration/BRIDGE.bat",
+        "C:/Oracle/worktrees/media-witness-poc/BRIDGE.bat",
+        "C:/Oracle/worktrees/obs-live-witness-v01/BRIDGE.bat",
+        "C:/Oracle/worktrees/oracle-public-main/BRIDGE.bat"
+      ],
+      "sha256": "80c728e4c272a2bde9d1848b9573ff343ca27c4421cba75cc6419cf7f417c0f6"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/config.yaml",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/config.yaml",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/config.yaml",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/config.yaml",
+        "C:/Oracle/worktrees/canonical-grounding-integration/config.yaml",
+        "C:/Oracle/worktrees/media-witness-poc/config.yaml",
+        "C:/Oracle/worktrees/obs-live-witness-v01/config.yaml",
+        "C:/Oracle/worktrees/oracle-public-main/config.yaml"
+      ],
+      "sha256": "009ccc1b7b1460743ce9789b27f8d657179a94963650cdfc3532b17991ded89f"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/action_batch.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/action_batch.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/action_batch.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/action_batch.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/action_batch.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/action_batch.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/action_batch.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/action_batch.py"
+      ],
+      "sha256": "173d492d6da24c38f98b2e70b4a208202dcebf497331b987b8698d3940bbbcaf"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/action_candidates.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/action_candidates.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/action_candidates.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/action_candidates.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/action_candidates.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/action_candidates.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/action_candidates.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/action_candidates.py"
+      ],
+      "sha256": "4a8657c51740c46ad30868fac914dedc4b788141804f109fdf6419a2beedfbd9"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/actuation_engine.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/actuation_engine.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/actuation_engine.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/actuation_engine.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/actuation_engine.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/actuation_engine.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/actuation_engine.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/actuation_engine.py"
+      ],
+      "sha256": "b1bb2b01574a1b42c44fda9a3697f4689144a15d489091dc01ca76ee5248f981"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/ambient_watch.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/ambient_watch.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/ambient_watch.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/ambient_watch.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/ambient_watch.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/ambient_watch.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/ambient_watch.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/ambient_watch.py"
+      ],
+      "sha256": "e065329cb5eecdac00554a0b947e55541e6adbbdbf68584dd97ab69e72ce3598"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/approval_center.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/approval_center.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/approval_center.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/approval_center.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/approval_center.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/approval_center.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/approval_center.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/approval_center.py"
+      ],
+      "sha256": "48235aab0864e32a79dccae694d9073004c1d12f251bb03db16375c696c0dc9a"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/attention_filter.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/attention_filter.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/attention_filter.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/attention_filter.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/attention_filter.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/attention_filter.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/attention_filter.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/attention_filter.py"
+      ],
+      "sha256": "7767aec5820e8557218362a5c16df2a3f38dde2932d0244fb2602a180191a085"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/autonomy_policy.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/autonomy_policy.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/autonomy_policy.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/autonomy_policy.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/autonomy_policy.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/autonomy_policy.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/autonomy_policy.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/autonomy_policy.py"
+      ],
+      "sha256": "c31adfa8318d5e74e3769e716675a450b5aea256ff54df0a469baa306759cacf"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/autostart.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/autostart.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/autostart.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/autostart.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/autostart.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/autostart.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/autostart.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/autostart.py"
+      ],
+      "sha256": "6e4cd3c703be4a44f6eec754904f87ca55fe6e601b226091878a3ca8dd1181f2"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/brain_router.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/brain_router.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/brain_router.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/brain_router.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/brain_router.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/brain_router.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/brain_router.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/brain_router.py"
+      ],
+      "sha256": "bdcfda4d20d04e079efea18956c78c61adddd20eb8571e0ed7b434d8198ce88a"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/bridge.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/bridge.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/bridge.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/bridge.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/bridge.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/bridge.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/bridge.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/bridge.py"
+      ],
+      "sha256": "a1b2828e833dcc20a81c22fd8a55ea83c70c4f5b2511e89c138cfa1b11707a86"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/build_consulting_kit.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/build_consulting_kit.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/build_consulting_kit.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/build_consulting_kit.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/build_consulting_kit.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/build_consulting_kit.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/build_consulting_kit.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/build_consulting_kit.py"
+      ],
+      "sha256": "ed9397eb2f2d51f9f99c3642f453b5ce93c7ede41d035b98a39665cfc22aa6dd"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/capability_registry.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/capability_registry.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/capability_registry.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/capability_registry.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/capability_registry.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/capability_registry.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/capability_registry.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/capability_registry.py"
+      ],
+      "sha256": "c34106ea9617eb8284edc7f65a7940798bb6d89b57b60e87c4e23d2e4923f97c"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/chatgpt_bridge.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/chatgpt_bridge.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/chatgpt_bridge.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/chatgpt_bridge.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/chatgpt_bridge.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/chatgpt_bridge.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/chatgpt_bridge.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/chatgpt_bridge.py"
+      ],
+      "sha256": "2fd99177188b9109ace1c79036350aba5ae7c39545ca10fa8750f77b36ee87b0"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/claude_code_bridge.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/claude_code_bridge.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/claude_code_bridge.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/claude_code_bridge.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/claude_code_bridge.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/claude_code_bridge.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/claude_code_bridge.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/claude_code_bridge.py"
+      ],
+      "sha256": "01efe3684833bd225b0c1b02e0ae82c9c139ef58395607637a9bbbd03829648a"
+    },
+    {
+      "count": 2,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/cognitive_kernel.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/cognitive_kernel.py"
+      ],
+      "sha256": "28c8a9392c4e07714f76a84df119b2cc559235c9560e66ca991c0f4829732179"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/cognitive_salience.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/cognitive_salience.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/cognitive_salience.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/cognitive_salience.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/cognitive_salience.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/cognitive_salience.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/cognitive_salience.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/cognitive_salience.py"
+      ],
+      "sha256": "9b3bda0bd34a86efab54ea34721bd7bca6b13d6c1053259707e0be21d7898e7c"
+    },
+    {
+      "count": 8,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/companion_bootstrap.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/companion_bootstrap.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/companion_bootstrap.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/companion_bootstrap.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/companion_bootstrap.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/companion_bootstrap.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/companion_bootstrap.py",
+        "C:/Oracle/worktrees/windows-desktop-app-v01/core/companion_bootstrap.py"
+      ],
+      "sha256": "ff88d67235b73f018c8a36937045b5d917738139b8039e45c0473194c49a1e50"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/computer_control.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/computer_control.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/computer_control.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/computer_control.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/computer_control.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/computer_control.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/computer_control.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/computer_control.py"
+      ],
+      "sha256": "249169399d3fafe5482553a74ca3c7a6c8a348ba4ad6965ae0b8d62254020089"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/context_commands.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/context_commands.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/context_commands.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/context_commands.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/context_commands.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/context_commands.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/context_commands.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/context_commands.py"
+      ],
+      "sha256": "6d7ea175d88255c1836c82034bde546088e7239b9042c0700c22eab401e58fd3"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/context_loader.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/context_loader.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/context_loader.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/context_loader.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/context_loader.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/context_loader.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/context_loader.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/context_loader.py"
+      ],
+      "sha256": "717db69c95e2c640e75f769ae9301d311bd48a57e0dd33dc23e59eb525f4df1a"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/continuity_export.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/continuity_export.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/continuity_export.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/continuity_export.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/continuity_export.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/continuity_export.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/continuity_export.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/continuity_export.py"
+      ],
+      "sha256": "1bcfc61059723f151062571c9bbe93e523ddb953fe193dd3134f7fffdfa1e113"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/continuity_scheduler.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/continuity_scheduler.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/continuity_scheduler.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/continuity_scheduler.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/continuity_scheduler.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/continuity_scheduler.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/continuity_scheduler.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/continuity_scheduler.py"
+      ],
+      "sha256": "d0c9de005062fe0921a0b3e8a5efadb639385e058da58e55fd0c8144ab215a30"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/curiosity_engine.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/curiosity_engine.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/curiosity_engine.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/curiosity_engine.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/curiosity_engine.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/curiosity_engine.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/curiosity_engine.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/curiosity_engine.py"
+      ],
+      "sha256": "31a5b6b33e2f7638e9a51356ae3561605641e0f48ad98c1b8d725907f7cb9f3a"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/daemon.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/daemon.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/daemon.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/daemon.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/daemon.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/daemon.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/daemon.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/daemon.py"
+      ],
+      "sha256": "0bd5e25aa639d24812b3b7868c8ede684c439c02259cf656fb96b07556d3771d"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/desktop_ai_bridge.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/desktop_ai_bridge.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/desktop_ai_bridge.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/desktop_ai_bridge.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/desktop_ai_bridge.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/desktop_ai_bridge.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/desktop_ai_bridge.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/desktop_ai_bridge.py"
+      ],
+      "sha256": "edb782b636310cc19ea4bebc10f0b81ac77ed8c6922875624d44f386acd7f98b"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/drive_scope.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/drive_scope.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/drive_scope.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/drive_scope.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/drive_scope.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/drive_scope.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/drive_scope.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/drive_scope.py"
+      ],
+      "sha256": "2a792dcd5638e166786b8b9aa3ef0c9a305fcf5da96b6418bd673aaa06ca92a2"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/epistemic_ledger.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/epistemic_ledger.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/epistemic_ledger.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/epistemic_ledger.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/epistemic_ledger.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/epistemic_ledger.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/epistemic_ledger.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/epistemic_ledger.py"
+      ],
+      "sha256": "1cb5aed0e41b77dc83b9474c74a9302cc60ea36b9099a98af405ebed68078479"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/experience_compression.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/experience_compression.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/experience_compression.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/experience_compression.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/experience_compression.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/experience_compression.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/experience_compression.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/experience_compression.py"
+      ],
+      "sha256": "3ef85af3c681e523dd43192e3dd2750f9b66f0bd49ca92886cad4cab564234e6"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/freedom_to_ask.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/freedom_to_ask.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/freedom_to_ask.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/freedom_to_ask.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/freedom_to_ask.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/freedom_to_ask.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/freedom_to_ask.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/freedom_to_ask.py"
+      ],
+      "sha256": "d9cfd6d25a561721495ae88b73db4ce5026b35058e20ead4cca19b1f56069fd1"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/governance.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/governance.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/governance.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/governance.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/governance.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/governance.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/governance.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/governance.py"
+      ],
+      "sha256": "a28b69c78333076db4edb3488dede717fd6a14817bf1b618d0d1ab93254f7362"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/grounding.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/grounding.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/grounding.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/grounding.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/grounding.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/grounding.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/grounding.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/grounding.py"
+      ],
+      "sha256": "91f420dbb9eea3fcfe3bab305fac342cc9ab35f7b7e2fa4e52b6cec121ff3abc"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/identity_compass.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/identity_compass.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/identity_compass.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/identity_compass.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/identity_compass.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/identity_compass.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/identity_compass.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/identity_compass.py"
+      ],
+      "sha256": "f3733f4cd3ad056f0cbbae52cf61dbfbf723552fb5ecd07366614ad604ab5d0a"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/identity_compliance.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/identity_compliance.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/identity_compliance.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/identity_compliance.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/identity_compliance.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/identity_compliance.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/identity_compliance.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/identity_compliance.py"
+      ],
+      "sha256": "e6fcce0c313a292427acd1f288397a8289e3a117ae393ebae95b12977e6555bf"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/integration_gate.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/integration_gate.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/integration_gate.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/integration_gate.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/integration_gate.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/integration_gate.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/integration_gate.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/integration_gate.py"
+      ],
+      "sha256": "2cba978a13289e33fb1e9ee43f0a513b19476079005a146e2ccb2450494a1afe"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/lcl.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/lcl.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/lcl.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/lcl.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/lcl.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/lcl.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/lcl.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/lcl.py"
+      ],
+      "sha256": "155f18e9eb2a4e1f56a05fd51cec1db1ddc2021085927bf710a419c143e983b3"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/learning.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/learning.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/learning.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/learning.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/learning.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/learning.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/learning.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/learning.py"
+      ],
+      "sha256": "32776b32283cc3d41baa67fcfc8190efaab3c7f7ebd18c559ef3055cdfa75f91"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/light_compression.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/light_compression.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/light_compression.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/light_compression.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/light_compression.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/light_compression.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/light_compression.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/light_compression.py"
+      ],
+      "sha256": "d23272ebd31f7d6cdb6abafb656f3b68188bb9d3522f0469662f2f77e3be38f4"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/live_context.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/live_context.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/live_context.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/live_context.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/live_context.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/live_context.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/live_context.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/live_context.py"
+      ],
+      "sha256": "310c36f1fa0917cea7126a5d8774f6ca6157cd9937466963b748548aeb38dfcf"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/llm.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/llm.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/llm.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/llm.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/llm.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/llm.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/llm.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/llm.py"
+      ],
+      "sha256": "40f0d18fc715fab7c12dbfca3e7b895fb4ac6b596277f5ddd5ab1d76765fff3d"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/lootdrop.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/lootdrop.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/lootdrop.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/lootdrop.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/lootdrop.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/lootdrop.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/lootdrop.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/lootdrop.py"
+      ],
+      "sha256": "b4c7c8e7ae0ddbaf6b11729a6063f765a338dbfbf89f6bed39c4b589a3650ea0"
+    },
+    {
+      "count": 9,
+      "paths": [
+        "C:/ORACLE.AI/.claude/worktrees/agent-a2ab8f6a09d7b5de6/core/meaning_engine.py",
+        "C:/ORACLE.AI/.claude/worktrees/agent-acc4523a709bc40fc/core/meaning_engine.py",
+        "C:/Oracle/worktrees/builder-executor-bridge-v01/core/meaning_engine.py",
+        "C:/Oracle/worktrees/canonical-continuity-kernel/core/meaning_engine.py",
+        "C:/Oracle/worktrees/canonical-grounding-integration/core/meaning_engine.py",
+        "C:/Oracle/worktrees/media-witness-poc/core/meaning_engine.py",
+        "C:/Oracle/worktrees/obs-live-witness-v01/core/meaning_engine.py",
+        "C:/Oracle/worktrees/oracle-public-main/core/meaning_engine.py"
+      ],
+      "sha256": "146cf94a4ae1500d784217168e6225c06b5feca37a3008e4d54126d850b190cb"
+    }
+  ],
+  "generated_at": "2026-07-01T23:35:38.646944+00:00",
+  "inaccessible_count": 2,
+  "inaccessible_files": [
+    {
+      "path": "C:/Oracle/ORACLE.AI-runtime/Memory/oracle_memory.db",
+      "reason": "matched_but_too_large_to_hash_first_pass: 92282880 > 67108864"
+    },
+    {
+      "path": "C:/ORACLE.AI/Memory/oracle_memory.db",
+      "reason": "matched_but_too_large_to_hash_first_pass: 91242496 > 67108864"
+    }
+  ],
+  "manifest_path": "C:\\Oracle\\ORACLE.AI-runtime\\data\\oracle_custody\\oracle_artifact_manifest.jsonl",
+  "matched_terms": {
+    "Legacy.GI": 287,
+    "ORACLE": 5738,
+    "ORACLE.AI": 3409,
+    "OracleAI": 279,
+    "Rendered Reality": 839,
+    "SOV1": 1658,
+    "UserPath": 526,
+    "oracle-ai-runtime": 2206
+  },
+  "next_recommended_copy_candidates": [
+    {
+      "matched_terms": [
+        "Legacy.GI",
+        "ORACLE",
+        "ORACLE.AI",
+        "OracleAI",
+        "Rendered Reality",
+        "SOV1",
+        "UserPath",
+        "oracle-ai-runtime"
+      ],
+      "reason": "High marker density and small metadata/custody value; copy still requires Noah.Physical approval.",
+      "sensitivity": "standard",
+      "sha256": "b5cb5e7c02671729cc1c64996a0dc9ed845912ebf73b9f65b289849429a519cf",
+      "source_path": "C:/Oracle/ORACLE.AI-runtime/docs/oracle_observe_copy_store.md"
+    },
+    {
+      "matched_terms": [
+        "Legacy.GI",
+        "ORACLE",
+        "ORACLE.AI",
+        "OracleAI",
+        "Rendered Reality",
+        "SOV1",
+        "UserPath",
+        "oracle-ai-runtime"
+      ],
+      "reason": "High marker density and small metadata/custody value; copy still requires Noah.Physical approval.",
+      "sensitivity": "standard",
+      "sha256": "db7f7c7672315c2977cf78b1da4d608a3ade36d2ae1fb0eb44227638784d25ee",
+      "source_path": "C:/Oracle/ORACLE.AI-runtime/core/oracle_custody_sweep.py"
+    },
+    {
+      "matched_terms": [
+        "Legacy.GI",
+        "ORACLE",
+        "ORACLE.AI",
+        "OracleAI",
+        "Rendered Reality",
+        "SOV1",
+        "UserPath",
+        "oracle-ai-runtime"
+      ],
+      "reason": "High marker density and small metadata/custody value; copy still requires Noah.Physical approval.",
+      "sensitivity": "standard",
+      "sha256": "d92383b4a161e2c74b621e605016932710a71fccf95c2327483882552718c456",
+      "source_path": "C:/Oracle/ORACLE.AI-runtime/Memory/thread_ingest/parsed_transcripts/ORACLE/oracle_session_168_20260630T235528Z_5d3f773f7681.json"
+    },
+    {
+      "matched_terms": [
+        "Legacy.GI",
+        "ORACLE",
+        "ORACLE.AI",
+        "OracleAI",
+        "Rendered Reality",
+        "SOV1",
+        "UserPath",
+        "oracle-ai-runtime"
+      ],
+      "reason": "High marker density and small metadata/custody value; copy still requires Noah.Physical approval.",
+      "sensitivity": "standard",
+      "sha256": "6b2bde965a248786ef231694d3fa6a2f5fe10e5b353b1a7ca57db6491bb38a21",
+      "source_path": "C:/Oracle/ORACLE.AI-runtime/oracle_content_scan.txt"
+    },
+    {
+      "matched_terms": [
+        "Legacy.GI",
+        "ORACLE",
+        "ORACLE.AI",
+        "OracleAI",
+        "Rendered Reality",
+        "SOV1",
+        "UserPath",
+        "oracle-ai-runtime"
+      ],
+      "reason": "High marker density and small metadata/custody value; copy still requires Noah.Physical approval.",
+      "sensitivity": "standard",
+      "sha256": "bac667148e805191b22b6f1e93a22695d7fe87d31cbf36ac87fdeeb755a73db5",
+      "source_path": "C:/Oracle/state/sources/oracle_source_manifest_report_20260619T205839Z.md"
+    },
+    {
+      "matched_terms": [
+        "Legacy.GI",
+        "ORACLE",
+        "ORACLE.AI",
+        "OracleAI",
+        "Rendered Reality",
+        "SOV1",
+        "UserPath",
+        "oracle-ai-runtime"
+      ],
+      "reason": "High marker density and small metadata/custody value; copy still requires Noah.Physical approval.",
+      "sensitivity": "standard",
+      "sha256": "10ebb7f977435b7ab387bf7b65c8cd4662af9a610d4afb4edcb74b97a93b749a",
+      "source_path": "C:/Oracle/ORACLE.AI-runtime/docs/GITHUB_SYSTEMS_INDEX.md"
+    },
+    {
+      "matched_terms": [
+        "Legacy.GI",
+        "ORACLE",
+        "ORACLE.AI",
+        "OracleAI",
+        "Rendered Reality",
+        "SOV1",
+        "UserPath",
+        "oracle-ai-runtime"
+      ],
+      "reason": "High marker density and small metadata/custody value; copy still requires Noah.Physical approval.",
+      "sensitivity": "standard",
+      "sha256": "5d3f773f7681cf1e2c4c43dfa0718cc0494b05652fe94ade9437678ff9839dd6",
+      "source_path": "C:/Oracle/ORACLE.AI-runtime/thread_exports/sqlite_sessions/oracle_session_168_20260630T235528Z.txt"
+    },
+    {
+      "matched_terms": [
+        "Legacy.GI",
+        "ORACLE",
+        "ORACLE.AI",
+        "OracleAI",
+        "Rendered Reality",
+        "SOV1",
+        "UserPath",
+        "oracle-ai-runtime"
+      ],
+      "reason": "High marker density and small metadata/custody value; copy still requires Noah.Physical approval.",
+      "sensitivity": "standard",
+      "sha256": "5d3f773f7681cf1e2c4c43dfa0718cc0494b05652fe94ade9437678ff9839dd6",
+      "source_path": "C:/Oracle/ORACLE.AI-runtime/Memory/thread_recall/imports/ORACLE_ORACLE_session_168_0436ce29e224.txt"
+    },
+    {
+      "matched_terms": [
+        "Legacy.GI",
+        "ORACLE",
+        "ORACLE.AI",
+        "OracleAI",
+        "Rendered Reality",
+        "SOV1",
+        "UserPath",
+        "oracle-ai-runtime"
+      ],
+      "reason": "High marker density and small metadata/custody value; copy still requires Noah.Physical approval.",
+      "sensitivity": "standard",
+      "sha256": "5d3f773f7681cf1e2c4c43dfa0718cc0494b05652fe94ade9437678ff9839dd6",
+      "source_path": "C:/Oracle/ORACLE.AI-runtime/Memory/thread_ingest/raw_transcripts/ORACLE/oracle_session_168_20260630T235528Z_5d3f773f7681.txt"
+    },
+    {
+      "matched_terms": [
+        "Legacy.GI",
+        "ORACLE",
+        "ORACLE.AI",
+        "OracleAI",
+        "Rendered Reality",
+        "SOV1",
+        "UserPath",
+        "oracle-ai-runtime"
+      ],
+      "reason": "High marker density and small metadata/custody value; copy still requires Noah.Physical approval.",
+      "sensitivity": "high",
+      "sha256": "5db0ce0018af97fedf0cf394f597b98877d8bcf9620fcf16142ee3e45f870589",
+      "source_path": "C:/Users/noahh/.codex/attachments/1528f51b-33da-4622-9ebf-341b8c589c26/pasted-text.txt"
+    },
+    {
+      "matched_terms": [
+        "Legacy.GI",
+        "ORACLE",
+        "ORACLE.AI",
+        "OracleAI",
+        "Rendered Reality",
+        "SOV1",
+        "UserPath",
+        "oracle-ai-runtime"
+      ],
+      "reason": "High marker density and small metadata/custody value; copy still requires Noah.Physical approval.",
+      "sensitivity": "high",
+      "sha256": "49d5c1b4fcf2c3c889cb4f9f0f19eeb6f216247ea32ab10fa41326d758650760",
+      "source_path": "C:/Users/noahh/.codex/attachments/d6a4f354-6328-4257-b605-68b1db7d07d5/pasted-text.txt"
+    },
+    {
+      "matched_terms": [
+        "Legacy.GI",
+        "ORACLE",
+        "ORACLE.AI",
+        "OracleAI",
+        "Rendered Reality",
+        "SOV1",
+        "UserPath",
+        "oracle-ai-runtime"
+      ],
+      "reason": "High marker density and small metadata/custody value; copy still requires Noah.Physical approval.",
+      "sensitivity": "high",
+      "sha256": "df98f8beffe79fa466285fa4d0100d1af596552f994b0154772eb97b02811263",
+      "source_path": "C:/Users/noahh/.codex/attachments/pasted-text-attachments.json"
+    }
+  ],
+  "receipt_path": "C:\\Oracle\\ORACLE.AI-runtime\\data\\oracle_custody\\oracle_custody_sweep_receipt_latest.json",
+  "required_fields": [
+    "source_path",
+    "source_system",
+    "filename",
+    "extension",
+    "size_bytes",
+    "created_at",
+    "modified_at",
+    "sha256",
+    "matched_terms",
+    "custody_status",
+    "copy_status",
+    "store_status",
+    "canon_status",
+    "promotion_status",
+    "sensitivity",
+    "notes"
+  ],
+  "rules": {
+    "canon_status": "candidate",
+    "cloud_upload": false,
+    "copy": "not performed without explicit Noah.Physical approval",
+    "execution": false,
+    "git_push": false,
+    "observe": "discover and hash ORACLE-adjacent artifacts",
+    "promotion_status": "not_promoted",
+    "store": "manifest and receipt written; no raw content duplication"
+  },
+  "scan_status": {
+    "completed": true,
+    "files_seen": 14610,
+    "limit_reason": null
+  },
+  "search_roots": [
+    {
+      "label": "C:/Oracle",
+      "path": "C:/Oracle"
+    },
+    {
+      "label": "C:/ORACLE.AI",
+      "path": "C:/ORACLE.AI"
+    },
+    {
+      "label": "C:/Users/noahh/.codex",
+      "path": "C:/Users/noahh/.codex"
+    }
+  ],
+  "timestamped_receipt_path": "C:\\Oracle\\ORACLE.AI-runtime\\data\\oracle_custody\\oracle_custody_sweep_receipt_20260701T233538Z.json"
+}

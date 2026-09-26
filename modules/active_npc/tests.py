@@ -11,6 +11,7 @@ Tests prove:
 6. Threat response (high-threat events shift need urgency)
 7. Refusal behaviour (hostile disposition produces refusal/flee)
 8. No knowledge teleportation (private event not perceived by absent NPC)
+9. Arcane events become bounded memory, goals, and action choices
 
 Usage:
     python -m modules.active_npc.tests
@@ -226,6 +227,49 @@ def run_tests() -> int:
     test("NPC has no belief about guild_master after private event",
          npc11.memory.get_belief("guild_master", "location") is None,
          "no belief injected")
+
+    # -- 9. Arcane event handling --
+    print("\n-- 9. Arcane event handling --")
+    npc12 = build_mock_npc()
+    safety_before_magic = npc12.needs.get("safety").current_level
+    result12 = npc12.process_event(world.forge_ward_flares())
+    ward_belief = npc12.memory.get_belief("stonecroft_forge_ward", "state")
+    ward_goal = next((g for g in npc12.goals.active() if g.name == "Stabilize forge ward"), None)
+    safety_after_magic = npc12.needs.get("safety").current_level
+
+    test("Forge ward flare is perceived",
+         result12.observed,
+         f"observed={result12.observed}")
+    test("Forge ward flare creates bounded ward belief",
+         ward_belief is not None and ward_belief.provenance == Provenance.OBSERVED,
+         f"belief={ward_belief.value if ward_belief else 'none'}")
+    test("Forge ward flare creates immediate stabilization goal",
+         ward_goal is not None,
+         f"goal={ward_goal.name if ward_goal else 'none'}")
+    test("Arcane danger increases safety pressure",
+         safety_after_magic > safety_before_magic,
+         f"safety: {safety_before_magic:.2f} -> {safety_after_magic:.2f}")
+    test("Arcane anomaly drives investigate/dialogue choice",
+         result12.selected_action_kind in (ActionKind.INVESTIGATE.value, ActionKind.DIALOGUE.value),
+         f"action={result12.selected_action_kind}")
+
+    rel_before_charm = npc12.relationships.get("player").trust
+    result13 = npc12.process_event(
+        world.player_offers_stabilizing_charm(),
+        interacting_with="player",
+        player_input="This charm can quiet the ward if you let me place it.",
+    )
+    rel_after_charm = npc12.relationships.get("player").trust
+    completed_ward_goal = next((g for g in npc12.goals.goals if g.name == "Stabilize forge ward"), None)
+    test("Stabilizing charm changes the interaction into dialogue",
+         result13.selected_action_kind == ActionKind.DIALOGUE.value,
+         f"action={result13.selected_action_kind}")
+    test("Stabilizing charm improves player trust",
+         rel_after_charm > rel_before_charm,
+         f"trust: {rel_before_charm:.2f} -> {rel_after_charm:.2f}")
+    test("Stabilizing charm resolves the ward goal",
+         completed_ward_goal is not None and completed_ward_goal.status == GoalStatus.COMPLETED,
+         f"status={completed_ward_goal.status.value if completed_ward_goal else 'none'}")
 
     # ── Summary ───────────────────────────────────────────────────────────────
     print("\n" + "=" * 70)

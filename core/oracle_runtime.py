@@ -518,22 +518,6 @@ def _invoke_module(
             result.next_recommended_step = "/self-build to propose the next improvement."
             result.confidence = 0.40
 
-        # Also check if backup is due and run it
-        try:
-            from continuity_scheduler import load_schedule, run_once
-            from datetime import datetime, timezone
-            sched = load_schedule()
-            if sched.get("enabled") and sched.get("next_run_at"):
-                next_run = datetime.fromisoformat(sched["next_run_at"])
-                if datetime.now(timezone.utc) >= next_run:
-                    backup = run_once()
-                    if backup.get("status") == "completed":
-                        result.action_taken += " | Continuity backup completed."
-                    elif backup.get("status") == "blocked":
-                        result.action_taken += f" | Backup blocked: {backup.get('blocked_reason', '')}"
-        except Exception:
-            pass
-
     # Write cycle result back to project state — only for build-step recommendations,
     # not transient cycle actions like "Use /pending to review…"
     try:
@@ -640,6 +624,21 @@ def run_cycle(mode: str = MODE_MANUAL) -> RuntimeCycleResult:
 
     # Invoke module
     result = _invoke_module(priority, mode, result)
+
+    # Continuity backup — every cycle, regardless of selected priority.
+    # Backups must not starve behind P1–P8; run_if_due is a cheap no-op
+    # when disabled or not yet due.
+    try:
+        from continuity_scheduler import run_if_due
+        backup = run_if_due()
+        if backup is not None:
+            status = backup.get("status", "")
+            if status == "completed":
+                result.action_taken += " | Continuity backup completed."
+            elif status in ("blocked", "failed"):
+                result.action_taken += f" | Backup {status}: {backup.get('blocked_reason', '')}"
+    except Exception:
+        pass
 
     # Finalize
     result.finish("one_cycle_complete" if mode == MODE_MANUAL else f"{mode}_cycle_complete")

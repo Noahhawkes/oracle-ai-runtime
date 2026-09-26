@@ -163,6 +163,35 @@ def _pending_approval_count() -> int:
         return 0
 
 
+def _terminal_census() -> dict:
+    """Read and receipt terminal-like processes without closing anything."""
+    try:
+        from terminal_census import write_snapshot
+
+        return write_snapshot()
+    except Exception as exc:
+        return {
+            "generated_at": _NOW(),
+            "counts": {
+                "terminal_processes": 0,
+                "shell_processes": 0,
+                "conhost_processes": 0,
+                "oracle_related": 0,
+                "codex_related": 0,
+                "external_helpers": 0,
+                "unclassified": 0,
+                "excess_shells_over_limit": 0,
+            },
+            "records": [],
+            "error": f"{type(exc).__name__}: {exc}",
+            "safety": {
+                "read_only": True,
+                "no_windows_closed": True,
+                "no_processes_killed": True,
+            },
+        }
+
+
 # ── One next action ───────────────────────────────────────────────────────────
 
 def _one_next_action(findings: dict) -> dict:
@@ -175,6 +204,23 @@ def _one_next_action(findings: dict) -> dict:
             "command":          "python core/approval_center.py --list",
             "approval_required": False,
             "reason":           "Pending items reduce ORACLE's ability to reason accurately.",
+        }
+
+    tc_counts = findings.get("terminal_census", {}).get("counts", {})
+    if tc_counts.get("excess_visible_windows_over_limit", 0) > 0:
+        return {
+            "action":           f"Review terminal census ({tc_counts.get('visible_terminal_windows', 0)} visible terminal windows)",
+            "command":          "python core/terminal_census.py --status",
+            "approval_required": False,
+            "reason":           "Visible terminal windows are above the workspace limit; receipts help separate ORACLE-owned shells from Codex and external helpers.",
+        }
+
+    if tc_counts.get("excess_shells_over_limit", 0) > 0:
+        return {
+            "action":           f"Review terminal backing sessions ({tc_counts.get('shell_processes', 0)} shell processes)",
+            "command":          "python core/terminal_census.py --status",
+            "approval_required": False,
+            "reason":           "Backing shell/session count is above the workspace limit even if not all of them are visible desktop windows.",
         }
 
     terminals = findings.get("windows", {}).get("terminals", [])
@@ -235,10 +281,12 @@ def dry_run() -> dict:
     old_exp      = _old_exports()
     scoped       = _scoped_path_candidates()
     pending      = _pending_approval_count()
+    terminal_census = _terminal_census()
 
     findings = {
         "generated_at":     _NOW(),
         "windows":          windows,
+        "terminal_census":  terminal_census,
         "stale_proposals":  stale,
         "old_exports":      old_exp,
         "scoped_paths":     scoped,
@@ -257,6 +305,19 @@ def dry_run() -> dict:
     flags = []
     if len(windows.get("terminals", [])) > MAX_OPEN_TERMINALS:
         flags.append(f"WARNING: {len(windows['terminals'])} terminals open (>{MAX_OPEN_TERMINALS})")
+    tc_counts = terminal_census.get("counts", {})
+    if tc_counts.get("excess_visible_windows_over_limit", 0) > 0:
+        flags.append(
+            f"WARNING: {tc_counts.get('visible_terminal_windows', 0)} visible terminal window(s) detected "
+            f"(>{MAX_OPEN_TERMINALS})"
+        )
+    if tc_counts.get("excess_shells_over_limit", 0) > 0:
+        flags.append(
+            f"WARNING: {tc_counts.get('shell_processes', 0)} terminal shell process(es) detected "
+            f"(>{MAX_OPEN_TERMINALS})"
+        )
+    if tc_counts.get("unclassified", 0) > 0:
+        flags.append(f"INFO: {tc_counts['unclassified']} unclassified terminal-like process(es)")
     if len(windows.get("editors", [])) > MAX_OPEN_EDITORS:
         flags.append(f"INFO: {len(windows['editors'])} editor windows open")
     if stale:
@@ -282,6 +343,7 @@ def dry_run() -> dict:
 def _write_md_report(findings: dict) -> None:
     w  = findings.get("windows", {})
     na = findings.get("next_action", {})
+    tc = findings.get("terminal_census", {}).get("counts", {})
     lines = [
         "# ORACLE Workspace Steward Report",
         f"Generated: {findings.get('generated_at', '')[:19]}",
@@ -293,6 +355,16 @@ def _write_md_report(findings: dict) -> None:
         f"- Browsers      : {len(w.get('browsers', []))}",
         f"- ORACLE windows: {len(w.get('oracle', []))}",
         f"- Unknown       : {len(w.get('unknown', []))}",
+        "",
+        "## Terminal Process Census",
+        f"- Visible terminal windows: {tc.get('visible_terminal_windows', 0)}",
+        f"- Shell processes: {tc.get('shell_processes', 0)}",
+        f"- Terminal-like processes: {tc.get('terminal_processes', 0)}",
+        f"- Windows Terminal hosts/sessions: {tc.get('windows_terminal_hosts', 0)}",
+        f"- ORACLE-related: {tc.get('oracle_related', 0)}",
+        f"- Codex-related: {tc.get('codex_related', 0)}",
+        f"- External helpers: {tc.get('external_helpers', 0)}",
+        f"- Unclassified: {tc.get('unclassified', 0)}",
         "",
         "## Findings",
     ]
@@ -457,6 +529,11 @@ if __name__ == "__main__":
         print(f"  Old exports : {len(result.get('old_exports', []))}")
         print(f"  Pending     : {result.get('pending_approvals', 0)} approvals")
         print(f"  Scoped paths: {len(result.get('scoped_paths', []))}")
+        tc = result.get("terminal_census", {}).get("counts", {})
+        print(f"  Term proc   : {tc.get('visible_terminal_windows', 0)} visible, "
+              f"{tc.get('shell_processes', 0)} shells, "
+              f"{tc.get('oracle_related', 0)} ORACLE-related, "
+              f"{tc.get('unclassified', 0)} unclassified")
         for flag in result.get("flags", []):
             print(f"  ⚑ {flag}")
         print(f"\n  Next action : {na.get('action')}")
@@ -471,8 +548,12 @@ if __name__ == "__main__":
         if REPORT_JSON.exists():
             raw = json.loads(REPORT_JSON.read_text(encoding="utf-8"))
             na  = raw.get("next_action", {})
+            tc = raw.get("terminal_census", {}).get("counts", {})
             print(f"\n  Last run : {raw.get('generated_at', 'never')[:19]}")
             print(f"  Flags    : {len(raw.get('flags', []))}")
+            print(f"  Term proc: {tc.get('visible_terminal_windows', 0)} visible, "
+                  f"{tc.get('shell_processes', 0)} shells, "
+                  f"{tc.get('oracle_related', 0)} ORACLE-related")
             print(f"  Next     : {na.get('action', 'none')}\n")
         else:
             print("\n  No stewardship report yet. Run --dry-run first.\n")

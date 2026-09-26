@@ -25,7 +25,8 @@ def test_verified_git_facts_are_live():
     v = s["verified"]
     assert v["branch"] and v["branch"] != "UNKNOWN"
     assert v["commit"] and v["commit"] != "UNKNOWN"
-    assert v["working_tree"] in ("clean", "modified")
+    assert v["working_tree"] in ("clean", "modified", "unknown")
+    assert v.get("subprocess_used") is False
     assert isinstance(v["recent_commits"], list)
     # freshness: observed_at is recent (within a minute)
     obs = datetime.fromisoformat(s["observed_at"])
@@ -50,7 +51,9 @@ def test_summary_separates_verified_from_declared():
     assert "BOUNDARY:" in text
     # verified section names live runtime facts
     assert "Branch/commit:" in text
-    assert "localhost:7777" in text
+    import runtime_config
+    assert f"localhost:{runtime_config.runtime_port()}" in text
+    assert "localhost:7777" not in text
 
 
 def test_declared_narrative_never_shown_as_verified():

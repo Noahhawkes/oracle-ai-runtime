@@ -84,6 +84,34 @@ class NPCReasoning:
                     ))
 
         # ── Goal-directed action ───────────────────────────────────────────────
+        # Arcane forge events stay grounded in ordinary NPC state.
+        if observation and _is_arcane_observation(observation):
+            desc = observation.description.lower()
+            if "stabilize" in desc or "quieting rune" in desc:
+                candidates.append(CandidateAction(
+                    kind=ActionKind.DIALOGUE,
+                    target=interacting_with,
+                    content="Evaluate the offered stabilizing charm",
+                    rationale="Arcane aid offered for the forge ward; response depends on trust and caution",
+                    need_score=0.55,
+                    goal_score=0.72,
+                    relationship_score=0.2 if disposition not in ("hostile",) else -0.1,
+                    risk=0.25,
+                    feasibility=0.85,
+                ))
+            else:
+                candidates.append(CandidateAction(
+                    kind=ActionKind.INVESTIGATE,
+                    target="stonecroft_forge_ward",
+                    content="Inspect the unstable forge ward",
+                    rationale="Forge ward produced an arcane anomaly within Mira's workspace",
+                    need_score=0.75,
+                    goal_score=0.65,
+                    relationship_score=0.0,
+                    risk=0.35,
+                    feasibility=0.8,
+                ))
+
         if top_goal:
             if interacting_with and disposition not in ("hostile", "suspicious"):
                 trust = rel.trust if rel else 0.0
@@ -186,6 +214,12 @@ class NPCReasoning:
         if "attack" in desc or "killed" in desc or "murder" in desc:
             interpretations.append("This event involved violence — threat level should increase")
 
+        if _is_arcane_observation(obs):
+            if "stabilize" in desc or "quieting rune" in desc:
+                interpretations.append("The ward may be calmed by controlled ironwork and cautious trust")
+            else:
+                interpretations.append("Forge ward instability threatens the shop and needs direct inspection")
+
         if "gold" in desc or "reward" in desc or "payment" in desc:
             if self.identity.traits.pragmatism > 0.5:
                 interpretations.append("Potential financial opportunity detected")
@@ -194,3 +228,8 @@ class NPCReasoning:
             interpretations.append("Event noted; insufficient context to draw specific conclusions")
 
         return interpretations
+
+
+def _is_arcane_observation(obs: Observation) -> bool:
+    text = f"{obs.event_type} {obs.description}".lower()
+    return any(token in text for token in ("arcane", "ward", "rune", "charm", "magic"))

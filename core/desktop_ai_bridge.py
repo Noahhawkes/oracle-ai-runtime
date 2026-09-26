@@ -202,6 +202,10 @@ class StagedPrompt:
     requires_confirmation: bool = True
     sent: bool = False
     sent_at: str = ""
+    existence_stage_event_id: str = ""
+    existence_stage_event_hash: str = ""
+    existence_handoff_event_id: str = ""
+    existence_handoff_event_hash: str = ""
 
 
 def save_staged(sp: StagedPrompt) -> None:
@@ -436,8 +440,32 @@ def stage_prompt(
         risk=target.risk_level,
         requires_confirmation=target.confirmation_required,
     )
+    if target_key == "sov1":
+        try:
+            from existence_integration import record_sov1_task_staged
+
+            existence_event = record_sov1_task_staged(
+                stage_id=sp.id,
+                prompt=sp.prompt,
+                source=sp.source,
+                risk=sp.risk,
+                requires_confirmation=sp.requires_confirmation,
+            )
+            sp.existence_stage_event_id = existence_event["event_id"]
+            sp.existence_stage_event_hash = existence_event["event_hash"]
+        except Exception as exc:
+            raise StagingError(
+                "SOV1 staging blocked because the ORACLE existence ledger "
+                f"could not create a receipt: {type(exc).__name__}: {exc}"
+            ) from exc
     save_staged(sp)
-    _audit("STAGE", f"target={target_key} source={source} len={len(prompt)}")
+    _audit(
+        "STAGE",
+        (
+            f"target={target_key} source={source} len={len(prompt)} "
+            f"existence_event={sp.existence_stage_event_id or 'not_applicable'}"
+        ),
+    )
     return sp
 
 
@@ -485,6 +513,25 @@ def send_staged(*, confirmed: bool = False) -> dict:
 
     sp.sent = result.get("success", False)
     sp.sent_at = datetime.now(timezone.utc).isoformat()
+    if sp.target == "sov1":
+        try:
+            from existence_integration import record_sov1_handoff_result
+
+            existence_event = record_sov1_handoff_result(
+                stage_id=sp.id,
+                prompt=sp.prompt,
+                source=sp.source,
+                confirmed=confirmed,
+                result=result,
+            )
+            sp.existence_handoff_event_id = existence_event["event_id"]
+            sp.existence_handoff_event_hash = existence_event["event_hash"]
+            result["existence_event_id"] = existence_event["event_id"]
+            result["existence_event_hash"] = existence_event["event_hash"]
+        except Exception as exc:
+            result["existence_logging_error"] = f"{type(exc).__name__}: {exc}"
+            result["success"] = False
+            sp.sent = False
     save_staged(sp)
 
     _audit(
@@ -538,17 +585,25 @@ def _dispatch_file(target: DesktopAITarget, sp: StagedPrompt) -> dict:
 
 
 def _dispatch_subprocess(target: DesktopAITarget, sp: StagedPrompt) -> dict:
-    """SOV1: echo the task — SOV1 subprocess routing is done in oracle.py."""
+    """Release a SOV1 task to ORACLE's governed execution boundary.
+
+    This handoff does not claim the desktop task has executed. The current
+    repository has no durable worker that consumes the staged file.
+    """
     return {
         "success": True,
         "target": sp.target,
         "method": HANDOFF_SUBPROCESS,
         "detail": (
-            "SOV1 task staged. "
-            "ORACLE will route this to sov1.py on your next /cycle or run one resident cycle."
+            "SOV1 task released by ORACLE and receipted. "
+            "No SOV1 execution worker consumed it in this handoff."
         ),
         "prompt_snippet": sp.prompt[:80],
-        "next_action": "Type /cycle to run one SOV1 computer-use cycle with this task.",
+        "next_action": (
+            "Run SOV1 explicitly with the reviewed task until a durable "
+            "ORACLE-to-SOV1 execution worker is implemented."
+        ),
+        "execution_completed": False,
     }
 
 

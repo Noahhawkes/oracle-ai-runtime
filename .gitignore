@@ -36,6 +36,10 @@ storage/token.json
 storage/credentials.json
 storage/*.json
 
+# OBS Studio capture profiles/configs — runtime junk, and profile .ini files
+# can embed live OAuth tokens. Never commit.
+data/obs_captures/
+
 # User identity and personal documents (privacy — reviewed separately)
 Users/
 
@@ -59,3 +63,51 @@ state/
 .snapshots/
 Projects/patch_proposals/
 .aider*
+
+# generated drive scan report (regenerable)
+oracle_content_scan.txt
+
+# Live-coding backup snapshots + scratch scan output (not source, regenerable)
+*.bak_*
+*_hits.txt
+*_brief.txt
+*_inspection.txt
+*_diff.txt
+*_uncommitted.patch
+observation_boss_lair.txt
+vision_bridge_inventory.txt
+approval-continuation.patch
+patch_approval_continuation*.py
+fallback_prompt_inspection.txt
+stream_reply_inspection.txt
+oracle_server_diff.txt
+oracle_ingest_test/.pytest_cache/
+.claude/
+_preservation_checkpoints/
+sandbox/
+sandbox.trash/
+
+# Intake runtime staging (large, regenerable) + local backups
+intake/staging/
+Backups/
+
+# Generated thread-pass ingestion receipts (regenerable via seed_loader)
+data/receipts/
+
+# Staged large build directives (local-only user content, may be large/personal)
+data/build_directives/
+
+# RedInk ingestion test workspace (scratch, recreated per test)
+noah_exocortex/
+
+# RedInk sovereign custody store (local-only, not committed)
+custody/
+
+# Ellie/Drakin extracted manuscripts (unpublished novels; regenerable via tools/extract_ellie_corpus.py)
+data/domains/ellie/extracted/
+
+# Extracted Documents corpus (local recall content; regenerable via tools/extract_documents_corpus.py)
+data/domains/documents/extracted/
+
+# Agent gateway bearer token (local secret, never commit)
+agent_gateway_token.txt

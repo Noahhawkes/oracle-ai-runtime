@@ -1,0 +1,26 @@
+{
+  "record_id": "TP_003_25_QUESTION_DIAGNOSTIC_SPINE",
+  "title": "25-Question Diagnostic Spine",
+  "source_date": "2026-06-23",
+  "source_context": "iOS in-bed thread pass, later continued on PC",
+  "submitted_by": "Noah.Physical",
+  "authorial_authority": "Noah.Physical",
+  "intent_owner": "Noah.Physical",
+  "produced_with": "mixed",
+  "token_origin": "mixed",
+  "origin_channel": "ai_assisted_thread_pass",
+  "reviewed_by": "Noah.Physical",
+  "approved_by": "Noah.Physical",
+  "authorship_status": "noah_authorized_ai_assisted",
+  "transport_path": "ChatGPT thread to ORACLE runtime seed data",
+  "confidence": "high_for_user_directives_medium_for_external_ai_claims",
+  "canon_status": "candidate_seed_record",
+  "approval_status": "pending_noah_physical",
+  "holes": [
+    "Token origin is AI-assisted/mixed; authorial authority is Noah.Physical. Candidate pending Noah.Physical canon approval."
+  ],
+  "contradictions": [],
+  "required_review": [
+    "Keep as audit suite; do not enforce per-turn"
+  ]
+}

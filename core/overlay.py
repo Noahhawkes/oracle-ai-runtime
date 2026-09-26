@@ -359,11 +359,16 @@ class OracleOverlay(tk.Tk):
     # ── Button handlers ───────────────────────────────────────────────────────
 
     def _btn_start_local(self):
-        bat = ROOT / "oracle_local.bat"
+        bat = ROOT / "oracle_desktop.bat"
+        if not bat.exists():
+            bat = ROOT / "oracle_local.bat"
         if bat.exists():
-            subprocess.Popen(["cmd", "/c", "start", "ORACLE.AI Local",
-                              str(bat)], shell=False)
-            self._append("Launched ORACLE Local in a new terminal window.\n", "info")
+            subprocess.Popen(
+                ["cmd", "/c", str(bat)],
+                shell=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            self._append("Launched ORACLE Local through the hidden desktop bootstrap.\n", "info")
         else:
             self._append("oracle_local.bat not found. Run python core/oracle.py manually.\n", "warn")
 
