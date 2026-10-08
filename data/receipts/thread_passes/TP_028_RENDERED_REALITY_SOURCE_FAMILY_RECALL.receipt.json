@@ -1,0 +1,72 @@
+{
+  "receipt_id": "build_TP_028_RENDERED_REALITY_SOURCE_FAMILY_RECALL",
+  "record_id": "TP_028_RENDERED_REALITY_SOURCE_FAMILY_RECALL",
+  "title": "Rendered Reality Source Family Recall - source map (preserve-first)",
+  "kind": "source_family_map_record",
+  "continues": ["TP_018_MIRICLEDRIVE_CONNECTOR_RESTORE", "TP_019_MIRICLEDRIVE_LOCAL_FILE_INVENTORY_PROVENANCE"],
+  "ingested_at": "2026-06-28T18:50:53.567524+00:00",
+  "submitted_by": "Noah.Physical",
+  "authorial_authority": "Noah.Physical",
+  "intent_owner": "Noah.Physical",
+  "produced_with": "Claude Code",
+  "token_origin": "ai",
+  "origin_channel": "live_obs_drive_recall",
+  "authorship_status": "noah_authorized_ai_assisted",
+  "machine_observed": false,
+  "observation_status": "post_event_testimony",
+  "testimony_source": "Noah.Physical",
+  "source_family": "RenderedReality",
+  "artifacts": [
+    {"path": "research_canon/rendered_reality_source_family.md", "sha256": "sha256:00fac91edeb0d429600607cb1f6c2d8597f1b01b28cd152881f478834e41d066"},
+    {"path": "research_canon/rendered_reality_source_family.jsonl", "sha256": "sha256:7b8d08d321c4fd4c086656fcc4312b3bd498230d0839d744e877b4b3d133864e"}
+  ],
+  "source_count": 7,
+  "boundary_laws": [
+    "RENDERED_REALITY_ARCHIVE != SINGLE_DOCUMENT",
+    "THREAD_EXPORT != CANONICAL_FACT",
+    "AI_SUMMARY != PRIMARY_SOURCE",
+    "FILTERED_CONTENT != FULL_CONTEXT",
+    "CREATIVE_BRANCH != TECHNICAL_SPEC",
+    "SOURCE_FAMILY_MAP_PRECEDES_INGESTION"
+  ],
+  "categorization": {
+    "RR_001": "personality_profile_extraction (docx) - AI categorization of Noah material",
+    "RR_002": "personal_evolution_extraction (docx) - AI extraction",
+    "RR_003": "personality_profile_extraction (google_doc) - VARIANT of RR_001; core values & leadership; values are REPORTED not asserted",
+    "RR_004": "personal_evolution_extraction (google_doc) - VARIANT of RR_002",
+    "RR_005": "filtered_data (spreadsheet) - 'You said:' thread rows; multi-agent; filtering loss unknown",
+    "RR_006": "thread_export (md) - Grok export, conv 868220f2..., 67 msgs; per-turn authorship preserved",
+    "RR_007": "creative_media_branch (docx) - Silverback Tales satire; NOT doctrine/spec"
+  },
+  "distinct_authorship_situations_preserved": 4,
+  "do_not_ingest_blindly": [
+    "Do not collapse manuscript, AI categorization, thread export, filtered spreadsheet, and creative branch into one authorship category.",
+    "RR_003/RR_004 are Google Doc VARIANTS of RR_001/RR_002 - diff before treating as identical; do not double-count as canon.",
+    "RR_005 filtered spreadsheet is lossy by definition (criteria unknown) - never treat as full context.",
+    "RR_006 Grok export is multi-agent testimony - THREAD_EXPORT != CANONICAL_FACT, keep Noah vs Grok turns separable.",
+    "RR_007 creative branch is fiction/satire - do not mine for runtime facts or doctrine.",
+    "Extracted 'core values' (RR_003) are reported claims about Noah, not independently verified facts."
+  ],
+  "relationship_model": {
+    "rendered_reality": "upstream doctrine + archive source family (the corpus)",
+    "miricledrive": "scanner/inventory tool that discovers and groups files (machine_scan_inventory)",
+    "oracle_ai": "runtime witness; indexes + preserves provenance; refuses discovery->authorship/canon promotion without Noah.Physical"
+  },
+  "proposed_next_source_map_path": [
+    "1. Connector refine pass: resolve verified drive_url_or_id + created_at/updated_at for RR_001..RR_007; clear provenance holes.",
+    "2. Diff RR_001 vs RR_003 and RR_002 vs RR_004 (docx vs Google Doc variants) to record divergence.",
+    "3. Build thread families (start with RR_006 Grok export per-turn split).",
+    "4. Timeline -> doctrine extraction -> code artifacts -> per-source receipts."
+  ],
+  "canon_status": "runtime_ingested_record",
+  "approval_status": "pending_noah_physical",
+  "holes": [
+    "No Drive IDs/URLs connector-verified yet; timestamps are filename-derived where present. This is a map, not verified Drive metadata.",
+    "No file CONTENT was retrieved or hashed; this records source existence, category, and provenance intent only.",
+    "OBS recall not machine-observed by ORACLE; recording path/hash not provided - lived provenance rests on Noah.Physical testimony.",
+    "Source list is what Noah reported finding; the family is likely larger (excavation, not complete census).",
+    "Token origin is AI-authored (Claude Code) under Noah.Physical authority; pending Noah.Physical canon approval."
+  ],
+  "required_review": ["Noah.Physical approve source family + categories before any content ingest"],
+  "promoted_to_canon": false
+}

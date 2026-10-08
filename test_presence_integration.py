@@ -114,8 +114,12 @@ def test_fastapi_endpoints():
     try:
         import urllib.request
         import urllib.error
-        
-        base_url = "http://localhost:7777"
+
+        try:
+            from runtime_config import runtime_base_url
+            base_url = runtime_base_url(host="localhost")
+        except Exception:
+            base_url = "http://localhost:7781"
         
         # Check if server is up
         try:
@@ -256,7 +260,7 @@ def main():
         print("\n🎉 All tests passed! ORACLE presence is fully integrated.")
         print("\nNext steps:")
         print("  1. Start oracle_server.py if not already running")
-        print("  2. Open http://localhost:7777 in your browser")
+        print("  2. Open the runtime URL (default http://localhost:7781) in your browser")
         print("  3. Make changes to files in core/ or Projects/")
         print("  4. Watch for notifications (urgency-based multi-channel alerts)")
         print("  5. Try hotkeys:")

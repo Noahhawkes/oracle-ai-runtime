@@ -1,0 +1,110 @@
+{
+  "receipt_id": "build_TP_031_ORACLE_DESKTOP_APP_AND_DURABLE_THREAD_LOGGING",
+  "record_id": "TP_031_ORACLE_DESKTOP_APP_AND_DURABLE_THREAD_LOGGING",
+  "title": "ORACLE Desktop App (v1 launcher) + Durable Thread Logging audit",
+  "kind": "build_and_audit_record",
+  "ingested_at": "2026-06-28T19:06:10.153770+00:00",
+  "submitted_by": "Noah.Physical",
+  "authorial_authority": "Noah.Physical",
+  "intent_owner": "Noah.Physical",
+  "produced_with": "Claude Code",
+  "token_origin": "ai",
+  "origin_channel": "high_priority_build_directive",
+  "authorship_status": "noah_authorized_ai_assisted",
+  "machine_observed": true,
+  "observation_status": "machine_observed",
+
+  "app_launcher": {
+    "oracle_exe_exists": false,
+    "v1_launcher_is_temporary": true,
+    "launcher_ps1": "ORACLE.ps1",
+    "launcher_bat": "ORACLE_HOME.bat",
+    "operator_home": "ui/operator_home.html (generated fresh on each launch)",
+    "desktop_shortcut": "C:\\Users\\noahh\\OneDrive\\Desktop\\ORACLE.lnk",
+    "shortcut_target": "C:\\Oracle\\ORACLE.AI-runtime\\ORACLE_HOME.bat",
+    "exe_next_step": "Wrap ORACLE.ps1 into ORACLE.exe via ps2exe or PyInstaller (a launcher exe), or pin ORACLE.lnk to taskbar. Not done in v1 to avoid an unverified compile step.",
+    "note": "Existing ORACLE.bat (CLI: core/oracle.py) was left untouched; the Operator Home launcher is ORACLE_HOME.bat to avoid clobbering it."
+  },
+
+  "ports_checked": {
+    "method": "ORACLE.ps1 TCP probe + netstat owner lookup, verified live",
+    "7777": "UP - STALE Google Drive copy (PID 37000: python.exe G:\\My Drive\\HawkesNest LLC\\ORACLE.AI\\oracle_server.py --port 7777). Labeled stale, never auto-opened.",
+    "7778": "DOWN - preview/dev port",
+    "7781": "DOWN - canonical ORACLE runtime (this repo). Launcher reports exact start command; does not auto-spawn the elevated server.",
+    "11434": "UP - Ollama models service"
+  },
+
+  "thread_persistence_findings": {
+    "verdict": "ALREADY DURABLE in the canonical repo - not the feared defect.",
+    "where_stored": "Memory/oracle_memory.db (SQLite), table 'messages' (session_id, role, content, timestamp). Helpers in core/memory.py.",
+    "saved_immediately": "Yes. Main chat path saves the user turn BEFORE the model call (oracle_server.py:2348 save_message user). Assistant turn saved after generation.",
+    "user_turn_survives_timeout": "Yes on the main path (user saved before model). Streaming path oracle_server.py:1475-1477 bundles user+assistant after reply - a minor gap if that path times out (see remaining_gaps).",
+    "thread_id_survives_refresh": "Yes. GET /api/history (oracle_server.py:3515) returns live _history, else falls back to the most recent durable session.",
+    "refresh_reloads_thread": "Yes. ui/index.html init() calls restoreHistory() (line 2467) which fetches /api/history and replays the thread on every page load.",
+    "frontend_only_in_memory": "No. There is server-side durable persistence + rehydrate; the in-browser state is just a view.",
+    "localStorage_used": "No - and not needed; durability is server-side SQLite, which is stronger.",
+    "root_cause_of_perceived_amnesia": "Running the stale :7777 Google Drive copy (predates the durable-history + restoreHistory fixes), not the canonical :7781. Same stale-copy root cause as TP_017."
+  },
+
+  "persistence_schema_present": ["session_id", "message_id (id)", "role", "content", "timestamp"],
+  "persistence_schema_not_present": ["source_interface", "port", "model_route", "persistence_status", "receipt_id"],
+  "schema_note": "Directive's richer per-message fields (source_interface/port/model_route/persistence_status/receipt_id) are NOT in the current messages table. Adding them is a real schema migration; deferred (not overbuilt) and listed as a gap rather than applied blind to the live DB.",
+
+  "boundary_laws": [
+    "REFRESH_MUST_NOT_DESTROY_THREAD",
+    "LOCAL_CHAT_STATE != DURABLE_MEMORY",
+    "DESKTOP_APP_EXPECTATION != BROWSER_TAB_EXPERIMENT",
+    "NOAH_SHOULD_NOT_HAVE_TO_REMEMBER_PORTS"
+  ],
+  "boundary_laws_doc": "docs/oracle_desktop_boundary_laws.md",
+
+  "files_changed": [
+    {"path": "ORACLE.ps1", "status": "new", "sha256": "sha256:7b521f0847983e6d2de7e19a520a6661b53cfdc2ec581f88a11e9cbcdb60b158"},
+    {"path": "ORACLE_HOME.bat", "status": "new", "sha256": "sha256:95a78ce344c29cb1ddccf101f449427ff1991d863b8d518eff898018da90826a"},
+    {"path": "ui/operator_home.html", "status": "generated", "sha256": "sha256:b1eaafbe02b3a0d8c7c498504c7bb7f828fb528dd9751ed07155442273e04500"},
+    {"path": "core/healthcheck.py", "status": "existing (TP_017)", "sha256": "sha256:46941ae9e14c0395ecca2a3566a9bae328aa978ce17091f82507aa7ff3ab30c2"},
+    {"path": "tests/test_thread_persistence.py", "status": "new", "sha256": "sha256:53fceae594b9a460d85fae4dc3cff5ebd48575b82d53ccacda16db3d8e372ee9"},
+    {"path": "docs/oracle_desktop_boundary_laws.md", "status": "new", "sha256": "sha256:999de01b180de80230e04730c77b3ef9862dff3b154e1e164aaf299c4df970eb"},
+    {"path": "docs/refresh_persistence_manual_test.md", "status": "new", "sha256": "sha256:d1ee44f804a482bea67cf1cb73a328e793769f1aa6a5f7975179484f80ffae32"},
+    {"path": "ORACLE.lnk (Desktop)", "status": "new shortcut", "sha256": null}
+  ],
+  "no_files_deleted": true,
+  "oracle_server_unchanged": true,
+  "ui_index_html_unchanged": true,
+
+  "tests_run": {
+    "data_layer": {
+      "command": "python -m pytest tests/test_thread_persistence.py -q",
+      "result": "4 passed",
+      "proves": "user turn persists before reply; survives model timeout; survives refresh + restart in order; most-recent-session recovery matches /api/history fallback"
+    },
+    "launcher": {
+      "command": ".\\ORACLE.ps1 -Report",
+      "result": "exit 0; detected 7777(stale)/7778(down)/7781(down)/11434(up); wrote ui/operator_home.html with live source counts (MiricleDrive 10, RR 7)"
+    }
+  },
+  "refresh_persistence_test_result": "Data-layer: PASS (automated, 4 tests). Browser-level: NOT RUN by Claude (requires the live elevated :7781 runtime, which is Noah's to start). Manual checklist provided: docs/refresh_persistence_manual_test.md.",
+
+  "exact_command_noah_should_run": "Double-click the Desktop 'ORACLE' icon (runs ORACLE_HOME.bat -> ORACLE.ps1). Or from C:\\Oracle\\ORACLE.AI-runtime: powershell -ExecutionPolicy Bypass -File ORACLE.ps1   (add -Start to auto-launch the runtime if 7781 is down).",
+  "exact_desktop_icon_noah_should_click": "ORACLE (C:\\Users\\noahh\\OneDrive\\Desktop\\ORACLE.lnk)",
+
+  "remaining_gaps": [
+    "ORACLE.exe not compiled - v1 is a launcher + shortcut. Wrap to a true .exe as next step if desired.",
+    "Operator Home is a generated static snapshot (re-run to refresh). Pending-approvals count links into the live runtime rather than being computed offline.",
+    "No visible 'Saved locally / Not saved' indicator in the chat UI yet - durability is real but not surfaced per-message. Small ui/index.html addition, deferred to avoid editing the live face blind.",
+    "Streaming chat path (oracle_server.py:1475-1477) saves user+assistant together; recommend saving the user turn before the model call there too, matching the main path.",
+    "messages table lacks source_interface/port/model_route/persistence_status/receipt_id; a migration would add them.",
+    "Stale :7777 G: copy is still running; retiring it (TP_017) would remove the recurring amnesia trap at the source.",
+    "Browser-level refresh test still needs Noah to run once on :7781 to confirm end-to-end."
+  ],
+
+  "canon_status": "runtime_ingested_record",
+  "approval_status": "pending_noah_physical",
+  "holes": [
+    "Browser-level refresh persistence not machine-verified by Claude (elevated runtime is Noah's to start).",
+    "Desktop is OneDrive-redirected (C:\\Users\\noahh\\OneDrive\\Desktop); shortcut placed there.",
+    "Token origin is AI-authored (Claude Code) under Noah.Physical authority; pending Noah.Physical canon approval."
+  ],
+  "required_review": ["Noah.Physical run the browser refresh checklist on :7781 and confirm PASS; decide on retiring the :7777 G: copy"],
+  "promoted_to_canon": false
+}

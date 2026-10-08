@@ -312,6 +312,7 @@ The following repos from the task list were searched in all specified locations 
 | Source files | `AI Compliance Risks Brochure.docx`, `AI-Compliance-Coretm.pdf`, `AI-COMPLIANCE-COREtm-SALES-GUIDE.pdf`, `AI Compliance- Core 100 Question Audit.docx`, `AICC SOP Docs\` folder, multiple brochures and PDFs |
 | Purpose | A commercial consulting product — AI compliance auditing framework sold to enterprises |
 | Current status | **DOCUMENTS ONLY** — fully developed marketing/sales materials, no code |
+| Current doctrine | `docs/AI_COMPLIANCE_CORE_DOCTRINE.md` - receipt-backed AI audit trail and approval-gate system; "AI flight recorder for companies" |
 | Dependencies | None (document product) |
 | Belongs inside ORACLE | **Parked — future commercial product** |
 | Notes | Last modified Oct 2025. Complete enough to sell. No integration with ORACLE code needed. |

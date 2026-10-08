@@ -74,6 +74,7 @@ def init_db():
                 transformation_history TEXT NOT NULL DEFAULT '[]',
                 canonical_status     TEXT NOT NULL DEFAULT 'staged',
                 approval_status      TEXT NOT NULL DEFAULT 'pending',
+                provenance_json      TEXT NOT NULL DEFAULT '{}',
                 created_at           TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS audit_chain (
@@ -84,6 +85,10 @@ def init_db():
                 recorded_at  TEXT NOT NULL
             );
         """)
+    # Older durable_facts rows predate actor-aware provenance. Keep those rows,
+    # but mark their identity UNKNOWN/provenance-suspect instead of allowing a
+    # caller to infer that the account owner authored them (GitHub #16).
+    migrate_durable_fact_provenance()
     # Ensure the L2 index schema exists on boot (cheap, additive). Does NOT
     # rebuild the index here — rebuild is explicit (/rebuild-memory-index) to
     # keep boot fast on slow (Drive-synced) storage.
@@ -104,10 +109,21 @@ def new_session():
 
 def save_message(session_id, role, content):
     with get_conn() as conn:
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
             (session_id, role, content, datetime.now().isoformat())
         )
+        message_id = cur.lastrowid
+        # Attach the message to its session's durable thread so a conversation
+        # survives restarts. Best-effort: chat must never break if this fails.
+        try:
+            import thread_registry as _thread_registry
+            _thread_registry.on_message_saved(
+                conn, session_id=session_id, message_id=message_id,
+                role=role, content=content)
+        except Exception:
+            pass
+        return message_id
 
 
 def get_recent_messages(session_id, limit=20):
@@ -243,6 +259,97 @@ _REQUIRED_PROVENANCE_FIELDS = {
 
 _VALID_SOURCE_TYPES = {"human_stated", "inferred", "observed", "generated"}
 
+_ACTOR_PROVENANCE_FIELDS = (
+    "speaker_id",
+    "author_id",
+    "submitter_id",
+    "account_owner_id",
+    "project_owner_id",
+    "human_source_id",
+    "source_agent_type",
+    "source_model",
+    "participant_role",
+    "intended_audience",
+    "transport_channel",
+    "source_reference",
+    "identity_resolution_status",
+)
+
+
+def _legacy_unknown_provenance() -> dict:
+    """Honest read/migration shape for rows written before actor custody."""
+    return {
+        **{field: "UNKNOWN" for field in _ACTOR_PROVENANCE_FIELDS},
+        "identity_resolution_status": "legacy_unresolved",
+        "provenance_evidence": [],
+        "correction_history": [],
+        "provenance_suspect": True,
+        "provenance_note": (
+            "Legacy durable fact predates actor-aware persistence; speaker, author, "
+            "submitter, and owner identities must not be inferred."
+        ),
+    }
+
+
+def _normalize_durable_provenance(provenance: dict) -> dict:
+    """Fill missing actor dimensions with UNKNOWN without conflating identities."""
+    normalized = dict(provenance or {})
+    for field in _ACTOR_PROVENANCE_FIELDS:
+        value = normalized.get(field)
+        normalized[field] = str(value).strip() if value not in (None, "") else "UNKNOWN"
+    normalized.setdefault("provenance_evidence", [])
+    normalized.setdefault("correction_history", [])
+    normalized.setdefault("provenance_suspect", False)
+    return normalized
+
+
+def migrate_durable_fact_provenance() -> dict:
+    """Add full-provenance storage and downgrade unattributed legacy rows.
+
+    This migration is additive and idempotent. It never rewrites fact text or
+    claims that an old row belonged to Noah.Physical.
+    """
+    with get_conn() as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(durable_facts)")}
+        column_added = False
+        if "provenance_json" not in columns:
+            conn.execute("ALTER TABLE durable_facts ADD COLUMN provenance_json TEXT NOT NULL DEFAULT '{}'")
+            column_added = True
+        legacy = json.dumps(_legacy_unknown_provenance(), sort_keys=True)
+        cursor = conn.execute(
+            """
+            UPDATE durable_facts
+            SET provenance_json=?
+            WHERE provenance_json IS NULL OR trim(provenance_json) IN ('', '{}')
+            """,
+            (legacy,),
+        )
+        conn.commit()
+        return {
+            "provenance_column_added": column_added,
+            "legacy_rows_marked_suspect": cursor.rowcount,
+        }
+
+
+def _inflate_durable_fact(row) -> dict:
+    """Decode actor provenance and expose its dimensions on recall records."""
+    record = dict(row)
+    try:
+        provenance = json.loads(record.get("provenance_json") or "{}")
+        if not isinstance(provenance, dict) or not provenance:
+            provenance = _legacy_unknown_provenance()
+    except (TypeError, json.JSONDecodeError):
+        provenance = _legacy_unknown_provenance()
+        provenance["provenance_note"] = (
+            "Stored provenance JSON was unreadable; actor identities are UNKNOWN."
+        )
+    provenance = _normalize_durable_provenance(provenance)
+    record["provenance"] = provenance
+    for field in _ACTOR_PROVENANCE_FIELDS:
+        record[field] = provenance[field]
+    record["provenance_suspect"] = bool(provenance.get("provenance_suspect"))
+    return record
+
 
 def _validate_provenance(provenance: dict) -> None:
     """Raise ValueError if any required provenance field is absent or invalid."""
@@ -267,6 +374,7 @@ def insert_durable_fact(fact_text: str, provenance: dict) -> int:
     Raises ValueError if provenance is incomplete.
     Returns the row id.
     """
+    provenance = _normalize_durable_provenance(provenance)
     _validate_provenance(provenance)
     now = datetime.now().isoformat()
     with get_conn() as conn:
@@ -274,8 +382,9 @@ def insert_durable_fact(fact_text: str, provenance: dict) -> int:
             """
             INSERT INTO durable_facts
               (fact_text, source_type, source_id, observed_at, confidence,
-               transformation_history, canonical_status, approval_status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               transformation_history, canonical_status, approval_status,
+               provenance_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 fact_text,
@@ -286,6 +395,7 @@ def insert_durable_fact(fact_text: str, provenance: dict) -> int:
                 json.dumps(provenance["transformation_history"]),
                 provenance["canonical_status"],
                 provenance["approval_status"],
+                json.dumps(provenance, ensure_ascii=True, sort_keys=True),
                 now,
             ),
         )
@@ -311,7 +421,7 @@ def search_durable_facts(query: str, limit: int = 10) -> list[dict]:
         ).fetchall()
         results = []
         for row in rows:
-            r = dict(row)
+            r = _inflate_durable_fact(row)
             try:
                 r["transformation_history"] = json.loads(r.get("transformation_history") or "[]")
             except Exception:
@@ -490,7 +600,7 @@ def search_memory_index(query: str, *, limit: int = 10, source_type: str | None 
                 "SELECT * FROM durable_facts WHERE lower(fact_text) LIKE ? ORDER BY id DESC LIMIT ?",
                 (f"%{words[0]}%", limit),
             ).fetchall()
-            return [dict(r) for r in rows]
+            return [_inflate_durable_fact(r) for r in rows]
         match = " OR ".join(f'"{w}"' for w in words[:20])
         sql = [
             "SELECT f.*, bm25(durable_fts) AS bm25_rank",
@@ -515,13 +625,13 @@ def search_memory_index(query: str, *, limit: int = 10, source_type: str | None 
             sql.append("ORDER BY (bm25(durable_fts) - COALESCE(f.authority_rank,0)/40.0 - f.confidence) ASC")
         sql.append("LIMIT ?"); params.append(limit)
         rows = conn.execute(" ".join(sql), params).fetchall()
-        return [dict(r) for r in rows]
+        return [_inflate_durable_fact(r) for r in rows]
 
 
 def get_memory_by_id(memory_id: int) -> dict | None:
     with get_conn() as conn:
         r = conn.execute("SELECT * FROM durable_facts WHERE id=?", (memory_id,)).fetchone()
-        return dict(r) if r else None
+        return _inflate_durable_fact(r) if r else None
 
 
 def mark_superseded(old_id: int, by_id: int) -> None:

@@ -49,12 +49,50 @@ def _log(action: str, detail: str = ""):
         pass
 
 
-def _require_hands():
+def _hands_off() -> bool:
+    """True when physical input actuation is disabled (default-safe).
+
+    Honors Noah's 'no computer control' boundary: the hands are OFF unless
+    explicitly enabled. This is the hard gate that overrides any autonomous
+    loop (e.g. SOV1) — even if a loop calls type_text/press, nothing is
+    injected while hands are off.
+
+    Precedence:
+      1. Memory/hands_off.flag present  -> OFF (kill switch always wins)
+      2. env ORACLE_HANDS_ON in {1,true,yes,on} -> ON
+      3. Memory/hands_on.flag present   -> ON
+      4. default                        -> OFF (safe)
+    """
+    import os
+    try:
+        if (ROOT / "Memory" / "hands_off.flag").exists():
+            return True
+    except Exception:
+        pass
+    if os.getenv("ORACLE_HANDS_ON", "").strip().lower() in ("1", "true", "yes", "on"):
+        return False
+    try:
+        if (ROOT / "Memory" / "hands_on.flag").exists():
+            return False
+    except Exception:
+        pass
+    return True
+
+
+def _require_hands(output: bool = False):
     if not HANDS_AVAILABLE:
         return (
             "The hands are not installed. In a terminal run:\n"
             "    python -m pip install pyautogui mss pygetwindow\n"
             "then restart Oracle."
+        )
+    if output and _hands_off():
+        _log("BLOCKED", "actuation refused — HANDS_OFF safety gate (no computer control)")
+        return (
+            "[HANDS OFF] Physical input is disabled by the safety gate "
+            "(no computer control). Eyes/screenshots still work. To allow "
+            "keyboard/mouse output, set env ORACLE_HANDS_ON=1 or create "
+            "Memory/hands_on.flag, then retry."
         )
     return None
 
@@ -87,7 +125,7 @@ def screen_size() -> str:
 # ── Mouse ─────────────────────────────────────────────────────────────────────
 
 def move_mouse(x: int, y: int, duration: float = 0.5) -> str:
-    err = _require_hands()
+    err = _require_hands(output=True)
     if err:
         return err
     pyautogui.moveTo(x, y, duration=duration)
@@ -96,7 +134,7 @@ def move_mouse(x: int, y: int, duration: float = 0.5) -> str:
 
 
 def click(x: int = None, y: int = None, button: str = "left", clicks: int = 1) -> str:
-    err = _require_hands()
+    err = _require_hands(output=True)
     if err:
         return err
     if x is not None and y is not None:
@@ -113,7 +151,7 @@ def double_click(x: int = None, y: int = None) -> str:
 
 
 def scroll(amount: int) -> str:
-    err = _require_hands()
+    err = _require_hands(output=True)
     if err:
         return err
     pyautogui.scroll(amount)
@@ -124,7 +162,7 @@ def scroll(amount: int) -> str:
 # ── Keyboard ──────────────────────────────────────────────────────────────────
 
 def type_text(text: str, interval: float = 0.03) -> str:
-    err = _require_hands()
+    err = _require_hands(output=True)
     if err:
         return err
     pyautogui.write(text, interval=interval)
@@ -134,7 +172,7 @@ def type_text(text: str, interval: float = 0.03) -> str:
 
 def press(key: str) -> str:
     """Press a single key, e.g. 'enter', 'tab', 'esc', 'win'."""
-    err = _require_hands()
+    err = _require_hands(output=True)
     if err:
         return err
     pyautogui.press(key)
@@ -144,7 +182,7 @@ def press(key: str) -> str:
 
 def hotkey(*keys: str) -> str:
     """Press a key combo, e.g. hotkey('ctrl','c') or hotkey('win','r')."""
-    err = _require_hands()
+    err = _require_hands(output=True)
     if err:
         return err
     pyautogui.hotkey(*keys)
@@ -156,7 +194,7 @@ def hotkey(*keys: str) -> str:
 
 def open_program(name: str) -> str:
     """Open a program via the Windows Run dialog (Win+R)."""
-    err = _require_hands()
+    err = _require_hands(output=True)
     if err:
         return err
     pyautogui.hotkey("win", "r")
@@ -224,7 +262,7 @@ def paste_text(text: str) -> str:
     Paste text via clipboard — handles special characters, much faster than typing.
     Requires pyperclip: pip install pyperclip
     """
-    err = _require_hands()
+    err = _require_hands(output=True)
     if err:
         return err
     try:
@@ -242,7 +280,7 @@ def paste_text(text: str) -> str:
 
 def copy_selection() -> str:
     """Copy whatever is currently selected to clipboard."""
-    err = _require_hands()
+    err = _require_hands(output=True)
     if err:
         return err
     pyautogui.hotkey("ctrl", "c")
@@ -256,7 +294,7 @@ def copy_selection() -> str:
 
 
 def select_all() -> str:
-    err = _require_hands()
+    err = _require_hands(output=True)
     if err:
         return err
     pyautogui.hotkey("ctrl", "a")

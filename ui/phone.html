@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>ORACLE Phone</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #070b09;
+      --surface: #0d1512;
+      --surface-2: #121b18;
+      --line: #22332d;
+      --text: #edf5ef;
+      --muted: #8ea39a;
+      --green: #45d48a;
+      --amber: #e7b44f;
+      --blue: #7aa7ff;
+      --red: #f06d6d;
+      --shadow: rgba(0, 0, 0, .35);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      min-height: 100%;
+    }
+
+    body {
+      margin: 0;
+      background:
+        linear-gradient(180deg, rgba(69, 212, 138, .08), transparent 260px),
+        var(--bg);
+      color: var(--text);
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      min-height: 42px;
+      border: 1px solid var(--line);
+      background: #13201b;
+      color: var(--text);
+      border-radius: 8px;
+      padding: 9px 12px;
+      touch-action: manipulation;
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    button.primary {
+      background: #1b6f47;
+      border-color: #2aaa6d;
+    }
+
+    button.ghost {
+      background: transparent;
+    }
+
+    button:disabled {
+      opacity: .55;
+    }
+
+    .shell {
+      width: 100%;
+      min-height: 100svh;
+      display: flex;
+      flex-direction: column;
+      padding-bottom: calc(76px + env(safe-area-inset-bottom));
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 4;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: calc(12px + env(safe-area-inset-top)) 14px 12px;
+      background: rgba(7, 11, 9, .92);
+      border-bottom: 1px solid var(--line);
+      box-shadow: 0 8px 26px var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .brand {
+      min-width: 0;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.1;
+      font-weight: 750;
+    }
+
+    .brand p {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 64vw;
+    }
+
+    .connection {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--amber);
+      box-shadow: 0 0 14px rgba(231, 180, 79, .55);
+    }
+
+    .connection.ok .dot {
+      background: var(--green);
+      box-shadow: 0 0 14px rgba(69, 212, 138, .55);
+    }
+
+    .connection.bad .dot {
+      background: var(--red);
+      box-shadow: 0 0 14px rgba(240, 109, 109, .5);
+    }
+
+    main {
+      width: 100%;
+      display: grid;
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .metric,
+    .panel,
+    .resume {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 12px;
+    }
+
+    .metric span,
+    .panel h2,
+    .resume .label {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 5px;
+      min-height: 24px;
+      color: var(--text);
+      font-size: clamp(15px, 4.7vw, 22px);
+      line-height: 1.15;
+      overflow-wrap: anywhere;
+    }
+
+    .resume {
+      padding: 14px;
+    }
+
+    .resume strong {
+      display: block;
+      margin-top: 7px;
+      font-size: clamp(18px, 5.7vw, 26px);
+      line-height: 1.15;
+      overflow-wrap: anywhere;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .actions button {
+      padding-left: 8px;
+      padding-right: 8px;
+    }
+
+    .panel {
+      padding: 12px;
+      min-width: 0;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .panel h2 {
+      margin: 0;
+    }
+
+    .count {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .item {
+      min-width: 0;
+      padding: 10px;
+      background: var(--surface-2);
+      border: 1px solid rgba(255, 255, 255, .04);
+      border-radius: 7px;
+    }
+
+    .item strong {
+      display: block;
+      overflow-wrap: anywhere;
+    }
+
+    .item small {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .empty {
+      color: var(--muted);
+      padding: 10px 0;
+    }
+
+    .chat {
+      display: grid;
+      gap: 8px;
+      max-height: 46svh;
+      overflow: auto;
+      padding-right: 2px;
+      scroll-behavior: smooth;
+    }
+
+    .message {
+      min-width: 0;
+      border-radius: 8px;
+      padding: 10px;
+      background: var(--surface-2);
+      border: 1px solid rgba(255, 255, 255, .04);
+    }
+
+    .message.user {
+      background: #142018;
+      border-color: rgba(69, 212, 138, .24);
+    }
+
+    .message.system {
+      background: #1b1910;
+      border-color: rgba(231, 180, 79, .24);
+    }
+
+    .message .role {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+    }
+
+    .message .body {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .composer {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 5;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+      background: rgba(7, 11, 9, .94);
+      border-top: 1px solid var(--line);
+      box-shadow: 0 -12px 32px var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .composer textarea {
+      width: 100%;
+      min-height: 48px;
+      max-height: 118px;
+      resize: none;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #0a100e;
+      color: var(--text);
+      outline: none;
+    }
+
+    .composer textarea:focus {
+      border-color: #2aaa6d;
+      box-shadow: 0 0 0 3px rgba(69, 212, 138, .14);
+    }
+
+    .composer button {
+      min-width: 72px;
+    }
+
+    @media (min-width: 760px) {
+      body {
+        background: #050806;
+      }
+
+      .shell {
+        max-width: 680px;
+        margin: 0 auto;
+        border-left: 1px solid var(--line);
+        border-right: 1px solid var(--line);
+      }
+
+      .composer {
+        left: 50%;
+        right: auto;
+        width: min(680px, 100vw);
+        transform: translateX(-50%);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <h1>ORACLE</h1>
+        <p id="subtitle">phone cockpit</p>
+      </div>
+      <div id="connection" class="connection">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="connectionText">syncing</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="status-grid" aria-label="Current continuity state">
+        <div class="metric">
+          <span>Human State</span>
+          <strong id="humanMode">UNKNOWN</strong>
+        </div>
+        <div class="metric">
+          <span>Project</span>
+          <strong id="currentProject">ORACLE</strong>
+        </div>
+      </section>
+
+      <section class="resume" aria-label="Resume action">
+        <span class="label">Resume Action</span>
+        <strong id="resumeAction">Loading continuity spine...</strong>
+        <div class="actions">
+          <button id="refreshBtn" type="button" class="ghost">Refresh</button>
+          <button id="reentryBtn" type="button">Re-entry</button>
+          <button id="backBtn" type="button" class="primary">Back</button>
+          <button id="oracleBtn" type="button">Oracle</button>
+          <button id="restBtn" type="button">Rest</button>
+          <button id="sleepBtn" type="button">Sleep</button>
+        </div>
+      </section>
+
+      <section class="panel" aria-label="Open loops">
+        <div class="panel-head">
+          <h2>Open Loops</h2>
+          <span id="loopCount" class="count">0</span>
+        </div>
+        <div id="openLoops" class="list"></div>
+      </section>
+
+      <section class="panel" aria-label="Pending approvals">
+        <div class="panel-head">
+          <h2>Pending Approvals</h2>
+          <span id="approvalCount" class="count">0</span>
+        </div>
+        <div id="pendingApprovals" class="list"></div>
+      </section>
+
+      <section class="panel" aria-label="Recent receipts">
+        <div class="panel-head">
+          <h2>Recent Receipts</h2>
+          <span id="receiptCount" class="count">0</span>
+        </div>
+        <div id="recentReceipts" class="list"></div>
+      </section>
+
+      <section class="panel" aria-label="Chat">
+        <div class="panel-head">
+          <h2>Chat</h2>
+          <span id="historySource" class="count">live</span>
+        </div>
+        <div id="messages" class="chat"></div>
+      </section>
+    </main>
+
+    <form id="chatForm" class="composer">
+      <textarea id="messageInput" rows="1" autocomplete="off" autocapitalize="sentences" placeholder="Message ORACLE..."></textarea>
+      <button id="sendBtn" type="submit" class="primary">Send</button>
+    </form>
+  </div>
+
+  <script>
+    const els = {
+      connection: document.getElementById("connection"),
+      connectionText: document.getElementById("connectionText"),
+      subtitle: document.getElementById("subtitle"),
+      humanMode: document.getElementById("humanMode"),
+      currentProject: document.getElementById("currentProject"),
+      resumeAction: document.getElementById("resumeAction"),
+      loopCount: document.getElementById("loopCount"),
+      approvalCount: document.getElementById("approvalCount"),
+      receiptCount: document.getElementById("receiptCount"),
+      historySource: document.getElementById("historySource"),
+      openLoops: document.getElementById("openLoops"),
+      pendingApprovals: document.getElementById("pendingApprovals"),
+      recentReceipts: document.getElementById("recentReceipts"),
+      messages: document.getElementById("messages"),
+      form: document.getElementById("chatForm"),
+      input: document.getElementById("messageInput"),
+      send: document.getElementById("sendBtn"),
+      refresh: document.getElementById("refreshBtn"),
+      reentry: document.getElementById("reentryBtn"),
+      back: document.getElementById("backBtn"),
+      oracle: document.getElementById("oracleBtn"),
+      rest: document.getElementById("restBtn"),
+      sleep: document.getElementById("sleepBtn")
+    };
+
+    let busy = false;
+
+    function setConnection(state, text) {
+      els.connection.className = "connection " + state;
+      els.connectionText.textContent = text;
+    }
+
+    function valueOrUnknown(value) {
+      const text = String(value || "").trim();
+      return text || "UNKNOWN";
+    }
+
+    function compactTime(value) {
+      const text = String(value || "").trim();
+      if (!text) return "time unknown";
+      return text.replace("T", " ").replace(/\.\d+Z$/, "Z");
+    }
+
+    async function getJson(path) {
+      const response = await fetch(path, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(path + " returned " + response.status);
+      }
+      return response.json();
+    }
+
+    async function postJson(path, payload) {
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload || {})
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || path + " returned " + response.status);
+      }
+      return data;
+    }
+
+    function clear(node) {
+      while (node.firstChild) node.removeChild(node.firstChild);
+    }
+
+    function item(primary, secondary) {
+      const wrap = document.createElement("div");
+      wrap.className = "item";
+      const strong = document.createElement("strong");
+      strong.textContent = valueOrUnknown(primary);
+      wrap.appendChild(strong);
+      if (secondary) {
+        const small = document.createElement("small");
+        small.textContent = secondary;
+        wrap.appendChild(small);
+      }
+      return wrap;
+    }
+
+    function renderList(node, rows, emptyText, mapper) {
+      clear(node);
+      const items = Array.isArray(rows) ? rows : [];
+      if (!items.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = emptyText;
+        node.appendChild(empty);
+        return;
+      }
+      items.forEach((row) => node.appendChild(mapper(row)));
+    }
+
+    function renderDashboard(data, human) {
+      els.humanMode.textContent = valueOrUnknown(data.current_human_state || human.current_mode);
+      els.currentProject.textContent = valueOrUnknown(data.current_project);
+      els.resumeAction.textContent = valueOrUnknown(data.suggested_resume_action);
+
+      const loops = Array.isArray(data.top_open_loops) ? data.top_open_loops : [];
+      els.loopCount.textContent = String(loops.length);
+      renderList(els.openLoops, loops, "No open loops reported.", (loop) => {
+        const meta = [loop.status, loop.project, compactTime(loop.latest_modification || loop.timestamp)]
+          .filter(Boolean)
+          .join(" | ");
+        return item(loop.title, meta);
+      });
+
+      const approvals = Array.isArray(data.pending_approvals) ? data.pending_approvals : [];
+      els.approvalCount.textContent = String(approvals.length);
+      renderList(els.pendingApprovals, approvals, "No pending approvals.", (approval) => {
+        const meta = [approval.status, approval.source, approval.id].filter(Boolean).join(" | ");
+        return item(approval.summary, meta);
+      });
+
+      const receipts = Array.isArray(data.recent_receipts) ? data.recent_receipts : [];
+      els.receiptCount.textContent = String(receipts.length);
+      renderList(els.recentReceipts, receipts, "No receipts visible.", (receipt) => {
+        const preview = receipt.preview || {};
+        const title = preview.operation || preview.receipt_id || receipt.source || "receipt";
+        const meta = [preview.status, receipt.source, compactTime(receipt.modified_at)].filter(Boolean).join(" | ");
+        return item(title, meta);
+      });
+    }
+
+    function addMessage(role, text) {
+      const row = document.createElement("article");
+      row.className = "message " + role;
+      const label = document.createElement("div");
+      label.className = "role";
+      label.textContent = role;
+      const body = document.createElement("div");
+      body.className = "body";
+      body.textContent = text || "";
+      row.appendChild(label);
+      row.appendChild(body);
+      els.messages.appendChild(row);
+      els.messages.scrollTop = els.messages.scrollHeight;
+      return body;
+    }
+
+    function renderHistory(history) {
+      clear(els.messages);
+      const rows = Array.isArray(history.history) ? history.history.slice(-8) : [];
+      rows.forEach((entry) => {
+        addMessage(entry.role || "system", entry.content || "");
+      });
+      if (!rows.length) {
+        addMessage("system", "ORACLE phone cockpit ready.");
+      }
+      els.historySource.textContent = history.source || "unknown";
+    }
+
+    async function refreshAll() {
+      setConnection("", "syncing");
+      try {
+        const [dashboard, human, history] = await Promise.all([
+          getJson("/api/continuity/operator-dashboard"),
+          getJson("/api/human-state"),
+          getJson("/api/history")
+        ]);
+        renderDashboard(dashboard, human);
+        renderHistory(history);
+        els.subtitle.textContent = "project " + valueOrUnknown(dashboard.current_project);
+        setConnection("ok", "local");
+      } catch (error) {
+        setConnection("bad", "offline");
+        addMessage("system", "Sync failed: " + error.message);
+      }
+    }
+
+    function appendSseEvent(raw, body) {
+      raw.split("\n").forEach((line) => {
+        if (!line.startsWith("data:")) return;
+        const data = line.slice(5).trim();
+        if (!data) return;
+        try {
+          const payload = JSON.parse(data);
+          if (payload.type === "token" && payload.text) {
+            body.textContent += payload.text;
+            els.messages.scrollTop = els.messages.scrollHeight;
+          }
+        } catch (error) {
+          body.textContent += data;
+        }
+      });
+    }
+
+    async function sendChat(text) {
+      const message = String(text || "").trim();
+      if (!message || busy) return;
+      busy = true;
+      els.send.disabled = true;
+      addMessage("user", message);
+      const assistantBody = addMessage("assistant", "");
+      setConnection("", "thinking");
+      try {
+        const response = await fetch("/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message })
+        });
+        if (!response.ok) {
+          throw new Error("/chat returned " + response.status);
+        }
+        if (!response.body) {
+          assistantBody.textContent = await response.text();
+        } else {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          while (true) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            buffer += decoder.decode(chunk.value, { stream: true });
+            const parts = buffer.split("\n\n");
+            buffer = parts.pop() || "";
+            parts.forEach((part) => appendSseEvent(part, assistantBody));
+          }
+          if (buffer) appendSseEvent(buffer, assistantBody);
+        }
+        setConnection("ok", "local");
+        await refreshContinuityOnly();
+      } catch (error) {
+        assistantBody.textContent = "Chat failed: " + error.message;
+        setConnection("bad", "offline");
+      } finally {
+        busy = false;
+        els.send.disabled = false;
+      }
+    }
+
+    async function refreshContinuityOnly() {
+      try {
+        const [dashboard, human] = await Promise.all([
+          getJson("/api/continuity/operator-dashboard"),
+          getJson("/api/human-state")
+        ]);
+        renderDashboard(dashboard, human);
+        setConnection("ok", "local");
+      } catch (error) {
+        setConnection("bad", "offline");
+      }
+    }
+
+    function formatBrief(brief) {
+      const lines = [
+        "last_known_mode: " + valueOrUnknown(brief.last_known_mode),
+        "time_since_last_explicit_transition: " + valueOrUnknown(brief.time_since_last_explicit_transition),
+        "project: " + valueOrUnknown(brief.project_noah_was_working_on),
+        "last_completed_action: " + valueOrUnknown(brief.last_completed_action),
+        "recommended_next_action: " + valueOrUnknown(brief.recommended_next_action)
+      ];
+      const loops = Array.isArray(brief.open_loops) ? brief.open_loops.slice(0, 5) : [];
+      if (loops.length) lines.push("open_loops: " + loops.join(" | "));
+      const gaps = Array.isArray(brief.continuity_gaps) ? brief.continuity_gaps : [];
+      if (gaps.length) lines.push("continuity_gaps: " + gaps.join(" | "));
+      return lines.join("\n");
+    }
+
+    async function showReentryBrief() {
+      setConnection("", "reading");
+      try {
+        const brief = await getJson("/api/reentry-brief");
+        addMessage("system", "RE-ENTRY BRIEF\n" + formatBrief(brief));
+        setConnection("ok", "local");
+      } catch (error) {
+        addMessage("system", "Re-entry failed: " + error.message);
+        setConnection("bad", "offline");
+      }
+    }
+
+    async function recordTransition(sourceText) {
+      setConnection("", "recording");
+      try {
+        const result = await postJson("/api/human-state/transition", {
+          source_text: sourceText,
+          source_system: "ORACLE.phone"
+        });
+        const event = result.event || result.classification || {};
+        const mode = event.new_mode || "UNKNOWN";
+        addMessage("system", result.recorded === false && result.duplicate
+          ? "Transition already recorded: " + mode
+          : "Transition recorded: " + mode);
+        await refreshContinuityOnly();
+      } catch (error) {
+        addMessage("system", "Transition failed: " + error.message);
+        setConnection("bad", "offline");
+      }
+    }
+
+    els.form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const text = els.input.value;
+      els.input.value = "";
+      sendChat(text);
+    });
+
+    els.input.addEventListener("input", () => {
+      els.input.style.height = "auto";
+      els.input.style.height = Math.min(118, els.input.scrollHeight) + "px";
+    });
+
+    els.refresh.addEventListener("click", refreshAll);
+    els.reentry.addEventListener("click", showReentryBrief);
+    els.back.addEventListener("click", () => recordTransition("Back at the workstation"));
+    els.oracle.addEventListener("click", () => recordTransition("Working on ORACLE from phone cockpit"));
+    els.rest.addEventListener("click", () => recordTransition("I'm resting now"));
+    els.sleep.addEventListener("click", () => recordTransition("I'm going to sleep"));
+
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) refreshContinuityOnly();
+    });
+
+    refreshAll();
+  </script>
+</body>
+</html>

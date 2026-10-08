@@ -1,0 +1,74 @@
+{
+  "receipt_id": "build_TP_019_MIRICLEDRIVE_LOCAL_FILE_INVENTORY_PROVENANCE",
+  "record_id": "TP_019_MIRICLEDRIVE_LOCAL_FILE_INVENTORY_PROVENANCE",
+  "title": "MiricleDrive Local File Inventory Provenance (machine_scan_inventory)",
+  "kind": "source_type_and_build_record",
+  "continues": ["TP_015_LIVED_CONTEXT_IS_CONTINUITY_MATERIAL", "TP_018_MIRICLEDRIVE_CONNECTOR_RESTORE"],
+  "ingested_at": "2026-06-28T18:33:13.038328+00:00",
+  "submitted_by": "Noah.Physical",
+  "authorial_authority": "Noah.Physical",
+  "intent_owner": "Noah.Physical",
+  "produced_with": "Claude Code",
+  "token_origin": "ai",
+  "origin_channel": "live_obs_build_directive",
+  "authorship_status": "noah_authorized_ai_assisted",
+  "new_source_type": "machine_scan_inventory",
+  "discovery_rule": "A file discovered in an inventory may be indexed as discovered material, but it is not automatically ingested, authored, approved, or canonical.",
+  "boundaries_enforced": [
+    "LOCAL_FILE_PRESENCE != AUTHORSHIP",
+    "SCANNER_DISCOVERY != APPROVAL",
+    "USER_CHANNEL != AUTOMATIC_AUTHORSHIP",
+    "TRANSPORT != ORIGIN",
+    "OBS_RECALL_CONTEXT = HUMAN_WITNESS_EVENT"
+  ],
+  "inventory_fields": [
+    "inventory_id", "inventory_name", "scan_origin", "scan_scope",
+    "file_type_grouping", "obs_context_available", "human_context_summary",
+    "authorship_status", "approval_status", "ingestion_status", "provenance_notes"
+  ],
+  "discovered_item_fields": [
+    "discovered_path_or_title", "discovered_file_type",
+    "discovered_timestamp_if_available", "authorship_status",
+    "approval_status", "ingestion_status", "provenance_notes"
+  ],
+  "artifacts": [
+    {"path": "core/machine_scan_inventory.py", "sha256": "sha256:273cad1ac3b0554909e35abe836e62421ce30e18c5da35546daaa70968f42a31"},
+    {"path": "tests/test_machine_scan_inventory.py", "sha256": "sha256:abe3dc5c4c9041cebd50ad77042c4c1e3c4731722cb185d25cecae7e0c3abd6d"}
+  ],
+  "test_fixture": "MiricleDrive Scanner: Singularity Primitive v0 (1 discovered item: 'OracleAI NoahEternal Drive Grok')",
+  "verification": {
+    "run_command": "python -m pytest tests/test_machine_scan_inventory.py -q",
+    "observed_output": "7 passed in 0.07s",
+    "boundary_proof": "fixture reports discovered=1, ingestible=0 (nothing auto-promotes)",
+    "machine_observed": true
+  },
+  "obs_lived_provenance": {
+    "observation_status": "Return-from-Dark / live human witness",
+    "machine_observed_by_oracle": false,
+    "reporter": "Noah.Physical",
+    "obs_context_available": true,
+    "human_context_summary": "Noah clarified live on OBS that the MiricleDrive file came from a file/tool he made that pulled every file from his computer and organized it by file type. He is logging the recall live on OBS for context.",
+    "holes": [
+      "ORACLE did not machine-observe the OBS recording; OBS video path/hash not provided, so the recording is future evidence, not yet verified.",
+      "Recall is post-event testimony from Noah.Physical, not a machine observation."
+    ]
+  },
+  "authorship_boundary": {
+    "the_tool": "MiricleDrive scanner was made by / under Noah.Physical's direction.",
+    "the_files": "Individual files discovered by the scan may have separate authorship and are marked authorship_status=unknown until explicitly attributed.",
+    "rule": "Do not collapse 'file found on Noah's computer' into 'file authored by Noah.'"
+  },
+  "canon_status": "runtime_ingested_record",
+  "approval_status": "pending_noah_physical",
+  "holes": [
+    "Schema is minimal (smallest working) and not yet wired into a persistent store or the live runtime.",
+    "No actual scanner output was ingested; only the source TYPE, rule, fixture, and receipt were created.",
+    "OBS recording not provided/hashed; lived-provenance claim rests on Noah.Physical testimony.",
+    "Token origin is AI-authored (Claude Code) under Noah.Physical authority; pending Noah.Physical canon approval."
+  ],
+  "required_review": [
+    "Noah.Physical confirm field set and discovery rule before wiring MiricleDrive scanner output through it",
+    "Attach OBS recording path + hash to upgrade lived provenance from testimony to verified evidence"
+  ],
+  "promoted_to_canon": false
+}

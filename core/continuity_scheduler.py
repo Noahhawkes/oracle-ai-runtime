@@ -219,8 +219,8 @@ def run_once(force: bool = False) -> dict:
         _log("run_once blocked: SAFE_SLEEP")
         return run
 
-    # Cloud upload never allowed by default
-    if sched.get("cloud_upload_allowed") and not force:
+    # Cloud upload never allowed — non-negotiable, force does not override
+    if sched.get("cloud_upload_allowed"):
         run["blocked_reason"] = "cloud_upload_allowed=True — refused"
         run["status"] = "blocked"
         run["completed_at"] = _NOW()
@@ -236,8 +236,15 @@ def run_once(force: bool = False) -> dict:
         import json as _json
         from datetime import datetime as _dt
 
-        ts_str = _dt.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        payload = build_export()
+        # build_export returns (payload, ts_str); older annotation claimed dict.
+        # Accept both shapes so a future signature cleanup can't silently
+        # re-break the backup path.
+        built = build_export()
+        if isinstance(built, tuple):
+            payload, ts_str = built
+        else:
+            payload = built
+            ts_str = _dt.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
         # Safety: scrub blocked types from payload
         for blocked_key in _BLOCKED_EXPORT_TYPES:
@@ -294,6 +301,36 @@ def run_once(force: bool = False) -> dict:
         _log(f"run_once failed: {e}")
 
     return run
+
+
+def run_if_due(force: bool = False) -> Optional[dict]:
+    """
+    Single gate for automatic backups. Call from any live loop; cheap when idle.
+
+    Returns the run record when a backup executed (or blocked/failed),
+    None when disabled or not yet due.
+
+    Self-heals the enable deadlock: an enabled schedule with next_run_at=None
+    is treated as due now — otherwise nothing would ever seed next_run_at,
+    because only a completed run sets it.
+    """
+    sched = load_schedule()
+    if not sched.get("enabled"):
+        return None
+    next_run_at = sched.get("next_run_at")
+    if next_run_at is None:
+        _log("run_if_due: enabled with next_run_at=None — bootstrapping first run")
+        return run_once(force=force)
+    try:
+        next_dt = datetime.fromisoformat(next_run_at)
+    except Exception:
+        _log(f"run_if_due: unparseable next_run_at={next_run_at!r} — treating as due")
+        return run_once(force=force)
+    if next_dt.tzinfo is None:
+        next_dt = next_dt.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) >= next_dt:
+        return run_once(force=force)
+    return None
 
 
 # ── Status report ─────────────────────────────────────────────────────────────
@@ -452,6 +489,47 @@ def run_smoke_tests() -> int:
             else:
                 check(f"_compute_next_run({freq}): returns string", isinstance(result_nr, str))
 
+        # 9. run_if_due gate behavior
+        sched4 = _cs.load_schedule()
+        sched4["enabled"] = False
+        sched4["frequency"] = "daily"
+        _cs.save_schedule(sched4)
+        check("run_if_due: disabled returns None", _cs.run_if_due() is None)
+
+        # Enabled with next_run_at=None must bootstrap (the old deadlock)
+        sched4["enabled"] = True
+        sched4["next_run_at"] = None
+        _cs.save_schedule(sched4)
+        boot_run = _cs.run_if_due()
+        check("run_if_due: enabled+null bootstraps a run", isinstance(boot_run, dict))
+        if isinstance(boot_run, dict) and boot_run.get("status") == "completed":
+            after = _cs.load_schedule()
+            check("run_if_due: completed run seeds next_run_at", bool(after.get("next_run_at")))
+
+        # Future next_run_at must not run
+        future = (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat()
+        sched5 = _cs.load_schedule()
+        sched5["enabled"] = True
+        sched5["next_run_at"] = future
+        _cs.save_schedule(sched5)
+        check("run_if_due: not due returns None", _cs.run_if_due() is None)
+
+        # Past next_run_at must run
+        past = (datetime.now(timezone.utc) - timedelta(hours=6)).isoformat()
+        sched5["next_run_at"] = past
+        _cs.save_schedule(sched5)
+        due_run = _cs.run_if_due()
+        check("run_if_due: past-due triggers a run", isinstance(due_run, dict))
+
+        # 10. force must NOT override the cloud refusal
+        sched6 = _cs.load_schedule()
+        sched6["cloud_upload_allowed"] = True
+        _cs.save_schedule(sched6)
+        forced = _cs.run_once(force=True)
+        check("run_once(force=True): cloud still blocked", forced.get("status") == "blocked")
+        sched6["cloud_upload_allowed"] = False
+        _cs.save_schedule(sched6)
+
     finally:
         _cs.SCHEDULER_STATE_FILE = orig_state
         _cs.SCHEDULER_LOG_FILE   = orig_log
@@ -462,7 +540,7 @@ def run_smoke_tests() -> int:
         except Exception:
             pass
 
-    total = 31
+    total = 38
     passed = total - failures
     print(f"{'='*55}")
     print(f"Result: {passed}/{total} passed")
@@ -516,8 +594,14 @@ if __name__ == "__main__":
     elif args.enable:
         sched = load_schedule()
         sched["enabled"] = True
+        # Seed next_run_at so the auto-run gate can ever open. Without this,
+        # enabled+null deadlocks: the gate requires next_run_at, and only a
+        # completed run sets it. Due immediately — first backup on next tick.
+        if not sched.get("next_run_at"):
+            sched["next_run_at"] = _NOW()
         save_schedule(sched)
         print("  Scheduler enabled.")
+        print(f"  Next run due: {sched['next_run_at']}")
 
     elif args.disable:
         sched = load_schedule()
