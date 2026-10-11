@@ -18,6 +18,21 @@ I don’t know if superintelligence exists yet. But if an intelligence capable o
 
 ---
 
+## Research Program: Continuity Intelligence
+
+This repository now includes the public research corpus behind **Legacy.GI, Rendered Reality, ORACLE, and Continuity Intelligence**.
+
+The current scientific program asks a deliberately falsifiable question:
+
+> **Can selective structure-preserving compression retain longitudinal human continuity information better than strong generic compression at equal information budgets?**
+
+The corpus preserves the current mathematical core, canon registry, candidate experimental protocols, adversarial continuity benchmark, formal manuscripts, and historical source documents that show how the ideas evolved.
+
+**Research gateway:** [Continuity Intelligence Research Corpus](research/README.md)
+
+Research discipline: **receipts over claims; correction without erasure; reconstruction is never historical memory without provenance.**
+
+
 ## What ORACLE Is
 
 | Capability | Status |
