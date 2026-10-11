@@ -127,6 +127,8 @@ These are evidence about the ruler. They are preserved.
 
 ## 8. Immediate next artifacts
 
+Round 1 probe authorship is governed by `research/calibration/ROUND_1_PROBE_AUTHORING_CONSTRAINTS_V0_1.md`. That artifact fixes the 48-probe balance, author separation, required probe fields, challenge coverage, leakage defenses, lock procedure, and scoring-readiness gate without instantiating any confirmatory bracket.
+
 1. Probe-generation specification and authorship log for Round 1, 48 probes.
 2. Rater recruitment and qualification packet.
 3. Scoring sheet / schema that captures original scores, flags, Critical Integrity codes, and adjudication without overwrite.
