@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Noahhawkes/oracle-ai-runtime/research/protocols/experiment_manifest.schema.json",
+  "title": "Continuity Intelligence Experiment Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "experiment_id",
+    "protocol_version",
+    "hypothesis_version",
+    "repository_commit",
+    "corpus_manifest_hash",
+    "probe_set_hash",
+    "critical_integrity_set_hash",
+    "renderer_model",
+    "budgets",
+    "primary_comparator",
+    "primary_endpoint",
+    "permitted_result_states",
+    "run_state"
+  ],
+  "properties": {
+    "experiment_id": {
+      "type": "string"
+    },
+    "protocol_version": {
+      "type": "string"
+    },
+    "hypothesis_version": {
+      "type": "string"
+    },
+    "repository_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "corpus_manifest_hash": {
+      "type": "string"
+    },
+    "source_hashes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "probe_set_hash": {
+      "type": "string"
+    },
+    "critical_integrity_set_hash": {
+      "type": "string"
+    },
+    "compression_code_commit": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "renderer_model": {
+      "type": "string"
+    },
+    "embedding_model": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "prompts_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "random_seeds": {
+      "type": "array",
+      "items": {
+        "type": [
+          "integer",
+          "string"
+        ]
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "B_store",
+        "B_retrieve",
+        "B_prompt",
+        "B_output"
+      ],
+      "properties": {
+        "B_store": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "B_retrieve": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "B_prompt": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "B_output": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "counting_method": {
+          "type": "string"
+        },
+        "tokenizer": {
+          "type": "string"
+        }
+      }
+    },
+    "compression_levels": {
+      "type": "array",
+      "items": {
+        "enum": [
+          50,
+          75,
+          90,
+          95,
+          97.5,
+          99
+        ]
+      },
+      "uniqueItems": true
+    },
+    "primary_comparator": {
+      "type": "string"
+    },
+    "primary_endpoint": {
+      "const": "95_percent_compression"
+    },
+    "secondary_endpoints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "delta_min": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "noninferiority_margin": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "statistical_analysis_plan_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "permitted_result_states": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "PASS",
+          "FAIL",
+          "INCONCLUSIVE_MEASUREMENT"
+        ]
+      },
+      "minItems": 3,
+      "maxItems": 3,
+      "uniqueItems": true
+    },
+    "privacy_redaction_rules_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "environment_manifest_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "run_state": {
+      "enum": [
+        "DRAFT",
+        "FROZEN",
+        "CALIBRATION",
+        "PILOT",
+        "CONFIRMATORY",
+        "COMPLETE",
+        "INVALIDATED"
+      ]
+    },
+    "known_deviations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
