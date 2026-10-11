@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Noahhawkes/oracle-ai-runtime/research/protocols/continuity_answer.schema.json",
+  "title": "Continuity Intelligence Model Answer Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "run_id",
+    "probe_id",
+    "condition_id",
+    "renderer_model",
+    "answer",
+    "retrieved_source_ids",
+    "prompt_tokens",
+    "output_tokens"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "probe_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "condition_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "renderer_model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "answer": {
+      "type": "string"
+    },
+    "retrieved_source_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "prompt_tokens": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "output_tokens": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "storage_tokens_used": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "retrieval_tokens_used": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "generated_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "raw_output_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}
