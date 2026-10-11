@@ -142,6 +142,8 @@ The study therefore adopts the following boundary:
 
 ## 4. Hypothesis and Decision Rule
 
+The manuscript's confirmatory decision language is implemented in the versioned protocol artifact `research/protocols/SIX_DIMENSION_DECISION_RULE_V0_1.md`. Its bracketed thresholds, superiority/non-inferiority assignments, interval method, alpha level, corpus-clustering procedure, and Critical Integrity tolerance remain unresolved until explicitly instantiated and frozen before confirmatory execution.
+
 ### 4.1 Primary hypothesis
 
 > **The specified continuity-aware intervention retains more of the six continuity structures than the frozen strongest generic baseline at equal measured resource budgets.**
