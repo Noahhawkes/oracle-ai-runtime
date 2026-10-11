@@ -195,6 +195,8 @@ Selection of the most favorable comparison after observing outcomes is prohibite
 
 ## 8. Freeze requirements
 
+The evidence-generating procedure for the unresolved brackets is defined in `research/protocols/CALIBRATION_DESIGN_V0_1.md`. That calibration design does not instantiate any bracket from preference and does not authorize confirmatory execution until the required reliability and distributional evidence exists.
+
 Before confirmatory execution, freeze and version:
 
 - the superiority set (P);
