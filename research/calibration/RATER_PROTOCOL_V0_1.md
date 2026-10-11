@@ -6,7 +6,7 @@
 
 ## 1. Roles
 
-Calibration uses three distinct roles:
+Calibration uses three distinct roles. For this hypothesis version there are exactly **two independent primary raters** plus **one adjudicator**. The adjudicator is not treated as a third independent rater:
 
 ### Primary Rater A
 
@@ -118,6 +118,8 @@ If the gold standard is ambiguous, the probe is defective.
 
 The condition is not failed because the instrument produced an ambiguous critical probe.
 
+Unexpected answers, low scores, or rater disagreement are not by themselves probe defects. Defect disposition follows the frozen Annotator Handbook.
+
 ## 9. Calibration rounds
 
 Use exactly:
@@ -132,15 +134,19 @@ Independent scoring.
 
 Then calculate reliability and categorize disagreements.
 
-Handbook clarification is allowed after Round 1.
+Versioned handbook clarification is allowed after Round 1 under the frozen revision policy.
+
+Round 1 cannot establish terminal confirmatory eligibility.
 
 ### Round 2
 
 Fresh 48-probe set.
 
-Independent scoring under revised handbook.
+Independent scoring under the revised handbook.
 
-Handbook clarification is allowed after Round 2.
+Versioned handbook clarification is allowed after Round 2 under the frozen revision policy.
+
+Round 2 cannot establish terminal confirmatory eligibility.
 
 ### Round 3
 
@@ -148,24 +154,34 @@ Fresh locked 48-probe set.
 
 No further rubric revision for the same hypothesis version.
 
-Round 3 determines terminal reliability state.
+**Round 3 alone determines terminal reliability state.**
+
+There is no early declaration of confirmatory eligibility from a favorable Round 1 or Round 2 result.
 
 ## 10. Reliability statistics
 
-Primary:
+Reliability is calculated from the **original independent primary-rater ratings before adjudication**.
 
-- Krippendorff's alpha for ordinal scores by dimension.
+Adjudicated scores are not substituted into inter-rater reliability calculations.
 
-Secondary when exactly two raters:
+For 0-3 dimension scores:
 
-- weighted Cohen's kappa.
+- primary: Krippendorff's alpha at the **ordinal** measurement level, separately by dimension;
+- secondary: weighted Cohen's kappa using the weighting scheme frozen in the Annotator Handbook;
+- raw exact agreement;
+- disagreement/confusion patterns.
 
-Also report:
+For binary item-level Critical Integrity labels:
 
+- Krippendorff's alpha at the **nominal** measurement level;
 - raw agreement;
-- confusion/disagreement patterns;
-- Critical Integrity flag agreement;
-- number of defective or retired probes.
+- 2x2 classification table where applicable.
+
+If a coefficient is undefined because the labels lack sufficient variation, report `UNDEFINED`, the raw agreement, and the label distribution. Do not replace an undefined coefficient with 0 or 1.
+
+Report confidence intervals under the predeclared round analysis procedure. If the interval spans multiple terminal reliability bands, flag the result `RELIABILITY_UNCERTAIN` without silently changing the locked point-estimate threshold rule.
+
+Also report the number of defective or retired probes.
 
 ## 11. Terminal reliability states
 
@@ -181,12 +197,21 @@ A failed dimension is preserved as a failed measurement attempt.
 
 ## 12. Rater qualification
 
-Before confirmatory scoring, each rater must achieve:
+Qualification is separate from the Round 1-3 reliability calculation and uses a held-out qualification packet that the candidate rater did not score during calibration.
 
-- at least 85% agreement with adjudicated calibration labels;
-- no unresolved evidence-class misunderstanding;
-- no severe Critical Integrity misunderstanding;
-- demonstrated correct handling of UNKNOWN and CONFLICT PRESERVED.
+The current candidate qualification specification is maintained at:
+
+`research/calibration/RATER_QUALIFICATION_PACKET_SPEC_V0_1.md`
+
+Minimum requirements are:
+
+- 24 held-out items, 4 per dimension;
+- at least 21/24 exact 0-3 score matches to the locked qualification key;
+- correct state classification for every qualification item designated UNKNOWN or CONFLICT PRESERVED;
+- correct classification for every qualification item designated with one of the five gate-eligible Critical Integrity families;
+- no unresolved misunderstanding of the question-specific evidence-authority rules.
+
+Qualification target labels must be locked independently of the candidate rater's own scoring or adjudication.
 
 Failure to qualify is not fixed by changing the answer key after the fact.
 
