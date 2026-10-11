@@ -44,7 +44,7 @@ Each probe records:
 
 ## 3. Rater procedure
 
-Minimum two independent raters per probe; three preferred for α estimation.
+Exactly two independent primary raters per probe plus one adjudicator. The adjudicator is not counted as an independent rater for reliability estimation.
 
 - Raters score independently before any discussion.
 - Raters are blinded to condition, continuity-aware vs. generic. Condition labels are stripped.
@@ -72,7 +72,7 @@ Secondary metrics:
 - raw agreement;
 - disagreement categories.
 
-Terminal states after Round 3, or earlier if the gate is met:
+Terminal states are assigned from Round 3 only. Rounds 1 and 2 are developmental and do not establish terminal confirmatory eligibility:
 
 - **α ≥ 0.80:** CONFIRMATORY-ELIGIBLE for that dimension.
 - **0.67 ≤ α < 0.80:** PILOT-GRADE ONLY.
