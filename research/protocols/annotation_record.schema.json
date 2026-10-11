@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Noahhawkes/oracle-ai-runtime/research/protocols/annotation_record.schema.json",
+  "title": "Continuity Intelligence Annotation Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "run_id",
+    "probe_id",
+    "condition_id",
+    "rater_id",
+    "primary_dimension",
+    "primary_score",
+    "error_flags",
+    "catastrophic_error_codes",
+    "critical_integrity_failure",
+    "annotation_state"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string"
+    },
+    "probe_id": {
+      "type": "string"
+    },
+    "condition_id": {
+      "type": "string"
+    },
+    "rater_id": {
+      "type": "string"
+    },
+    "primary_dimension": {
+      "enum": [
+        "decision",
+        "correction",
+        "temporal",
+        "relational",
+        "provenance",
+        "uncertainty"
+      ]
+    },
+    "primary_score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3
+    },
+    "secondary_scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "decision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "correction": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "temporal": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "relational": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "provenance": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "uncertainty": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        }
+      }
+    },
+    "error_flags": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "EF-01",
+          "EF-02",
+          "EF-03",
+          "EF-04",
+          "EF-05",
+          "EF-06",
+          "EF-07",
+          "EF-08"
+        ]
+      }
+    },
+    "catastrophic_error_codes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "CE-01",
+          "CE-02",
+          "CE-03",
+          "CE-04",
+          "CE-05",
+          "CE-06",
+          "CE-07",
+          "CE-08",
+          "CE-09",
+          "CE-10"
+        ]
+      }
+    },
+    "critical_integrity_failure": {
+      "type": "boolean"
+    },
+    "evidence_sufficient": {
+      "type": "boolean"
+    },
+    "adjudication_note": {
+      "type": "string"
+    },
+    "annotation_state": {
+      "enum": [
+        "UNSCORED",
+        "INDEPENDENT_SCORE",
+        "DISAGREEMENT",
+        "ADJUDICATED",
+        "FINAL_LOCKED"
+      ]
+    },
+    "scored_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  }
+}
