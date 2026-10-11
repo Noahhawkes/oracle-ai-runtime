@@ -62,15 +62,18 @@ Qualification gate, before any rater scores confirmatory material:
 
 ## 4. Reliability metrics and terminal states
 
-Primary metric:
+Primary metrics:
 
-- Krippendorff's α, ordinal, computed separately per dimension and for Critical Integrity flags.
+- Krippendorff's α at the ordinal measurement level, computed separately per dimension from original independent ratings;
+- Krippendorff's α at the nominal measurement level for binary item-level Critical Integrity flags.
 
 Secondary metrics:
 
-- weighted Cohen's κ when exactly two raters;
+- weighted Cohen's κ for 0-3 dimension scores using the weighting scheme frozen before Round 1;
 - raw agreement;
 - disagreement categories.
+
+Adjudicated scores are not substituted into inter-rater reliability calculations. Undefined coefficients are reported as UNDEFINED with the raw label distribution rather than replaced by 0 or 1.
 
 Terminal states are assigned from Round 3 only. Rounds 1 and 2 are developmental and do not establish terminal confirmatory eligibility:
 
