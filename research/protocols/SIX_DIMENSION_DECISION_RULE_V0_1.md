@@ -133,6 +133,8 @@ The protocol freezes:
 - clustering method;
 - acceptance threshold (\tau).
 
+Current candidate gate-eligible families for this hypothesis version are CE-01 WRONG_PERSON, CE-02 FALSE_AUTHORSHIP, CE-04 UNKNOWN_TO_CERTAIN, CE-07 GENERATED_AS_MEMORY, and CE-09 SOURCE_FABRICATION. Other catastrophic-error codes remain reportable but are not gate-eligible unless a new pre-confirmatory version explicitly changes this rule.
+
 Baseline critical-error rates are reported separately.
 
 A baseline's poor integrity does not waive this acceptance requirement.
