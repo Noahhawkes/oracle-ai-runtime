@@ -357,6 +357,8 @@ Probe authorship, what probe authors were allowed to see, and potential leakage 
 
 ## 15. Calibration
 
+The pre-execution calibration design is versioned at `research/protocols/CALIBRATION_DESIGN_V0_1.md`. It governs the reliability study used to judge the six-dimension ruler and to generate the empirical evidence required before the decision-rule brackets can be frozen.
+
 Follow the fixed three-round v0.2 procedure:
 
 - 48 fresh probes per round;
