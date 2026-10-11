@@ -193,6 +193,12 @@ Operational scoring remains 0–3 as defined in the v0.2 protocol and the v0.1 A
 
 ## 8. Decision rule
 
+The executable confirmatory vector rule is maintained as a separate versioned artifact:
+
+`research/protocols/SIX_DIMENSION_DECISION_RULE_V0_1.md`
+
+That artifact governs the six-dimensional estimand, superiority/non-inferiority assignments, simultaneous confidence bounds, Critical Integrity gate, and Positive/Negative/Inconclusive classification once its bracketed fields are instantiated and frozen. This section summarizes its role and does not override it.
+
 The study uses a preregistered vector rule.
 
 Before pilot outputs are generated, freeze:
