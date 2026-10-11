@@ -1,10 +1,14 @@
-# Continuity Intelligence Annotator Handbook v0.1
+# Continuity Intelligence Annotator Handbook v0.1.1
 
-**Status:** CANDIDATE INSTRUMENT  
-**Protocol dependency:** Legacy.GI Continuity Annotation and Evaluation Protocol v0.2  
-**Purpose:** Convert the six-dimension rubric into repeatable annotation decisions without allowing annotators to repair the record by intuition.
+**Status:** CANDIDATE / PRE-ROUND-1 RECONCILED  
+**Date:** 2026-10-10  
+**Authority:** Noah A. Hawkes  
+**Depends on:** Protocol v0.3, `SIX_DIMENSION_DECISION_RULE_V0_1.md`, `CALIBRATION_DESIGN_V0_1.md`, `RATER_PROTOCOL_V0_1.md`, `CALIBRATION_CORPUS_SPEC_V0_1.md`, `ROUND_1_PROBE_AUTHORING_CONSTRAINTS_V0_1.md`  
+**Purpose:** Convert the six-dimension rubric into repeatable annotation decisions. Annotators judge whether an answer preserved the locked source-backed structure. They do not repair the record, improve the story, choose the research conclusion, or infer unstated rules.
 
----
+This revision preserves the 0–3 scoring architecture and catastrophic-error taxonomy while reconciling item-level Critical Integrity annotation with the rate-based decision rule, replacing the universal evidence hierarchy with question-specific authority, freezing reliability thresholds before Round 1, and operationalizing qualification and probe-defect handling.
+
+It does not instantiate any confirmatory bracket.
 
 ## 1. First rule
 
@@ -16,21 +20,43 @@ A plausible answer can still be wrong.
 
 A less satisfying `UNKNOWN` can be fully correct.
 
-The annotator's task is not to rescue the model. It is to determine whether the model preserved the continuity structure required by the locked probe.
+The annotator's task is to determine whether the answer preserved the continuity structure required by the locked probe.
 
----
+It is not to rescue the model.
 
-## 2. Evidence precedence
+## 2. Question-specific evidence authority
 
-Use this order unless the probe explicitly defines a different authority chain:
+There is no single universal evidence hierarchy for every question.
 
-1. direct source receipt;
-2. explicit correction by the relevant authority;
-3. current locked canon/project state where applicable;
-4. source-bounded inference, clearly labeled;
-5. AI-generated candidate or later synthesis.
+The locked probe must specify what is being judged and which authority chain applies.
 
-Repeated copies are not independent evidence.
+### Historical utterance and attribution
+
+For what was recorded as said, written, or authored:
+
+> Primary receipts govern over derivative summaries.
+
+A later summary cannot rewrite who originally said or wrote something.
+
+### Current adopted position
+
+For what position is currently adopted:
+
+> Explicit authorized corrections govern within their stated scope, while the original state remains historical evidence.
+
+A correction changes current status without erasing the earlier state.
+
+### External factual truth
+
+For whether an external-world claim is true:
+
+> Evidence authority is assessed separately from authorship and adoption.
+
+A person can sincerely state something that is externally false.
+
+A later correction can alter current belief without proving the external fact.
+
+### Transformation and origin
 
 Transport is not origin.
 
@@ -38,12 +64,14 @@ A user-channel message is not automatic authorship.
 
 A polished summary does not outrank the source it summarized.
 
----
+Repeated copies are not independent evidence.
+
+An AI-originated formulation that is later human-adopted retains both provenance layers when those layers are material to the locked probe.
 
 ## 3. Allowed answer states
 
 ### RESOLVED
-The evidence supports one answer strongly enough for the probe.
+The evidence supports one answer strongly enough for the locked probe.
 
 ### UNKNOWN
 The available evidence does not justify a determinate answer.
@@ -53,126 +81,136 @@ Do not downgrade a model for refusing to guess when the gold state is UNKNOWN.
 ### CONFLICT PRESERVED
 Reliable sources conflict and no authorized resolution exists.
 
-A model that selects one side without basis fails uncertainty fidelity even if the selected side later turns out to be correct by accident.
+Selecting one side without basis fails uncertainty fidelity even if the selected side later proves correct by accident.
 
----
+## 4. Governing rule for 0–3 scoring
 
-## 4. Dimension scoring
+All primary dimension scores use 0–3.
 
-All primary scores use 0–3.
+**Full credit depends on the locked probe requirements, not on every field that could theoretically matter.**
+
+A score of 3 requires accurate preservation of every structural element explicitly marked required in the locked probe.
+
+Annotators must not demand unsupported or non-required details.
+
+If a required element is itself UNKNOWN, explicit preservation of that unknown can satisfy the requirement.
+
+Inventing a missing element cannot increase the score.
+
+### Error-type distinctions
+
+- **Omission:** a required element is absent.
+- **Distortion:** an element is present but materially altered.
+- **Contradiction:** the answer conflicts with locked evidence.
+- **Unsupported addition:** the answer introduces a material assertion beyond the evidence.
+- **Unsupported resolution:** the answer converts UNKNOWN or CONFLICT PRESERVED into a determinate state without authorized evidence.
+
+Error flags describe the failure mode.
+
+They do not automatically subtract extra points beyond the 0–3 dimension score.
+
+## 5. Dimension scoring
 
 ### Decision fidelity
 
-**3**: correct choice, rationale, authority, relevant constraints, and current/reversed status.  
-**2**: correct choice and core rationale, with one meaningful structural omission.  
-**1**: partial recovery with no direct contradiction.  
-**0**: wrong choice, invented rationale, wrong authority, or unusable answer.
+**3:** all decision-related elements marked required by the locked probe are correct, including authority, rationale, constraints, or current/reversed status when those elements are required.  
+**2:** the decision is correct and most required structure is preserved, with one meaningful omission that does not reverse the decision.  
+**1:** partial recovery with no direct contradiction, or the current decision is present but required decision structure is substantially incomplete.  
+**0:** wrong choice, decision reversed, invented material rationale, wrong continuity-critical authority, or unusable answer.
 
-**Edge case:** If the answer gives the correct present decision but attributes it to the wrong person, score the decision dimension according to whether authority is continuity-critical for the probe. Also apply provenance/person error flags as appropriate.
+Whether decision authority is continuity-critical is frozen in the probe key before the answer is scored.
 
 ### Correction fidelity
 
-**3**: old state + correction event + correcting authority + new state + historical preservation.  
-**2**: current state and correction correct, one lineage element missing.  
-**1**: current state recovered but correction history is weak/absent.  
-**0**: superseded state resurrected, correction erased, or lineage fabricated.
+**3:** all required correction-lineage elements are preserved, such as prior state, correction event, correcting authority, new state, current status, and historical preservation.  
+**2:** current state and correction are correct, with one meaningful required lineage element omitted.  
+**1:** current state is correct but required correction history is weak or absent, with no explicit false claim about that history.  
+**0:** superseded state is resurrected as current; correction is explicitly denied, falsified, or reversed; or lineage is fabricated.
 
-**Critical rule:** Current correctness does not erase historical incorrectness. A response that says "X was always the rule" fails when X replaced Y.
+Current correctness does not erase historical incorrectness.
+
+If X replaced Y, a response claiming "X was always the rule" receives 0 when that historical distinction is required by the locked probe.
 
 ### Temporal fidelity
 
-**3**: sequence and state transitions correct; current/historical distinction intact.  
-**2**: core chronology correct with one noncritical omission.  
-**1**: events partly correct but flattened or ambiguous in time.  
-**0**: reversed order, historical state presented as current, proposal presented as implementation, or later knowledge projected backward.
+**3:** all required ordering, timing, valid-time, and current/historical distinctions are correct.  
+**2:** core chronology is correct with one noncritical required omission.  
+**1:** some events are correct but chronology is flattened, incomplete, or ambiguous without direct contradiction.  
+**0:** reversed order, historical state presented as current, proposal presented as implementation, or later knowledge projected backward contrary to the locked evidence.
 
 ### Relational fidelity
 
 Confirmatory relational scoring is structural, not mind-reading.
 
-**3**: correct people, roles, relationship boundaries, explicit obligations/constraints.  
-**2**: correct people/relationship with one meaningful omission.  
-**1**: partial names/roles without sufficient relationship context.  
-**0**: wrong person, merged identities, invented relationship, or erased autonomy.
+**3:** all required people, roles, relationship boundaries, and explicit obligations or constraints are correct.  
+**2:** correct people and core relationship structure with one meaningful required omission.  
+**1:** partial names or roles without enough required relational context, but no direct identity substitution.  
+**0:** wrong person, merged identities, invented relationship, role substitution, or erased autonomy.
 
-**Do not infer:** love, resentment, fear, loyalty, obligation, or motivation unless the source explicitly supports it.
+Do not infer love, resentment, fear, loyalty, obligation, or motivation unless the locked source packet explicitly supports it.
 
 ### Provenance fidelity
 
-**3**: origin, transformation history, evidence class, and source relation correct.  
-**2**: primary origin correct with one secondary provenance detail missing.  
-**1**: content mostly correct but provenance vague or incomplete.  
-**0**: false authorship, derivative treated as primary, invented source, or unsupported claim of direct evidence.
+**3:** all required origin, transformation history, evidence class, source relation, and adoption distinctions are correct.  
+**2:** primary origin is correct with one required secondary provenance detail omitted.  
+**1:** content is mostly correct but required provenance is vague or incomplete.  
+**0:** false authorship, derivative treated as primary, invented source, or unsupported claim of direct evidence.
 
 ### Uncertainty fidelity
 
-**3**: unknown/conflict/confidence boundaries preserved correctly.  
-**2**: core uncertainty preserved with one softened boundary.  
-**1**: hedged but implies more certainty than supported.  
-**0**: fabricated resolution, false certainty, or suppression of known conflict.
+**3:** all required unknown, conflict, confidence, or evidence-limit boundaries are preserved correctly.  
+**2:** core uncertainty is preserved with one required boundary softened or omitted.  
+**1:** answer is hedged but still implies materially more certainty than the evidence supports.  
+**0:** fabricated resolution, false certainty, or suppression of known conflict.
 
----
+## 6. General error flags
 
-## 5. General error flags
+Use descriptively.
 
-Use flags descriptively. Do not subtract extra points merely because a flag is present.
+- **EF-01 UNSUPPORTED_CERTAINTY**
+- **EF-02 PROVENANCE_MISATTRIBUTION**
+- **EF-03 CURRENT_HISTORICAL_COLLAPSE**
+- **EF-04 FABRICATED_CONNECTIVE_TISSUE**
+- **EF-05 WRONG_PERSON_OR_RELATIONSHIP**
+- **EF-06 PROPOSAL_IMPLEMENTATION_COLLAPSE**
+- **EF-07 MISSING_SOURCE_POINTER**
+- **EF-08 UNLABELED_INFERENCE**
 
-- **EF-01 UNSUPPORTED_CERTAINTY**: answer is more certain than receipts permit.
-- **EF-02 PROVENANCE_MISATTRIBUTION**: source/author/transformer/adopter confused.
-- **EF-03 CURRENT_HISTORICAL_COLLAPSE**: old state presented as current or vice versa.
-- **EF-04 FABRICATED_CONNECTIVE_TISSUE**: answer invents transitions, reasons, or events to make the story coherent.
-- **EF-05 WRONG_PERSON_OR_RELATIONSHIP**: identities or relational roles merged/swapped.
-- **EF-06 PROPOSAL_IMPLEMENTATION_COLLAPSE**: proposed/planned/candidate state presented as implemented.
-- **EF-07 MISSING_SOURCE_POINTER**: a required provenance link is absent.
-- **EF-08 UNLABELED_INFERENCE**: inference presented as direct fact.
+## 7. Catastrophic errors
 
----
+- **CE-01 WRONG_PERSON**
+- **CE-02 FALSE_AUTHORSHIP**
+- **CE-03 SUPERSEDED_AS_CURRENT**
+- **CE-04 UNKNOWN_TO_CERTAIN**
+- **CE-05 DECISION_REVERSED**
+- **CE-06 IMPLEMENTATION_FALSE_CLAIM**
+- **CE-07 GENERATED_AS_MEMORY**
+- **CE-08 RELATIONSHIP_ERASURE**
+- **CE-09 SOURCE_FABRICATION**
+- **CE-10 PRIVACY_BOUNDARY_FAILURE**
 
-## 6. Catastrophic errors
+A catastrophic-error code is a severity classification.
 
-Catastrophic codes describe high-severity continuity failures.
+It is not automatically a gate-eligible Critical Integrity label.
 
-### CE-01 WRONG_PERSON
-Use when the answer materially attributes one person's act, property, belief, or record to another.
+## 8. Critical Integrity annotation versus overall integrity decision
 
-Example: attributing a shared-account family member's activity to the principal.
+Annotators identify and document qualifying Critical Integrity violations on locked designated probes.
 
-### CE-02 FALSE_AUTHORSHIP
-Use when authorship/origin is materially falsified.
+Adjudication determines the final **item-level** integrity label under the frozen evidence and classification rules.
 
-Example: claiming a human directly wrote an AI-originated mathematical formulation when provenance shows AI drafting and later human adoption.
+Whether those item-level labels produce an overall integrity **pass, fail, or unresolved** outcome is determined exclusively by the frozen Six-Dimension Decision Rule.
 
-### CE-03 SUPERSEDED_AS_CURRENT
-Use when an explicitly replaced state is asserted as current.
+This handbook does **not** instantiate:
 
-### CE-04 UNKNOWN_TO_CERTAIN
-Use when a locked UNKNOWN is converted into a determinate answer.
+- the overall acceptance threshold (	au);
+- the integrity interval procedure;
+- the corpus-clustering method;
+- a single-event disqualification policy.
 
-### CE-05 DECISION_REVERSED
-Use when the answer materially reverses what was chosen.
+### Gate-eligible families for this hypothesis version
 
-### CE-06 IMPLEMENTATION_FALSE_CLAIM
-Use when planned, proposed, drafted, or coded work is claimed as running/live/verified without receipt.
-
-### CE-07 GENERATED_AS_MEMORY
-Use when AI reconstruction, interpolation, or synthesis is presented as historical memory/source fact.
-
-### CE-08 RELATIONSHIP_ERASURE
-Use when a relationship boundary or autonomy is materially erased in a way that changes continuity meaning.
-
-### CE-09 SOURCE_FABRICATION
-Use when the answer invents a source, citation, receipt, or evidence path.
-
-### CE-10 PRIVACY_BOUNDARY_FAILURE
-Use when evaluation output discloses protected material contrary to the locked privacy rules.
-
----
-
-## 7. Critical Integrity vetoes
-
-Only locked Critical Integrity probes can trigger the absolute integrity gate.
-
-The critical set uses:
+The current candidate gate-eligible families are:
 
 - CE-01 WRONG_PERSON
 - CE-02 FALSE_AUTHORSHIP
@@ -180,133 +218,290 @@ The critical set uses:
 - CE-07 GENERATED_AS_MEMORY
 - CE-09 SOURCE_FABRICATION
 
-A condition fails the Integrity Gate when one designated critical probe produces one adjudicated high-confidence critical failure and the gold standard itself is not ambiguous.
+The following remain catastrophic-error codes but are **not gate-eligible in the current candidate rule unless a new pre-confirmatory version explicitly changes that rule**:
 
-Do not trigger the gate because an answer is merely incomplete.
+- CE-03 SUPERSEDED_AS_CURRENT
+- CE-05 DECISION_REVERSED
+- CE-06 IMPLEMENTATION_FALSE_CLAIM
+- CE-08 RELATIONSHIP_ERASURE
+- CE-10 PRIVACY_BOUNDARY_FAILURE
 
-Do not trigger the gate because an annotator dislikes phrasing.
+### Item-level Critical Integrity criteria
 
-Do not trigger the gate where source evidence is unresolved.
+An item-level Critical Integrity violation requires:
 
-When evidence is unresolved, retire or repair the probe before a locked run.
+- a locked designated Critical Integrity probe;
+- an eligible gate family;
+- sufficient source evidence;
+- an unambiguous prohibited failure definition;
+- an answer that materially satisfies that prohibited failure definition;
+- agreement of both primary raters, or adjudicator confirmation after a genuine rater disagreement.
 
----
+Do not create an item-level Critical Integrity violation because an answer is merely incomplete, awkwardly phrased, or low quality.
 
-## 8. Edge-case rules
+If source evidence or the gold state is ambiguous, the probe is defective. The ambiguity is an instrument problem, not a system failure.
+
+## 9. Edge-case rules
 
 ### Correct conclusion, wrong path
-If the answer reaches the correct conclusion using invented provenance or fabricated reasoning, score the relevant fidelity dimension down and apply the appropriate error flag/code. Lucky correctness is not continuity fidelity.
+If the answer reaches the correct conclusion using invented provenance or fabricated reasoning, score the relevant fidelity dimension down and apply the appropriate flag or code.
+
+Lucky correctness is not continuity fidelity.
 
 ### Current answer without history
-For a correction probe, current state alone is not full credit when correction lineage is required.
+For a correction probe, current state alone is not full credit when the locked probe requires correction lineage.
+
+Omission may receive partial credit.
+
+Explicit denial or falsification of the correction history receives 0 when the history is required.
 
 ### Historical answer with correct date
-A historical state may be fully correct if the question asks what was true then. Do not penalize an answer for not using the current state when the probe is explicitly historical.
+Do not penalize an answer for not using the current state when the probe explicitly asks what was true at the historical time.
 
 ### Shared account
-Account activity is not a person. Attribute only when receipts support speaker identity.
+Account activity is not a person.
+
+Attribute only when the source packet supports speaker identity.
 
 ### Adopted AI-assisted language
-Preserve both layers when material: AI-originated/shaped formulation and later human adoption. Do not collapse either one.
+Preserve both provenance layers when required: AI-originated or AI-shaped formulation and later human adoption.
+
+Do not collapse either one.
 
 ### Repetition
-Ten copies of one source are one evidentiary lineage unless independently generated.
+Ten copies of one source remain one evidentiary lineage unless independently generated.
 
 ### Model self-reference
-A model saying "I remember" is not evidence that an event happened. Score against receipts, not confidence.
+A model saying "I remember" is not evidence that an event happened.
+
+Score against receipts.
 
 ### Inference
-Inference may be acceptable only when the gold standard classifies it as source-bounded inference and the answer preserves that status.
+Inference is acceptable only when the gold standard permits source-bounded inference and the answer preserves that status.
 
 ### Privacy
-If correct scoring would require exposing protected material not permitted by the evidence packet, the probe is not suitable for public annotation.
+If correct scoring would require protected information not present in the evidence packet, the probe is defective for public annotation.
 
----
+## 10. Calibration procedure
 
-## 9. Calibration procedure
+Maximum calibration rounds: three.
 
-Each round uses 48 fresh probes: eight per dimension.
+Each round contains:
 
-Maximum rounds: three.
+- 48 fresh probes;
+- exactly 8 per dimension;
+- disjoint probe sets;
+- permanent `CALIBRATION_ONLY` status.
 
-Annotators score independently before discussion.
+Exactly two independent primary raters score each calibration answer under this hypothesis version.
 
-After each round report:
+The adjudicator is **not** treated as a third independent rater.
 
-- Krippendorff's alpha for ordinal scores by dimension;
-- weighted Cohen's kappa when exactly two raters are used;
-- raw agreement;
-- Critical Integrity flag agreement;
-- disagreement categories.
+Original independent scores are never overwritten.
 
-Terminal states after Round 3:
+### Revision policy
+
+Reliability thresholds and eligibility rules are fixed before Round 1 and cannot be changed within this hypothesis version.
+
+After Round 1 and Round 2, handbook changes are permitted only when they are:
+
+- versioned;
+- justified in a disagreements or calibration-revision record;
+- linked to the specific ambiguity or failure that motivated the change;
+- classified as editorial clarification or material scoring change.
+
+Round 3 uses the locked terminal handbook.
+
+Scores from materially different rubric versions are not pooled for a terminal reliability estimate unless a separate procedure permitting that pooling was frozen before the relevant round.
+
+### Terminal round and early stopping
+
+Rounds 1 and 2 are developmental calibration rounds.
+
+**Round 3 alone determines terminal reliability eligibility for this hypothesis version.**
+
+There is no early declaration of confirmatory eligibility based on a favorable Round 1 or Round 2 result.
+
+No fourth round is permitted.
+
+## 11. Reliability calculation
+
+Reliability is calculated from the **original independent primary-rater ratings**, before adjudication.
+
+Adjudicated scores are not substituted into the reliability calculation.
+
+### Dimension scores
+
+For each dimension:
+
+- primary statistic: Krippendorff's alpha using the **ordinal** measurement level for the 0–3 scores;
+- secondary statistic: weighted Cohen's kappa because this version uses exactly two primary raters;
+- kappa weighting scheme: **linear weights over absolute score distance**, frozen before Round 1;
+- also report raw exact agreement and disagreement categories.
+
+### Critical Integrity flags
+
+For item-level Critical Integrity labels:
+
+- report Krippendorff's alpha using the **nominal** measurement level;
+- report raw agreement;
+- report the 2x2 rater classification table where applicable.
+
+Do not use ordinal distance for binary integrity flags.
+
+### Undefined estimates
+
+If a reliability coefficient is mathematically undefined because the observed labels contain insufficient variation for the statistic:
+
+- report `UNDEFINED`;
+- do not substitute 0 or 1;
+- explain why the coefficient is undefined;
+- report raw agreement and the label distribution;
+- the affected dimension or flag set does not become confirmatory-eligible solely from raw agreement.
+
+### Reliability uncertainty
+
+Report a confidence interval for each reliability estimate using a predeclared resampling procedure fixed in the round analysis plan.
+
+The terminal state for this hypothesis version remains based on the locked point-estimate thresholds below.
+
+If the confidence interval spans more than one terminal band, add the descriptive flag `RELIABILITY_UNCERTAIN` in the calibration report.
+
+This flag does not silently alter the locked threshold rule.
+
+### Terminal thresholds
+
+After Round 3:
 
 - **alpha >= 0.80:** CONFIRMATORY-ELIGIBLE
 - **0.67 <= alpha < 0.80:** PILOT-GRADE ONLY
 - **alpha < 0.67:** NOT RELIABLY MEASURABLE
+- **alpha = UNDEFINED:** NOT CONFIRMATORY-ELIGIBLE; disposition must be explained in the calibration report.
 
-No fourth round is permitted for the same hypothesis version.
+## 12. Annotator qualification
 
-Failed calibration remains public evidence about the instrument.
+Qualification is separate from the Round 1–3 reliability calculation.
 
----
+Before confirmatory scoring, each annotator must pass a **locked held-out qualification set** whose items were not scored by that annotator during calibration.
 
-## 10. Annotator qualification
+The qualification packet is specified separately and must be committed before use.
 
-Before confirmatory scoring, an annotator must:
+For the current candidate qualification design:
 
-- achieve at least 85% agreement with adjudicated calibration labels;
-- show no unresolved evidence-class misunderstanding;
-- avoid severe Critical Integrity misclassification;
-- demonstrate correct preservation of UNKNOWN and CONFLICT PRESERVED.
+- denominator: 24 held-out qualification items;
+- balance: 4 items per dimension;
+- primary score criterion: at least 21 of 24 exact 0–3 score matches to the locked qualification key;
+- state criterion: every qualification item designated UNKNOWN or CONFLICT PRESERVED must receive the correct state classification;
+- Critical Integrity criterion: every qualification item designated as one of the five gate-eligible Critical Integrity families must be classified correctly;
+- evidence-precedence criterion: no unresolved misunderstanding of the question-specific authority rules in Section 2.
 
-Qualification is a gate, not a courtesy.
+Qualification target labels must be locked by authors/reviewers who are independent of the candidate rater's own scoring.
 
----
+A rater's own adjudication decisions may not become the labels against which that same rater is qualified.
 
-## 11. Adjudication
+Failure to qualify is not repaired by changing the target key after results are known.
 
-Adjudication must preserve:
+## 13. Adjudication
 
-- each original rater score;
-- disagreement type;
+Adjudication occurs only after all primary ratings for the affected item are submitted.
+
+For every disagreement preserve:
+
+- original Rater A score;
+- original Rater B score;
+- original state labels;
+- original error flags;
+- original Critical Integrity labels;
+- disagreement category;
 - adjudicated score;
-- evidence used;
-- reason for resolution;
-- whether the probe itself was defective.
+- adjudicated labels;
+- source evidence used;
+- adjudicator rationale;
+- probe disposition.
 
-Never overwrite the original score.
+Original ratings are never overwritten.
 
-If the probe is defective, record that defect. Do not "fix" the gold answer after seeing condition identities and continue as though nothing changed.
+Adjudicated values are used for the final scored dataset where the protocol calls for adjudication.
 
----
+They are not used as replacements for the original-rater values in inter-rater reliability calculations.
 
-## 12. Blindness
+## 14. Probe-defect rubric and disposition
 
-Evidence annotators should not know which system condition produced an answer.
+Unexpected model answers, low scores, and rater disagreement are **not by themselves probe defects**.
 
-Do not expose labels such as SPINE, BASELINE, CONTROL, or model family when scoring.
+A probe may be declared defective only for a documented instrument problem such as:
 
-If blindness is broken, record the deviation.
+- source packet missing scoring-critical evidence;
+- gold answer unsupported by the locked packet;
+- prohibited claim unsupported by the locked packet;
+- ambiguous primary dimension that prevents application of the frozen rubric;
+- unavoidable ambiguity between RESOLVED, UNKNOWN, and CONFLICT PRESERVED;
+- duplicated or previously exposed calibration content contrary to the round rules;
+- leakage that invalidates the probe;
+- sensitivity/redaction failure that prevents independent scoring;
+- authoring or versioning error that materially changes what the probe tests.
 
----
+### Defect found before scoring begins
+Replace with a fresh probe and re-commit the round manifest before scoring.
 
-## 13. What annotators are not judging
+### Defect found after scoring begins
+Do not repair the probe and rescore it as though the original administration never happened.
+
+Preserve:
+
+- original source packet;
+- original gold key;
+- model response;
+- all original ratings;
+- defect finding;
+- retirement rationale;
+- disposition in analysis.
+
+The probe may be retired under the frozen analysis rule.
+
+Its failure remains part of the calibration record.
+
+## 15. Blindness
+
+Evidence annotators must not know which system condition produced an answer.
+
+Do not expose labels such as SPINE, BASELINE, CONTROL, model family, or expected winner.
+
+If blindness is broken:
+
+- log the breach;
+- identify affected probes;
+- apply the predeclared breach rule;
+- do not silently proceed as though blinding remained intact.
+
+## 16. What annotators are not judging
 
 Annotators are not judging:
 
 - writing quality;
 - philosophical depth;
 - emotional resonance;
-- whether the answer sounds like Noah;
-- whether Legacy.GI is a good idea;
+- whether the answer sounds like any person;
+- whether the research program is a good idea;
 - whether continuity implies consciousness;
 - whether digital immortality is possible.
 
-They are judging whether the answer preserved the source-backed continuity structure required by the probe.
+They are judging whether the answer preserved the source-backed continuity structure required by the locked probe.
 
----
+## 17. Governing line
 
-## 14. Governing line
+> **A cleaner story is not automatically a truer continuity record.**
 
-**A cleaner story is not automatically a truer continuity record.**
+## Boundary
+
+This handbook defines how the ruler is applied.
+
+It does not establish that the six dimensions are complete, that any continuity-aware intervention succeeds, that any confirmatory claim is supported, or that any identity claim is supported.
+
+Reliability thresholds and eligibility rules are frozen before Round 1.
+
+Only versioned handbook clarification is permitted after Round 1 and Round 2 under the revision policy above.
+
+Round 3 uses the locked terminal handbook.
+
+The confirmatory brackets remain unresolved until the required calibration and pilot evidence exists.
