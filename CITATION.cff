@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this research corpus, please cite the frozen snapshot and the specific artifact you rely on."
+title: "Continuity Intelligence Research Corpus: Legacy.GI, Rendered Reality, ORACLE, and Governed Longitudinal Memory"
+type: dataset
+authors:
+  - family-names: "Hawkes"
+    given-names: "Noah A."
+repository-code: "https://github.com/Noahhawkes/oracle-ai-runtime"
+url: "https://github.com/Noahhawkes/oracle-ai-runtime/tree/95251cac4a91a32222bd5e8b0b54974d61c9f487/research"
+date-released: 2026-10-10
+version: "2026.10.10-snapshot"
+identifiers:
+  - type: other
+    value: "95251cac4a91a32222bd5e8b0b54974d61c9f487"
+    description: "Authoritative frozen Git commit for this corpus snapshot"
+preferred-citation:
+  type: report
+  title: "Continuity Intelligence Research Corpus: Frozen Research Snapshot 2026-10-10"
+  authors:
+    - family-names: "Hawkes"
+      given-names: "Noah A."
+  year: 2026
+  url: "https://github.com/Noahhawkes/oracle-ai-runtime/tree/95251cac4a91a32222bd5e8b0b54974d61c9f487/research"
