@@ -1,6 +1,8 @@
 # Continuity Intelligence Calibration Design v0.1
 
-**Status:** CANDIDATE DESIGN  
+**Status:** HISTORICAL CANDIDATE DESIGN  
+**Superseded by:** `research/protocols/CALIBRATION_DESIGN_V0_1.md`  
+**Preservation note:** Retained to preserve the pre-refinement design history; do not use this file as the current pre-execution calibration authority.  
 **Date:** 2026-10-10  
 **Depends on:**
 - `research/protocols/ANNOTATOR_HANDBOOK.md`
