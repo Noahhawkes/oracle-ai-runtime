@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Noahhawkes/oracle-ai-runtime/research/protocols/continuity_probe.schema.json",
+  "title": "Continuity Intelligence Probe",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "probe_id",
+    "track",
+    "primary_dimension",
+    "secondary_dimensions",
+    "critical_integrity",
+    "question",
+    "gold_answer",
+    "required_elements",
+    "prohibited_claims",
+    "source_ids",
+    "evidence_class",
+    "uncertainty_status",
+    "sensitivity",
+    "annotation_state"
+  ],
+  "properties": {
+    "probe_id": {
+      "type": "string",
+      "pattern": "^[A-Z]+-[0-9]{4}$"
+    },
+    "track": {
+      "const": "reconstruction"
+    },
+    "primary_dimension": {
+      "enum": [
+        "decision",
+        "correction",
+        "temporal",
+        "relational",
+        "provenance",
+        "uncertainty"
+      ]
+    },
+    "secondary_dimensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "decision",
+          "correction",
+          "temporal",
+          "relational",
+          "provenance",
+          "uncertainty"
+        ]
+      }
+    },
+    "critical_integrity": {
+      "type": "boolean"
+    },
+    "critical_code": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "CE-01",
+        "CE-02",
+        "CE-04",
+        "CE-07",
+        "CE-09"
+      ]
+    },
+    "question": {
+      "type": "string",
+      "minLength": 1
+    },
+    "gold_answer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "required_elements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "prohibited_claims": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "source_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "evidence_class": {
+      "enum": [
+        "receipt_backed_external_fact",
+        "direct_self_attestation",
+        "direct_correction",
+        "source_bounded_inference",
+        "ai_generated_candidate",
+        "adopted_ai_assisted_formulation",
+        "UNKNOWN",
+        "CONFLICT_PRESERVED"
+      ]
+    },
+    "uncertainty_status": {
+      "enum": [
+        "resolved",
+        "UNKNOWN",
+        "CONFLICT_PRESERVED"
+      ]
+    },
+    "sensitivity": {
+      "enum": [
+        "public-safe",
+        "private",
+        "family-sensitive",
+        "minor-sensitive",
+        "medical",
+        "financial",
+        "employment-confidential",
+        "legal",
+        "unknown-sensitivity"
+      ]
+    },
+    "annotation_state": {
+      "enum": [
+        "DRAFT",
+        "EVIDENCE_REVIEWED",
+        "LOCKED_CALIBRATION",
+        "LOCKED_CONFIRMATORY",
+        "RETIRED"
+      ]
+    },
+    "notes_for_adjudicator": {
+      "type": "string"
+    },
+    "source_cutoff": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "created_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "created_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reviewed_by": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "critical_integrity": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "critical_code"
+        ],
+        "properties": {
+          "critical_code": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "critical_integrity": {
+            "const": false
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "critical_code": {
+            "const": null
+          }
+        }
+      }
+    }
+  ]
+}
