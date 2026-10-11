@@ -199,9 +199,7 @@ A failed dimension is preserved as a failed measurement attempt.
 
 Qualification is separate from the Round 1-3 reliability calculation and uses a held-out qualification packet that the candidate rater did not score during calibration.
 
-The current candidate qualification specification is maintained at:
-
-`research/calibration/RATER_QUALIFICATION_PACKET_SPEC_V0_1.md`
+The current candidate qualification requirements are specified here and must be frozen in the qualification manifest before use.
 
 Minimum requirements are:
 
