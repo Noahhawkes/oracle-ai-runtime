@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Noahhawkes/oracle-ai-runtime/research/protocols/critical_integrity_probe.schema.json",
+  "title": "Critical Integrity Probe",
+  "allOf": [
+    {
+      "$ref": "continuity_probe.schema.json"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "critical_integrity": {
+          "const": true
+        },
+        "critical_code": {
+          "enum": [
+            "CE-01",
+            "CE-02",
+            "CE-04",
+            "CE-07",
+            "CE-09"
+          ]
+        }
+      }
+    }
+  ]
+}
